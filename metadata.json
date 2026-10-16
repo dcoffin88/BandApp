@@ -1,0 +1,6 @@
+{
+  "name": "BandJam - Band Collaboration Hub",
+  "description": "Collaborative hub for bands to share audio demo ideas, track multi-version takes, co-edit lyrics, and organize practice schedules with role-based permissions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,105 @@
+import React, { useState } from 'react';
+import { AdminSettingsView } from './components/AdminSettingsView.tsx';
+import { AuthView } from './components/AuthView.tsx';
+import { GlobalAudioPlayer } from './components/GlobalAudioPlayer.tsx';
+import { LyricsModal } from './components/LyricsModal.tsx';
+import { LyricsStudioView } from './components/LyricsStudioView.tsx';
+import { Navbar } from './components/Navbar.tsx';
+import { NewVersionModal } from './components/NewVersionModal.tsx';
+import { PracticeScheduleView } from './components/PracticeScheduleView.tsx';
+import { SongListMainView } from './components/SongListMainView.tsx';
+import { UploadDemoModal } from './components/UploadDemoModal.tsx';
+import { AudioPlayerProvider, useAudioPlayer } from './context/AudioPlayerContext.tsx';
+import { BandProvider, useBand } from './context/BandContext.tsx';
+import { SongIdea } from './types/band.ts';
+
+const AppContent: React.FC = () => {
+  const { isAuthenticated } = useBand();
+  const [activeTab, setActiveTab] = useState<'songs' | 'lyrics' | 'practice' | 'admin'>('songs');
+  const [adminSubTab, setAdminSubTab] = useState<'band' | 'users' | 'auth' | 'profile' | 'app'>('band');
+
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [lyricsModalSong, setLyricsModalSong] = useState<SongIdea | null>(null);
+  const [newVersionModalSong, setNewVersionModalSong] = useState<SongIdea | null>(null);
+
+  const { currentSong } = useAudioPlayer();
+
+  // If user is logged out, show the Auth screen
+  if (!isAuthenticated) {
+    return <AuthView />;
+  }
+
+  const handleSelectAdminSubTab = (subTab: 'band' | 'users' | 'auth' | 'profile' | 'app') => {
+    setAdminSubTab(subTab);
+    setActiveTab('admin');
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-amber-200">
+      {/* Top Navigation */}
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenUploadModal={() => setIsUploadModalOpen(true)}
+        onSelectAdminSubTab={handleSelectAdminSubTab}
+      />
+
+      {/* Main Container */}
+      <main className={`flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 ${
+        currentSong ? 'pb-32' : 'pb-16'
+      }`}>
+        {activeTab === 'songs' && (
+          <SongListMainView
+            onOpenUploadModal={() => setIsUploadModalOpen(true)}
+            onOpenLyricsModal={(song) => setLyricsModalSong(song)}
+            onOpenNewVersionModal={(song) => setNewVersionModalSong(song)}
+          />
+        )}
+
+        {activeTab === 'lyrics' && <LyricsStudioView />}
+
+        {activeTab === 'practice' && <PracticeScheduleView />}
+
+        {activeTab === 'admin' && (
+          <AdminSettingsView
+            key={adminSubTab}
+            initialTab={adminSubTab}
+          />
+        )}
+      </main>
+
+      {/* Persistent Bottom Audio Player Bar */}
+      <GlobalAudioPlayer
+        onOpenLyrics={(song) => setLyricsModalSong(song)}
+      />
+
+      {/* Modals */}
+      <UploadDemoModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+      />
+
+      <LyricsModal
+        song={lyricsModalSong}
+        isOpen={!!lyricsModalSong}
+        onClose={() => setLyricsModalSong(null)}
+      />
+
+      <NewVersionModal
+        song={newVersionModalSong}
+        isOpen={!!newVersionModalSong}
+        onClose={() => setNewVersionModalSong(null)}
+      />
+    </div>
+  );
+};
+
+export default function App() {
+  return (
+    <BandProvider>
+      <AudioPlayerProvider>
+        <AppContent />
+      </AudioPlayerProvider>
+    </BandProvider>
+  );
+}
