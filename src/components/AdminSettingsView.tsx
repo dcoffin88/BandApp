@@ -72,7 +72,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     changePassword,
   } = useBand();
 
-  const [activeSubTab, setActiveSubTab] = useState<'users' | 'auth' | 'profile' | 'app' | 'smtp'>(initialTab);
+  const [selectedSubTab, setActiveSubTab] = useState<'users' | 'auth' | 'profile' | 'app' | 'smtp'>(initialTab);
 
   // Band Edit State
   const [bandName, setBandName] = useState(band.name);
@@ -139,6 +139,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
 
   const isadmin = currentUser.role === 'admin';
+  const activeSubTab = isadmin ? selectedSubTab : 'profile';
 
   // Handlers
   const handleSaveBandSettings = async (e: React.FormEvent) => {
@@ -273,10 +274,12 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             </div>
             <div>
               <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                Admin &amp; Settings Control Center
+                {isadmin ? 'Admin & Settings Control Center' : 'Profile Management'}
               </h2>
               <p className="text-xs text-zinc-400">
-                Manage App Colors, Header Logo, Band Profile, Member Roles, Authentication Policies, and Profiles.
+                {isadmin
+                  ? 'Manage App Colors, Header Logo, Band Profile, Member Roles, Authentication Policies, and Profiles.'
+                  : 'Manage your profile, appearance, notifications, and password.'}
               </p>
             </div>
           </div>
@@ -296,6 +299,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
       {/* Sub-tab Navigation */}
       <div className="flex items-center gap-2 p-1 bg-zinc-900/90 rounded-2xl border border-zinc-800 overflow-x-auto text-xs font-semibold">
+        {isadmin && <>
         <button
           onClick={() => setActiveSubTab('app')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${
@@ -331,6 +335,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           <KeyRound className="w-4 h-4" />
           <span>Authentication Management</span>
         </button>
+        </>}
 
         <button
           onClick={() => setActiveSubTab('profile')}
@@ -346,12 +351,12 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         {isadmin && <button onClick={() => setActiveSubTab('smtp')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${activeSubTab === 'smtp' ? 'bg-amber-500 text-zinc-950 shadow-md font-bold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}><Mail className="w-4 h-4"/><span>Email Settings</span></button>}
       </div>
 
-      {activeSubTab === 'smtp' && <SmtpSettingsView />}
+      {isadmin && activeSubTab === 'smtp' && <SmtpSettingsView />}
 
       {/* ========================================================================= */}
       {/* APP SETTINGS (BAND IDENTITY, COLORS & HEADER LOGO / NAME AREA EDITOR) */}
       {/* ========================================================================= */}
-      {activeSubTab === 'app' && (
+      {isadmin && activeSubTab === 'app' && (
         <div className="space-y-6">
           {/* Band Profile Editor Form */}
           <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-5">
@@ -591,7 +596,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       {/* ========================================================================= */}
       {/* 2. USER MANAGEMENT TAB */}
       {/* ========================================================================= */}
-      {activeSubTab === 'users' && (
+      {isadmin && activeSubTab === 'users' && (
         <div className="space-y-6">
           {/* Top Actions: Search & Invite */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -837,7 +842,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       {/* ========================================================================= */}
       {/* 3. AUTHENTICATION MANAGEMENT TAB */}
       {/* ========================================================================= */}
-      {activeSubTab === 'auth' && (
+      {isadmin && activeSubTab === 'auth' && (
         <div className="space-y-6">
           {/* Security & Authentication Policies */}
           <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-5">
@@ -1343,7 +1348,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       {/* ========================================================================= */}
       {/* Invite Member Modal */}
       {/* ========================================================================= */}
-      {isInviteModalOpen && (
+      {isadmin && isInviteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl space-y-4 text-xs">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -1454,7 +1459,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       {/* ========================================================================= */}
       {/* Password Reset Modal */}
       {/* ========================================================================= */}
-      {resettingUser && (
+      {isadmin && resettingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl space-y-4 text-xs">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">

@@ -185,7 +185,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <span>Profile &amp; Gear Rig</span>
                     </button>
 
-                    <button
+                    {currentUser.role === 'admin' && <button
                       onClick={() => {
                         setActiveTab('admin');
                         if (onSelectAdminSubTab) onSelectAdminSubTab('app');
@@ -195,7 +195,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     >
                       <Settings className="w-3.5 h-3.5 text-amber-400" />
                       <span>Admin Settings</span>
-                    </button>
+                    </button>}
                   </div>
 
                   {/* Log Out Button */}
