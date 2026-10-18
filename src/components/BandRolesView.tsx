@@ -15,17 +15,17 @@ import {
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { Role } from '../types/band.ts';
-import { ROLE_PERMISSIONS } from '../utils/storage.ts';
+import { ROLE_PERMISSIONS } from '../shared/defaults.ts';
 
 export const BandRolesView: React.FC = () => {
-  const { band, currentUser, permissions, updateUserRole, addBandMember, switchUser } = useBand();
+  const { band, currentUser, permissions, updateUserRole, addBandMember } = useBand();
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [name, setName] = useState('');
   const [instrument, setInstrument] = useState('');
   const [role, setRole] = useState<Role>('member');
   const [email, setEmail] = useState('');
 
-  const isLeader = permissions.canManageMembers;
+  const isadmin = permissions.canManageMembers;
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +33,7 @@ export const BandRolesView: React.FC = () => {
 
     addBandMember({
       name: name.trim(),
-      email: email.trim() || `${name.toLowerCase().replace(/\s+/g, '')}@bandjam.app`,
+      email: email.trim() || `${name.toLowerCase().replace(/\s+/g, '')}@BandApp.app`,
       instrument: instrument.trim() || 'Guitar & Backing',
       role,
       status: 'active',
@@ -49,10 +49,10 @@ export const BandRolesView: React.FC = () => {
 
   const getRoleDesc = (r: Role) => {
     switch (r) {
-      case 'leader':
-        return 'Band Leader / Admin: Full permissions. Manage members, edit settings, delete tracks.';
-      case 'songwriter':
-        return 'Songwriter / Producer: Upload demos, record new takes/versions, edit lyrics, schedule practice.';
+      case 'admin':
+        return 'Band Admin: Full permissions. Manage members, edit settings, delete tracks.';
+      case 'editor':
+        return 'Editor: Upload demos, record new takes/versions, edit lyrics, schedule practice.';
       case 'member':
         return 'Band Member: Upload demos/takes, edit lyrics, RSVP to practices, join discussions.';
       case 'guest':
@@ -60,7 +60,7 @@ export const BandRolesView: React.FC = () => {
     }
   };
 
-  const roleTypes: Role[] = ['leader', 'songwriter', 'member', 'guest'];
+  const roleTypes: Role[] = ['admin', 'editor', 'member', 'guest'];
 
   return (
     <div className="space-y-6">
@@ -78,7 +78,7 @@ export const BandRolesView: React.FC = () => {
           </p>
         </div>
 
-        {isLeader && (
+        {isadmin && (
           <button
             onClick={() => setIsAddMemberOpen(true)}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs sm:text-sm shadow-md transition self-start sm:self-auto"
@@ -101,8 +101,8 @@ export const BandRolesView: React.FC = () => {
             <thead>
               <tr className="border-b border-zinc-800 text-zinc-400 font-mono uppercase tracking-wider">
                 <th className="py-2.5 px-3">Permission / Capability</th>
-                <th className="py-2.5 px-3 text-center">Leader</th>
-                <th className="py-2.5 px-3 text-center">Songwriter</th>
+                <th className="py-2.5 px-3 text-center">Admin</th>
+                <th className="py-2.5 px-3 text-center">Editor</th>
                 <th className="py-2.5 px-3 text-center">Member</th>
                 <th className="py-2.5 px-3 text-center">Guest / Session</th>
               </tr>
@@ -196,15 +196,15 @@ export const BandRolesView: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                  {/* Role selector (editable by Leader) */}
-                  {isLeader ? (
+                  {/* Role selector (editable by admin) */}
+                  {isadmin ? (
                     <select
                       value={member.role}
                       onChange={e => updateUserRole(member.id, e.target.value as Role)}
                       className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium"
                     >
-                      <option value="leader">Leader / Admin</option>
-                      <option value="songwriter">Songwriter</option>
+                      <option value="admin">Admin</option>
+                      <option value="editor">Editor</option>
                       <option value="member">Member</option>
                       <option value="guest">Guest</option>
                     </select>
@@ -214,15 +214,7 @@ export const BandRolesView: React.FC = () => {
                     </span>
                   )}
 
-                  {/* Switch to this user for testing */}
-                  {!isSelf && (
-                    <button
-                      onClick={() => switchUser(member.id)}
-                      className="text-[11px] text-amber-400 hover:text-amber-300 underline"
-                    >
-                      Switch to this user
-                    </button>
-                  )}
+
                 </div>
               </div>
             );
@@ -278,7 +270,7 @@ export const BandRolesView: React.FC = () => {
                 </label>
                 <input
                   type="email"
-                  placeholder="leo@bandjam.app"
+                  placeholder="leo@BandApp.app"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white"
@@ -294,8 +286,8 @@ export const BandRolesView: React.FC = () => {
                   onChange={e => setRole(e.target.value as Role)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-medium"
                 >
-                  <option value="leader">Leader / Admin</option>
-                  <option value="songwriter">Songwriter</option>
+                  <option value="admin">Admin</option>
+                  <option value="editor">Editor</option>
                   <option value="member">Member</option>
                   <option value="guest">Guest / Session</option>
                 </select>

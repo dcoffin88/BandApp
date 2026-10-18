@@ -3,12 +3,10 @@ import {
   AlertCircle,
   Check,
   Crop,
-  Disc,
   Image as ImageIcon,
   Move,
   RefreshCw,
   RotateCw,
-  Sparkles,
   Upload,
   X,
   ZoomIn,
@@ -20,6 +18,7 @@ interface ImageCropModalProps {
   onClose: () => void;
   onCropComplete: (croppedDataUrl: string) => void;
   initialImageUrl?: string;
+  imageType?: 'logo' | 'profile';
 }
 
 export const ImageCropModal: React.FC<ImageCropModalProps> = ({
@@ -27,6 +26,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
   onClose,
   onCropComplete,
   initialImageUrl,
+  imageType = 'logo',
 }) => {
   const [imageSrc, setImageSrc] = useState<string>(initialImageUrl || '');
   const [zoom, setZoom] = useState<number>(1);
@@ -34,31 +34,11 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
   const [offset, setOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [cropShape, setCropShape] = useState<'circle' | 'rounded'>('rounded');
+  const [cropShape, setCropShape] = useState<'circle' | 'rounded'>(imageType === 'profile' ? 'circle' : 'rounded');
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imageObjRef = useRef<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Sample band logo presets
-  const LOGO_PRESETS = [
-    {
-      name: 'Electric Bolt',
-      url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80',
-    },
-    {
-      name: 'Vintage Vinyl',
-      url: 'https://images.unsplash.com/photo-1539375665275-f9de415ef9ac?w=300&auto=format&fit=crop&q=80',
-    },
-    {
-      name: 'Retro Cassette',
-      url: 'https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?w=300&auto=format&fit=crop&q=80',
-    },
-    {
-      name: 'Stage Spotlight',
-      url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80',
-    },
-  ];
 
   // Load image whenever imageSrc changes
   useEffect(() => {
@@ -197,10 +177,10 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white tracking-tight">
-                Band Header Logo &amp; Crop Tool
+                {imageType === 'profile' ? 'Profile Image & Crop Tool' : 'Band Header Logo & Crop Tool'}
               </h2>
               <p className="text-xs text-zinc-400">
-                Upload, pan, zoom, and crop your band's custom logo
+                {imageType === 'profile' ? 'Upload, pan, zoom, and crop your profile image' : "Upload, pan, zoom, and crop your band's custom logo"}
               </p>
             </div>
           </div>
@@ -214,7 +194,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
         {/* Body */}
         <div className="p-6 overflow-y-auto space-y-5 text-xs">
-          {/* Upload Button & Presets */}
+          {/* Upload Button */}
           <div className="space-y-2.5">
             <input
               ref={fileInputRef}
@@ -231,21 +211,9 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition shadow-md"
               >
                 <Upload className="w-4 h-4" />
-                <span>Upload Logo Image</span>
+                <span>{imageType === 'profile' ? 'Upload Profile Image' : 'Upload Logo Image'}</span>
               </button>
 
-              <span className="text-zinc-500">or choose sample:</span>
-
-              {LOGO_PRESETS.map((preset, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setImageSrc(preset.url)}
-                  className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium transition text-[11px]"
-                >
-                  {preset.name}
-                </button>
-              ))}
             </div>
           </div>
 
@@ -383,7 +351,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 font-bold flex items-center gap-2 shadow-lg shadow-amber-500/20 transition"
           >
             <Check className="w-4 h-4 stroke-[2.5]" />
-            <span>Apply Crop &amp; Save Logo</span>
+            <span>{imageType === 'profile' ? 'Apply Crop' : 'Apply Crop & Save Logo'}</span>
           </button>
         </div>
       </div>

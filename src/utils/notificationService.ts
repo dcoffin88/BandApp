@@ -64,7 +64,7 @@ export function buildBandEmailHtml(options: {
                       ${band.name}
                     </h1>
                     <p style="margin: 2px 0 0 0; font-size: 12px; color: #a1a1aa;">
-                      ${band.motto || 'BandJam Collaboration Vault'}
+                      ${band.motto || 'BandApp Collaboration Vault'}
                     </p>
                   </td>
                 </tr>
@@ -112,7 +112,7 @@ export function buildBandEmailHtml(options: {
           <tr>
             <td style="padding: 20px 28px; background-color: #09090b; border-top: 1px solid #27272a; font-size: 11px; color: #71717a; text-align: center;">
               <p style="margin: 0 0 4px 0;">
-                You received this email because you are a member of <strong>${band.name}</strong> on BandJam.
+                You received this email because you are a member of <strong>${band.name}</strong> on BandApp.
               </p>
               <p style="margin: 0;">
                 To customize your email notification preferences, visit <strong>Admin & Settings &gt; Profile Management</strong> or <strong>SMTP Settings</strong>.

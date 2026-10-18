@@ -10,6 +10,10 @@ import {
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { SongIdea } from '../types/band.ts';
+import { useMicrophoneRecorder } from '../hooks/useMicrophoneRecorder.ts';
+import { MicrophoneSelector } from './MicrophoneSelector.tsx';
+
+const KEY_ROOTS = ['C', 'C♯ / D♭', 'D', 'D♯ / E♭', 'E', 'F', 'F♯ / G♭', 'G', 'G♯ / A♭', 'A', 'A♯ / B♭', 'B'];
 
 interface UploadDemoModalProps {
   isOpen: boolean;
@@ -38,16 +42,11 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Mic recording state
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const timerIntervalRef = useRef<any>(null);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const microphone = useMicrophoneRecorder(isOpen && sourceMode === 'mic', setErrorMsg);
+  const { isRecording, isRequesting, isStopping, recordingSeconds, recordedBlob, recordedAudioUrl, startRecording, stopRecording } = microphone;
+
 
   if (!isOpen) return null;
 
@@ -65,49 +64,9 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
     }
   };
 
-  // Mic recording
-  const startRecording = async () => {
-    try {
-      setErrorMsg('');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      const chunks: BlobPart[] = [];
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        setRecordedBlob(blob);
-        const url = URL.createObjectURL(blob);
-        setRecordedAudioUrl(url);
-        stream.getTracks().forEach(t => t.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      setRecordingSeconds(0);
-      timerIntervalRef.current = setInterval(() => {
-        setRecordingSeconds(sec => sec + 1);
-      }, 1000);
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg('Microphone access denied or not available. You can upload an audio file or synthesize a demo take instead.');
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      clearInterval(timerIntervalRef.current);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sourceMode === 'mic' && (isRecording || isRequesting || isStopping)) { setErrorMsg('Stop recording and wait for it to finish before uploading.'); return; }
     if (!title.trim()) {
       setErrorMsg('Please enter a title for this demo (e.g. "Song Idea", "Chorus Idea", "Riff").');
       return;
@@ -199,7 +158,7 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
         {/* Scrollable Form Content */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 text-sm">
           {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+            <div role="alert" className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
@@ -294,6 +253,7 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
           {/* Mode 2: Live Mic Recording */}
           {sourceMode === 'mic' && (
             <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 text-center space-y-3">
+              <MicrophoneSelector id="demo-microphone" devices={microphone.devices} value={microphone.selectedDeviceId} onChange={microphone.setSelectedDeviceId} disabled={isRecording || isRequesting || isStopping} isRequesting={isRequesting} isStopping={isStopping} />
               <div className="flex items-center justify-center gap-2">
                 {isRecording ? (
                   <div className="flex items-center gap-2 text-rose-400 font-semibold animate-pulse">
@@ -317,10 +277,11 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
                   <button
                     type="button"
                     onClick={startRecording}
+                    disabled={isRequesting || isStopping}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition"
                   >
                     <Mic className="w-4 h-4" />
-                    <span>{recordedAudioUrl ? 'Record Retake' : 'Start Recording'}</span>
+                    <span>{isRequesting ? 'Requesting access…' : isStopping ? 'Finishing…' : recordedAudioUrl ? 'Record Retake' : 'Start Recording'}</span>
                   </button>
                 ) : (
                   <button
@@ -393,16 +354,24 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                <label htmlFor="upload-demo-key" className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
                   Key
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Em, C, A"
+                <select
+                  id="upload-demo-key"
                   value={musicalKey}
                   onChange={e => setMusicalKey(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm font-mono"
-                />
+                >
+                  <option value="">Not specified</option>
+                  {['major', 'minor'].map(mode => (
+                    <optgroup key={mode} label={mode === 'major' ? 'Major keys' : 'Minor keys'}>
+                      {KEY_ROOTS.map(root => (
+                        <option key={root} value={`${root} ${mode}`}>{root} {mode}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -431,7 +400,7 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !title.trim()}
+              disabled={isSubmitting || !title.trim() || (sourceMode === 'mic' && (isRecording || isRequesting || isStopping))}
               className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-bold text-xs sm:text-sm shadow-md transition flex items-center gap-2"
             >
               {isSubmitting ? (

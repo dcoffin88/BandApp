@@ -14,7 +14,7 @@ import {
 import { generateWaveformSamples } from './audioGenerator.ts';
 
 export const ROLE_PERMISSIONS: Record<Role, UserRolePermissions> = {
-  leader: {
+  admin: {
     canUploadDemo: true,
     canUploadVersion: true,
     canEditLyrics: true,
@@ -22,7 +22,7 @@ export const ROLE_PERMISSIONS: Record<Role, UserRolePermissions> = {
     canSchedulePractice: true,
     canManageMembers: true,
   },
-  songwriter: {
+  editor: {
     canUploadDemo: true,
     canUploadVersion: true,
     canEditLyrics: true,
@@ -53,9 +53,9 @@ export const INITIAL_MEMBERS: BandMember[] = [
     id: 'mem-1',
     name: 'Dave Coffin',
     stageName: 'Dave "Echo" Coffin',
-    email: 'dave@bandjam.app',
+    email: 'dave@BandApp.app',
     password: 'password123',
-    role: 'leader',
+    role: 'admin',
     status: 'active',
     instrument: 'Lead Vocals & Rhythm Guitar',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
@@ -78,9 +78,9 @@ export const INITIAL_MEMBERS: BandMember[] = [
     id: 'mem-2',
     name: 'Maya Lin',
     stageName: 'Maya Synthwave',
-    email: 'maya@bandjam.app',
+    email: 'maya@BandApp.app',
     password: 'password123',
-    role: 'songwriter',
+    role: 'editor',
     status: 'active',
     instrument: 'Keyboards, Synth & Vocals',
     avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
@@ -102,9 +102,9 @@ export const INITIAL_MEMBERS: BandMember[] = [
     id: 'mem-3',
     name: 'Alex Rivers',
     stageName: 'Alex "Fuzz" Rivers',
-    email: 'alex@bandjam.app',
+    email: 'alex@BandApp.app',
     password: 'password123',
-    role: 'songwriter',
+    role: 'editor',
     status: 'active',
     instrument: 'Lead Guitar',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
@@ -126,7 +126,7 @@ export const INITIAL_MEMBERS: BandMember[] = [
     id: 'mem-4',
     name: 'Marcus Thorne',
     stageName: 'Marcus "Low-End" Thorne',
-    email: 'marcus@bandjam.app',
+    email: 'marcus@BandApp.app',
     password: 'password123',
     role: 'member',
     status: 'active',
@@ -150,7 +150,7 @@ export const INITIAL_MEMBERS: BandMember[] = [
     id: 'mem-5',
     name: 'Sam Taylor',
     stageName: 'Sammy Beats',
-    email: 'sam@bandjam.app',
+    email: 'sam@BandApp.app',
     password: 'password123',
     role: 'guest',
     status: 'active',
@@ -537,16 +537,16 @@ export const INITIAL_PRACTICES: PracticeSession[] = [
 ];
 
 const STORAGE_KEYS = {
-  BAND: 'bandjam_band_profile_v1',
-  SONGS: 'bandjam_songs_v1',
-  PRACTICES: 'bandjam_practices_v1',
-  CURRENT_USER_ID: 'bandjam_current_user_id_v1',
-  AUTH_SETTINGS: 'bandjam_auth_settings_v1',
-  AUDIT_LOGS: 'bandjam_audit_logs_v1',
-  IS_AUTHENTICATED: 'bandjam_is_authenticated_v1',
-  APP_SETTINGS: 'bandjam_app_settings_v1',
-  SMTP_SETTINGS: 'bandjam_smtp_settings_v1',
-  EMAIL_LOGS: 'bandjam_email_logs_v1',
+  BAND: 'BandApp_band_profile_v1',
+  SONGS: 'BandApp_songs_v1',
+  PRACTICES: 'BandApp_practices_v1',
+  CURRENT_USER_ID: 'BandApp_current_user_id_v1',
+  AUTH_SETTINGS: 'BandApp_auth_settings_v1',
+  AUDIT_LOGS: 'BandApp_audit_logs_v1',
+  IS_AUTHENTICATED: 'BandApp_is_authenticated_v1',
+  APP_SETTINGS: 'BandApp_app_settings_v1',
+  SMTP_SETTINGS: 'BandApp_smtp_settings_v1',
+  EMAIL_LOGS: 'BandApp_email_logs_v1',
 };
 
 export const INITIAL_SMTP_SETTINGS: SmtpSettings = {
@@ -558,8 +558,8 @@ export const INITIAL_SMTP_SETTINGS: SmtpSettings = {
   username: 'thevelvetreverb.band@gmail.com',
   password: '',
   fromName: 'The Velvet Reverb',
-  fromEmail: 'notifications@bandjam.app',
-  replyTo: 'dave@bandjam.app',
+  fromEmail: 'notifications@BandApp.app',
+  replyTo: 'dave@BandApp.app',
   notificationTriggers: {
     newDemos: true,
     newVersions: true,
@@ -573,7 +573,7 @@ export const INITIAL_SMTP_SETTINGS: SmtpSettings = {
 export const INITIAL_EMAIL_LOGS: EmailNotificationLog[] = [
   {
     id: 'eml-1',
-    recipientEmail: 'maya@bandjam.app',
+    recipientEmail: 'maya@BandApp.app',
     recipientName: 'Maya Lin',
     subject: '[Demo Vault] New Demo Uploaded: Song Idea',
     eventType: 'new_demo',
@@ -589,12 +589,12 @@ export const INITIAL_EMAIL_LOGS: EmailNotificationLog[] = [
       '<p style="margin:4px 0;"><strong>Key:</strong> E Minor</p>' +
       '<p style="margin:4px 0;"><strong>Notes:</strong> First acoustic guitar sketch with vocal melody idea.</p>' +
       '</div>' +
-      '<p style="font-size:12px;color:#a1a1aa;">Sent via BandJam Notification Dispatcher</p>' +
+      '<p style="font-size:12px;color:#a1a1aa;">Sent via BandApp Notification Dispatcher</p>' +
       '</div>',
   },
   {
     id: 'eml-2',
-    recipientEmail: 'alex@bandjam.app',
+    recipientEmail: 'alex@BandApp.app',
     recipientName: 'Alex Rivers',
     subject: '[Rehearsal] Practice Session Scheduled: Saturday Sonic Vault',
     eventType: 'practice_schedule',
@@ -615,7 +615,7 @@ export const INITIAL_EMAIL_LOGS: EmailNotificationLog[] = [
   },
   {
     id: 'eml-3',
-    recipientEmail: 'marcus@bandjam.app',
+    recipientEmail: 'marcus@BandApp.app',
     recipientName: 'Marcus Thorne',
     subject: '[Lyrics Updated] Maya Lin updated Chorus Idea chords',
     eventType: 'lyric_edit',
@@ -654,7 +654,7 @@ export const INITIAL_AUDIT_LOGS: LoginAuditEntry[] = [
   {
     id: 'log-1',
     userId: 'mem-1',
-    userName: 'Dave Coffin (Leader)',
+    userName: 'Dave Coffin (Admin)',
     timestamp: '2026-10-16T06:20:00Z',
     ipAddress: '192.168.1.104',
     status: 'success',
@@ -706,7 +706,21 @@ export const INITIAL_AUDIT_LOGS: LoginAuditEntry[] = [
 export function loadBandProfile(): BandProfile {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.BAND);
-    if (data) return JSON.parse(data);
+    if (data) {
+      const profile: BandProfile = JSON.parse(data);
+      return {
+        ...profile,
+        members: profile.members.map(member => {
+          // Profiles saved before the role rename still use these values.
+          const storedRole: string = member.role;
+          const role: Role = storedRole === 'leader' ? 'admin'
+            : storedRole === 'songwriter' ? 'editor'
+            : storedRole === 'admin' || storedRole === 'editor' || storedRole === 'member' || storedRole === 'guest'
+              ? storedRole : 'guest';
+          return { ...member, role };
+        }),
+      };
+    }
   } catch (e) {
     console.error('Failed to load band profile', e);
   }
@@ -767,7 +781,7 @@ export function loadCurrentUserId(): string {
   } catch (e) {
     console.error('Failed to load current user', e);
   }
-  return 'mem-1'; // Dave Coffin (Leader) default
+  return 'mem-1'; // Dave Coffin (Admin) default
 }
 
 export function saveCurrentUserId(id: string): void {

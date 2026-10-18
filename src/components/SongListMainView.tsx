@@ -136,9 +136,6 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
           <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400">
             Recorded Demos &amp; Song Sketches ({filteredSongs.length})
           </h2>
-          <span className="text-xs text-zinc-500">
-            Click any waveform to track &amp; seek
-          </span>
         </div>
 
         {filteredSongs.length === 0 ? (
@@ -182,7 +179,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
             </button>
           ) : (
             <div className="p-3 text-xs text-zinc-500 italic">
-              Guest role: Uploading demos is reserved for Songwriters and Band Leaders.
+              Guest role: Uploading demos is reserved for Editors and Band Admins.
             </div>
           )}
         </div>

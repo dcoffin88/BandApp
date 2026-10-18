@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { SongIdea } from '../types/band.ts';
+import { useMicrophoneRecorder } from '../hooks/useMicrophoneRecorder.ts';
+import { MicrophoneSelector } from './MicrophoneSelector.tsx';
 
 interface NewVersionModalProps {
   song: SongIdea | null;
@@ -25,9 +27,7 @@ export const NewVersionModal: React.FC<NewVersionModalProps> = ({
 }) => {
   const { addSongVersion, permissions } = useBand();
 
-  if (!isOpen || !song) return null;
-
-  const nextVerNum = song.versions.length + 1;
+  const nextVerNum = (song?.versions.length || 0) + 1;
   const [label, setLabel] = useState(`v${nextVerNum} - New Take`);
   const [notes, setNotes] = useState('');
   const [sourceMode, setSourceMode] = useState<'file' | 'mic'>('file');
@@ -35,15 +35,13 @@ export const NewVersionModal: React.FC<NewVersionModalProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const timerIntervalRef = useRef<any>(null);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const microphone = useMicrophoneRecorder(isOpen && Boolean(song) && sourceMode === 'mic', setErrorMsg);
+  const { isRecording, isRequesting, isStopping, recordingSeconds, recordedBlob, recordedAudioUrl, startRecording, stopRecording } = microphone;
+
+  if (!isOpen || !song) return null;
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -57,48 +55,9 @@ export const NewVersionModal: React.FC<NewVersionModalProps> = ({
     }
   };
 
-  const startRecording = async () => {
-    try {
-      setErrorMsg('');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      const chunks: BlobPart[] = [];
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        setRecordedBlob(blob);
-        const url = URL.createObjectURL(blob);
-        setRecordedAudioUrl(url);
-        stream.getTracks().forEach(t => t.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      setRecordingSeconds(0);
-      timerIntervalRef.current = setInterval(() => {
-        setRecordingSeconds(sec => sec + 1);
-      }, 1000);
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg('Microphone access was denied or not supported on this device.');
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      clearInterval(timerIntervalRef.current);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sourceMode === 'mic' && (isRecording || isRequesting || isStopping)) { setErrorMsg('Stop recording and wait for it to finish before uploading.'); return; }
     if (!permissions.canUploadVersion) {
       setErrorMsg('Your current role does not have permission to upload audio versions.');
       return;
@@ -174,7 +133,7 @@ export const NewVersionModal: React.FC<NewVersionModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-sm">
           {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+            <div role="alert" className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
@@ -247,15 +206,17 @@ export const NewVersionModal: React.FC<NewVersionModalProps> = ({
 
           {sourceMode === 'mic' && (
             <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 text-center space-y-2">
+              <MicrophoneSelector id="version-microphone" devices={microphone.devices} value={microphone.selectedDeviceId} onChange={microphone.setSelectedDeviceId} disabled={isRecording || isRequesting || isStopping} isRequesting={isRequesting} isStopping={isStopping} />
               <div className="flex items-center justify-center gap-3">
                 {!isRecording ? (
                   <button
                     type="button"
                     onClick={startRecording}
+                    disabled={isRequesting || isStopping}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition"
                   >
                     <Mic className="w-4 h-4" />
-                    <span>{recordedAudioUrl ? 'Re-record Take' : 'Record Mic Take'}</span>
+                    <span>{isRequesting ? 'Requesting access…' : isStopping ? 'Finishing…' : recordedAudioUrl ? 'Re-record Take' : 'Record Mic Take'}</span>
                   </button>
                 ) : (
                   <button
@@ -311,7 +272,7 @@ export const NewVersionModal: React.FC<NewVersionModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !label.trim()}
+              disabled={isSubmitting || !label.trim() || (sourceMode === 'mic' && (isRecording || isRequesting || isStopping))}
               className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition"
             >
               <Upload className="w-3.5 h-3.5" />

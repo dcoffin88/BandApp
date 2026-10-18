@@ -16,7 +16,7 @@ import { SongIdea } from './types/band.ts';
 const AppContent: React.FC = () => {
   const { isAuthenticated } = useBand();
   const [activeTab, setActiveTab] = useState<'songs' | 'lyrics' | 'practice' | 'admin'>('songs');
-  const [adminSubTab, setAdminSubTab] = useState<'band' | 'users' | 'auth' | 'profile' | 'app'>('band');
+  const [adminSubTab, setAdminSubTab] = useState<'users' | 'auth' | 'profile' | 'app' | 'smtp'>('app');
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [lyricsModalSong, setLyricsModalSong] = useState<SongIdea | null>(null);
@@ -29,7 +29,7 @@ const AppContent: React.FC = () => {
     return <AuthView />;
   }
 
-  const handleSelectAdminSubTab = (subTab: 'band' | 'users' | 'auth' | 'profile' | 'app') => {
+  const handleSelectAdminSubTab = (subTab: 'users' | 'auth' | 'profile' | 'app' | 'smtp') => {
     setAdminSubTab(subTab);
     setActiveTab('admin');
   };
@@ -74,10 +74,10 @@ const AppContent: React.FC = () => {
       />
 
       {/* Modals */}
-      <UploadDemoModal
+      {isUploadModalOpen && <UploadDemoModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
-      />
+      />}
 
       <LyricsModal
         song={lyricsModalSong}
@@ -85,21 +85,23 @@ const AppContent: React.FC = () => {
         onClose={() => setLyricsModalSong(null)}
       />
 
-      <NewVersionModal
+      {newVersionModalSong && <NewVersionModal
         song={newVersionModalSong}
         isOpen={!!newVersionModalSong}
         onClose={() => setNewVersionModalSong(null)}
-      />
+      />}
     </div>
   );
 };
 
+const SessionContent: React.FC = () => {
+  const { currentUser, isAuthenticated } = useBand();
+  return <AudioPlayerProvider key={isAuthenticated ? currentUser.id : 'signed-out'}><AppContent /></AudioPlayerProvider>;
+};
 export default function App() {
   return (
     <BandProvider>
-      <AudioPlayerProvider>
-        <AppContent />
-      </AudioPlayerProvider>
+      <SessionContent />
     </BandProvider>
   );
 }

@@ -63,7 +63,7 @@ export const SmtpSettingsView: React.FC = () => {
   const [verifyResult, setVerifyResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Test Email Probe State
-  const [testRecipient, setTestRecipient] = useState(currentUser.email || 'dave@bandjam.app');
+  const [testRecipient, setTestRecipient] = useState(currentUser.email || 'dave@BandApp.app');
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -77,7 +77,7 @@ export const SmtpSettingsView: React.FC = () => {
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [resendingId, setResendingId] = useState<string | null>(null);
 
-  const isLeader = currentUser.role === 'leader';
+  const isAdmin = currentUser.role === 'admin';
 
   // Common SMTP Presets
   const SMTP_PRESETS = [
@@ -142,10 +142,11 @@ export const SmtpSettingsView: React.FC = () => {
     setVerifyResult(null);
   };
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLeader) return;
-    updateSmtpSettings(localSettings);
+    if (!isAdmin) return;
+    if (!await updateSmtpSettings(localSettings)) return;
+    setLocalSettings(previous => ({ ...previous, password: '' }));
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   };
@@ -157,13 +158,14 @@ export const SmtpSettingsView: React.FC = () => {
     try {
       const res = await fetch('/api/smtp/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-BandApp-Request': '1' },
         body: JSON.stringify({
           host: localSettings.host,
           port: localSettings.port,
           encryption: localSettings.encryption,
           username: localSettings.username,
           password: localSettings.password,
+          authRequired: localSettings.authRequired,
         }),
       });
 
@@ -224,6 +226,8 @@ export const SmtpSettingsView: React.FC = () => {
 
   const getEventBadge = (type: EmailEventType) => {
     switch (type) {
+      case 'member_invite':
+        return { label: 'Invitation', bg: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' };
       case 'new_demo':
         return { label: 'New Demo', bg: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
       case 'new_version':
@@ -342,7 +346,6 @@ export const SmtpSettingsView: React.FC = () => {
                   }`}
                 >
                   <p className="truncate font-bold">{preset.name}</p>
-                  <p className="text-[10px] text-zinc-500 font-mono truncate">{preset.host || 'Custom host'}</p>
                 </button>
               );
             })}
@@ -358,9 +361,9 @@ export const SmtpSettingsView: React.FC = () => {
               <Server className="w-4 h-4 text-amber-400" />
               <h4 className="font-bold text-white text-sm">SMTP Server Connection Parameters</h4>
             </div>
-            {!isLeader && (
+            {!isAdmin && (
               <span className="text-[11px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
-                Leader Edit Only
+                Admin Edit Only
               </span>
             )}
           </div>
@@ -383,7 +386,7 @@ export const SmtpSettingsView: React.FC = () => {
               <input
                 type="checkbox"
                 checked={localSettings.isEnabled}
-                disabled={!isLeader}
+                disabled={!isAdmin}
                 onChange={e => setLocalSettings({ ...localSettings, isEnabled: e.target.checked })}
                 className="sr-only peer"
               />
@@ -400,7 +403,7 @@ export const SmtpSettingsView: React.FC = () => {
               <input
                 type="text"
                 value={localSettings.host}
-                disabled={!isLeader}
+                disabled={!isAdmin}
                 onChange={e => setLocalSettings({ ...localSettings, host: e.target.value.trim() })}
                 placeholder="e.g. smtp.gmail.com"
                 className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono placeholder-zinc-600 disabled:opacity-60"
@@ -416,7 +419,7 @@ export const SmtpSettingsView: React.FC = () => {
               <input
                 type="number"
                 value={localSettings.port}
-                disabled={!isLeader}
+                disabled={!isAdmin}
                 onChange={e => setLocalSettings({ ...localSettings, port: parseInt(e.target.value, 10) || 587 })}
                 placeholder="587"
                 className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono disabled:opacity-60"
@@ -431,7 +434,7 @@ export const SmtpSettingsView: React.FC = () => {
               </label>
               <select
                 value={localSettings.encryption}
-                disabled={!isLeader}
+                disabled={!isAdmin}
                 onChange={e => setLocalSettings({ ...localSettings, encryption: e.target.value as any })}
                 className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3 py-2 text-white disabled:opacity-60"
               >
@@ -449,7 +452,7 @@ export const SmtpSettingsView: React.FC = () => {
               <input
                 type="text"
                 value={localSettings.username}
-                disabled={!isLeader}
+                disabled={!isAdmin}
                 onChange={e => setLocalSettings({ ...localSettings, username: e.target.value.trim() })}
                 placeholder="e.g. band@gmail.com"
                 className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono placeholder-zinc-600 disabled:opacity-60"
@@ -465,7 +468,7 @@ export const SmtpSettingsView: React.FC = () => {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={localSettings.password}
-                  disabled={!isLeader}
+                  disabled={!isAdmin}
                   onChange={e => setLocalSettings({ ...localSettings, password: e.target.value })}
                   placeholder="••••••••••••••••"
                   className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl pl-3.5 pr-10 py-2 text-white font-mono placeholder-zinc-600 disabled:opacity-60"
@@ -479,7 +482,7 @@ export const SmtpSettingsView: React.FC = () => {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-[10px] text-zinc-500 mt-1">For Gmail: use 16-character App Password</p>
+              <p className="text-[10px] text-zinc-500 mt-1">Leave blank to keep the saved password. For Gmail, use an App Password.</p>
             </div>
 
             <div>
@@ -489,7 +492,7 @@ export const SmtpSettingsView: React.FC = () => {
               <input
                 type="text"
                 value={localSettings.fromName}
-                disabled={!isLeader}
+                disabled={!isAdmin}
                 onChange={e => setLocalSettings({ ...localSettings, fromName: e.target.value })}
                 placeholder={band.name}
                 className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white disabled:opacity-60"
@@ -504,9 +507,9 @@ export const SmtpSettingsView: React.FC = () => {
               <input
                 type="email"
                 value={localSettings.fromEmail}
-                disabled={!isLeader}
+                disabled={!isAdmin}
                 onChange={e => setLocalSettings({ ...localSettings, fromEmail: e.target.value.trim() })}
-                placeholder="notifications@bandjam.app"
+                placeholder="notifications@BandApp.app"
                 className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono placeholder-zinc-600 disabled:opacity-60"
               />
               <p className="text-[10px] text-zinc-500 mt-1">Sender address (must match relay policy)</p>
@@ -519,7 +522,7 @@ export const SmtpSettingsView: React.FC = () => {
               <input
                 type="email"
                 value={localSettings.replyTo}
-                disabled={!isLeader}
+                disabled={!isAdmin}
                 onChange={e => setLocalSettings({ ...localSettings, replyTo: e.target.value.trim() })}
                 placeholder={currentUser.email}
                 className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono placeholder-zinc-600 disabled:opacity-60"
@@ -593,7 +596,7 @@ export const SmtpSettingsView: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={isChecked}
-                    disabled={!isLeader}
+                    disabled={!isAdmin}
                     onChange={e =>
                       setLocalSettings({
                         ...localSettings,
@@ -625,7 +628,7 @@ export const SmtpSettingsView: React.FC = () => {
                 <span>SMTP settings and trigger rules updated!</span>
               </span>
             )}
-            {isLeader && (
+            {isAdmin && (
               <button
                 type="submit"
                 className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20"
@@ -655,7 +658,7 @@ export const SmtpSettingsView: React.FC = () => {
               type="email"
               value={testRecipient}
               onChange={e => setTestRecipient(e.target.value)}
-              placeholder="e.g. member@bandjam.app"
+              placeholder="e.g. member@BandApp.app"
               className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
               required
             />
@@ -750,6 +753,7 @@ export const SmtpSettingsView: React.FC = () => {
               className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-300 text-xs"
             >
               <option value="all">All Events</option>
+              <option value="member_invite">Member Invitations</option>
               <option value="new_demo">New Demos</option>
               <option value="new_version">New Takes</option>
               <option value="lyric_edit">Lyrics Edits</option>
@@ -910,7 +914,7 @@ export const SmtpSettingsView: React.FC = () => {
             <div className="px-6 py-3 bg-zinc-950/80 border-b border-zinc-800 text-xs space-y-1 font-mono text-zinc-400">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-zinc-500">From:</span> "{localSettings.fromName || band.name}" &lt;{localSettings.fromEmail || 'notifications@bandjam.app'}&gt;
+                  <span className="text-zinc-500">From:</span> "{localSettings.fromName || band.name}" &lt;{localSettings.fromEmail || 'notifications@BandApp.app'}&gt;
                 </div>
                 <span className="text-[10px] text-zinc-500">
                   {new Date(previewLog.sentAt).toLocaleString()}

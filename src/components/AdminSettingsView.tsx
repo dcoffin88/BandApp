@@ -37,15 +37,18 @@ import {
   X,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
-import { AppSettings, AuthSettings, BandMember, Role, ThemeColor, UserStatus } from '../types/band.ts';
+import { AppSettings, AuthSettings, BandMember, Role, UserStatus, MemberInvitationResult } from '../types/band.ts';
 import { ImageCropModal } from './ImageCropModal.tsx';
+import { SmtpSettingsView } from './SmtpSettingsView.tsx';
+import { DEFAULT_AVATAR } from '../shared/defaults.ts';
+import { AppearanceSettings } from './AppearanceSettings.tsx';
 
 interface AdminSettingsViewProps {
-  initialTab?: 'band' | 'users' | 'auth' | 'profile' | 'app';
+  initialTab?: 'users' | 'auth' | 'profile' | 'app' | 'smtp';
 }
 
 export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
-  initialTab = 'band',
+  initialTab = 'app',
 }) => {
   const {
     band,
@@ -63,10 +66,12 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     updateAppSettings,
     clearAuditLogs,
     addBandMember,
+    sendMemberInvite,
     logout,
+    changePassword,
   } = useBand();
 
-  const [activeSubTab, setActiveSubTab] = useState<'band' | 'users' | 'auth' | 'profile' | 'app'>(initialTab);
+  const [activeSubTab, setActiveSubTab] = useState<'users' | 'auth' | 'profile' | 'app' | 'smtp'>(initialTab);
 
   // Band Edit State
   const [bandName, setBandName] = useState(band.name);
@@ -77,6 +82,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
   // App Settings & Header Logo State
   const [localAppSettings, setLocalAppSettings] = useState<AppSettings>(appSettings);
+  const [customColorInvalid, setCustomColorInvalid] = useState(false);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [appSettingsSaveSuccess, setAppSettingsSaveSuccess] = useState(false);
 
@@ -87,7 +93,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState<Role>('member');
   const [newUserInstrument, setNewUserInstrument] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('password123');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
+  const [invitationFeedback, setInvitationFeedback] = useState<MemberInvitationResult | null>(null);
 
   // Password reset modal state
   const [resettingUser, setResettingUser] = useState<BandMember | null>(null);
@@ -106,6 +115,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [profileGear, setProfileGear] = useState(currentUser.gearList || '');
   const [profilePhone, setProfilePhone] = useState(currentUser.phone || '');
   const [profileAvatar, setProfileAvatar] = useState(currentUser.avatar);
+  const [isProfileCropModalOpen, setIsProfileCropModalOpen] = useState(false);
   const [profile2FA, setProfile2FA] = useState(currentUser.twoFactorEnabled || false);
   const [profileNotifs, setProfileNotifs] = useState(
     currentUser.notifications || {
@@ -125,115 +135,79 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [passwordChangeError, setPasswordChangeError] = useState('');
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
 
-  const isLeader = currentUser.role === 'leader';
-
-  const COLOR_THEMES: { id: ThemeColor; name: string; bg: string; text: string; ring: string; desc: string }[] = [
-    {
-      id: 'amber',
-      name: 'Amber / Vintage Gold',
-      bg: 'bg-amber-500',
-      text: 'text-amber-400',
-      ring: 'ring-amber-500',
-      desc: 'Warm tube amp glow, classic rock warmth',
-    },
-    {
-      id: 'cyan',
-      name: 'Electric Cyan / Neon',
-      bg: 'bg-cyan-500',
-      text: 'text-cyan-400',
-      ring: 'ring-cyan-500',
-      desc: 'Modern alt rock, synthpop, digital edge',
-    },
-    {
-      id: 'purple',
-      name: 'Deep Purple / Velvet',
-      bg: 'bg-purple-500',
-      text: 'text-purple-400',
-      ring: 'ring-purple-500',
-      desc: 'Psychedelic, midnight dream pop, lush aesthetic',
-    },
-    {
-      id: 'emerald',
-      name: 'Emerald / Stage Mint',
-      bg: 'bg-emerald-500',
-      text: 'text-emerald-400',
-      ring: 'ring-emerald-500',
-      desc: 'Indie groove, clean acoustic vibe, modern green',
-    },
-    {
-      id: 'rose',
-      name: 'Crimson / Punk Rose',
-      bg: 'bg-rose-500',
-      text: 'text-rose-400',
-      ring: 'ring-rose-500',
-      desc: 'Heavy grunge, energetic punk, high-voltage red',
-    },
-    {
-      id: 'orange',
-      name: 'Sunset Orange / Americana',
-      bg: 'bg-orange-500',
-      text: 'text-orange-400',
-      ring: 'ring-orange-500',
-      desc: 'Raw overdrive, desert rock, tape analog heat',
-    },
-  ];
+  const isadmin = currentUser.role === 'admin';
 
   // Handlers
-  const handleSaveBandSettings = (e: React.FormEvent) => {
+  const handleSaveBandSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!permissions.canManageMembers) return;
-    updateBandName(bandName, bandMotto, bandGenre, bandYear);
+    if (!await updateBandName(bandName, bandMotto, bandGenre, bandYear)) return;
     setBandSaveSuccess(true);
     setTimeout(() => setBandSaveSuccess(false), 2500);
   };
 
-  const handleSaveAppSettings = (e: React.FormEvent) => {
+  const handleSaveAppSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateAppSettings(localAppSettings);
+    if (customColorInvalid) return;
+    if (!await updateAppSettings(localAppSettings)) return;
     setAppSettingsSaveSuccess(true);
     setTimeout(() => setAppSettingsSaveSuccess(false), 2500);
   };
 
-  const handleSaveAuthSettings = (e: React.FormEvent) => {
+  const handleSaveAuthSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!permissions.canManageMembers) return;
-    updateAuthSettings(localAuthSettings);
+    if (!await updateAuthSettings(localAuthSettings)) return;
     setAuthSaveSuccess(true);
     setTimeout(() => setAuthSaveSuccess(false), 2500);
   };
 
-  const handleInviteUser = (e: React.FormEvent) => {
+  const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUserName.trim() || !newUserEmail.trim()) return;
+    if (isAddingMember || !newUserName.trim() || !newUserEmail.trim()) return;
+    setIsAddingMember(true);
+    setInvitationFeedback(null);
 
-    addBandMember({
+    const saved = await addBandMember({
       name: newUserName.trim(),
       email: newUserEmail.trim(),
       role: newUserRole,
       status: 'active',
       instrument: newUserInstrument.trim() || 'Vocals / Guitar',
-      password: newUserPassword.trim() || 'password123',
-      avatar: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 500)}?w=150&auto=format&fit=crop&q=80`,
+      password: newUserPassword,
+      avatar: DEFAULT_AVATAR,
     });
 
+    setIsAddingMember(false);
+    if (!saved.success) return;
+    if (saved.invitation) setInvitationFeedback({ ...saved.invitation, message: `Member added. ${saved.invitation.message}` });
     setIsInviteModalOpen(false);
     setNewUserName('');
     setNewUserEmail('');
     setNewUserInstrument('');
-    setNewUserPassword('password123');
+    setNewUserPassword('');
   };
 
-  const handleResetPassword = (e: React.FormEvent) => {
+  const handleResendInvite = async (member: BandMember) => {
+    if (invitingUserId) return;
+    setInvitingUserId(member.id);
+    setInvitationFeedback(null);
+    const result = await sendMemberInvite(member.id);
+    setInvitationFeedback(result);
+    setInvitingUserId(null);
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resettingUser || !newResetPassword.trim()) return;
-    updateUserProfile(resettingUser.id, { password: newResetPassword.trim() });
+    if (!await updateUserProfile(resettingUser.id, { password: newResetPassword })) return;
     setResettingUser(null);
     setNewResetPassword('');
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateUserProfile(currentUser.id, {
+    const saved = await updateUserProfile(currentUser.id, {
       name: profileName.trim(),
       stageName: profileStageName.trim(),
       email: profileEmail.trim(),
@@ -242,34 +216,25 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       gearList: profileGear.trim(),
       phone: profilePhone.trim(),
       avatar: profileAvatar.trim(),
-      twoFactorEnabled: profile2FA,
       notifications: profileNotifs,
     });
+    if (!saved) return;
     setProfileSaveSuccess(true);
     setTimeout(() => setProfileSaveSuccess(false), 2500);
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordChangeError('');
     setPasswordChangeSuccess(false);
-
-    if (currentPasswordInput !== (currentUser.password || 'password123')) {
-      setPasswordChangeError('Current password does not match.');
-      return;
-    }
-
-    if (newPasswordInput.length < 6) {
-      setPasswordChangeError('New password must be at least 6 characters.');
-      return;
-    }
 
     if (newPasswordInput !== confirmPasswordInput) {
       setPasswordChangeError('New passwords do not match.');
       return;
     }
 
-    updateUserProfile(currentUser.id, { password: newPasswordInput });
+    const result = await changePassword(currentPasswordInput, newPasswordInput);
+    if (!result.success) { setPasswordChangeError(result.message || 'Password change failed.'); return; }
     setPasswordChangeSuccess(true);
     setCurrentPasswordInput('');
     setNewPasswordInput('');
@@ -327,19 +292,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           }`}
         >
           <Palette className="w-4 h-4" />
-          <span>App Colors &amp; Header Logo</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('band')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${
-            activeSubTab === 'band'
-              ? 'bg-amber-500 text-zinc-950 shadow-md font-bold'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-          }`}
-        >
-          <Guitar className="w-4 h-4" />
-          <span>Band &amp; Roles</span>
+          <span>App Settings</span>
         </button>
 
         <button
@@ -377,13 +330,106 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           <UserCog className="w-4 h-4" />
           <span>Profile Management</span>
         </button>
+        {isadmin && <button onClick={() => setActiveSubTab('smtp')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${activeSubTab === 'smtp' ? 'bg-amber-500 text-zinc-950 shadow-md font-bold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}><Mail className="w-4 h-4"/><span>Email Settings</span></button>}
       </div>
 
+      {activeSubTab === 'smtp' && <SmtpSettingsView />}
+
       {/* ========================================================================= */}
-      {/* 0. APP SETTINGS (COLORS & HEADER LOGO / NAME AREA EDITOR) */}
+      {/* APP SETTINGS (BAND IDENTITY, COLORS & HEADER LOGO / NAME AREA EDITOR) */}
       {/* ========================================================================= */}
       {activeSubTab === 'app' && (
         <div className="space-y-6">
+          {/* Band Profile Editor Form */}
+          <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <Guitar className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-white text-base">Band Identity &amp; Metadata</h3>
+              </div>
+              {!isadmin && (
+                <span className="text-xs px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 font-mono">
+                  Admin Edit Only
+                </span>
+              )}
+            </div>
+
+            <form onSubmit={handleSaveBandSettings} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                    Band Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={bandName}
+                    disabled={!isadmin}
+                    onChange={e => setBandName(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm disabled:opacity-60"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                    Musical Genre
+                  </label>
+                  <input
+                    type="text"
+                    value={bandGenre}
+                    disabled={!isadmin}
+                    onChange={e => setBandGenre(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                    Motto / Tagline
+                  </label>
+                  <input
+                    type="text"
+                    value={bandMotto}
+                    disabled={!isadmin}
+                    onChange={e => setBandMotto(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                    Founded Year
+                  </label>
+                  <input
+                    type="text"
+                    value={bandYear}
+                    disabled={!isadmin}
+                    onChange={e => setBandYear(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm font-mono disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {isadmin && (
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  {bandSaveSuccess && (
+                    <span className="text-emerald-400 font-medium flex items-center gap-1">
+                      <Check className="w-4 h-4" />
+                      <span>Band details updated!</span>
+                    </span>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-1.5 shadow-md"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Save Band Details</span>
+                  </button>
+                </div>
+              )}
+            </form>
+          </div>
+
           {/* Header Logo & Name Area Live Mockup */}
           <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -391,7 +437,6 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <Crop className="w-5 h-5 text-amber-400" />
                 <h3 className="font-bold text-white text-base">Header Logo &amp; Name Area Editor</h3>
               </div>
-              <span className="text-xs text-zinc-400 font-mono">Live Navbar Preview</span>
             </div>
 
             {/* Live Header Preview Box */}
@@ -460,7 +505,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   )}
                 </div>
                 <p className="text-[11px] text-zinc-500">
-                  Upload any photo or band artwork. The crop tool lets you zoom, pan, rotate, and crop a crisp square or circular logo.
+                  Upload logo or photo. The crop tool lets you zoom, pan, rotate, and crop.
                 </p>
               </div>
 
@@ -510,41 +555,11 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
                 <Palette className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-white text-base">App Color Theme &amp; Accent Palette</h3>
+                <h3 className="font-bold text-white text-base">Appearance</h3>
               </div>
-              <span className="text-xs text-zinc-400 font-mono">Real-Time Tone Selection</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {COLOR_THEMES.map(theme => {
-                const isSelected = localAppSettings.primaryColor === theme.id;
-                return (
-                  <button
-                    key={theme.id}
-                    type="button"
-                    onClick={() => setLocalAppSettings({ ...localAppSettings, primaryColor: theme.id })}
-                    className={`p-4 rounded-2xl border text-left transition flex items-start gap-3 ${
-                      isSelected
-                        ? 'bg-zinc-800/90 border-amber-500/80 ring-2 ring-amber-500/20 shadow-xl'
-                        : 'bg-zinc-950/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/60'
-                    }`}
-                  >
-                    <div className={`w-8 h-8 rounded-xl ${theme.bg} shrink-0 mt-0.5 shadow-md flex items-center justify-center`}>
-                      {isSelected && <Check className="w-4 h-4 text-zinc-950 stroke-[3]" />}
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className={`font-bold text-xs sm:text-sm ${theme.text}`}>
-                        {theme.name}
-                      </p>
-                      <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
-                        {theme.desc}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <AppearanceSettings settings={localAppSettings} onChange={setLocalAppSettings} onInvalidColorChange={setCustomColorInvalid} />
 
             {/* Ambient Glow Toggle */}
             <div className="pt-3 border-t border-zinc-800">
@@ -556,7 +571,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   className="rounded accent-amber-500 w-4 h-4"
                 />
                 <div>
-                  <p className="font-semibold text-zinc-200 text-xs">Enable Ambient Stage Lighting &amp; Waveform Glow</p>
+                  <p className="font-semibold text-zinc-200 text-xs">Enable Ambient Lighting &amp; Glow</p>
                   <p className="text-[11px] text-zinc-500">Adds glowing accents to active playback, waveforms, and navigation badges.</p>
                 </div>
               </label>
@@ -573,10 +588,11 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleSaveAppSettings}
-                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20"
+                disabled={customColorInvalid}
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
-                <span>Save App Theme &amp; Header</span>
+                <span>Save Appearance &amp; Header</span>
               </button>
             </div>
           </div>
@@ -584,98 +600,181 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 1. BAND & ROLES TAB */}
+      {/* 2. USER MANAGEMENT TAB */}
       {/* ========================================================================= */}
-      {activeSubTab === 'band' && (
+      {activeSubTab === 'users' && (
         <div className="space-y-6">
-          {/* Band Profile Editor Form */}
-          <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <div className="flex items-center gap-2">
-                <Guitar className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-white text-base">Band Identity &amp; Metadata</h3>
-              </div>
-              {!isLeader && (
-                <span className="text-xs px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 font-mono">
-                  Leader Edit Only
-                </span>
-              )}
+          {/* Top Actions: Search & Invite */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative sm:w-72">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search by name, email, instrument..."
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              />
             </div>
 
-            <form onSubmit={handleSaveBandSettings} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-                    Band Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={bandName}
-                    disabled={!isLeader}
-                    onChange={e => setBandName(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm disabled:opacity-60"
-                    required
-                  />
-                </div>
+            {isadmin && (
+              <button
+                onClick={() => setIsInviteModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition shadow-md self-start sm:self-auto"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Add / Invite User</span>
+              </button>
+            )}
+          </div>
 
-                <div>
-                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-                    Musical Genre
-                  </label>
-                  <input
-                    type="text"
-                    value={bandGenre}
-                    disabled={!isLeader}
-                    onChange={e => setBandGenre(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm disabled:opacity-60"
-                  />
-                </div>
+          {/* User Directory Table */}
+          {invitationFeedback && (
+            <div role="status" className={`rounded-xl border p-4 text-sm ${invitationFeedback.status === 'sent' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' : 'border-amber-500/40 bg-amber-500/10 text-zinc-200'}`}>
+              <p>{invitationFeedback.message}</p>
+              {invitationFeedback.status === 'failed' && <button type="button" onClick={() => setActiveSubTab('smtp')} className="mt-2 underline font-semibold">Open Email Settings</button>}
+            </div>
+          )}
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-zinc-950/60 border-b border-zinc-800 text-zinc-400 font-mono uppercase tracking-wider">
+                    <th className="py-3 px-4">User</th>
+                    <th className="py-3 px-4">Instrument</th>
+                    <th className="py-3 px-4">Role</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Last Active</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
+                  {filteredMembers.map(member => {
+                    const isSelf = member.id === currentUser.id;
 
-                <div>
-                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-                    Motto / Tagline
-                  </label>
-                  <input
-                    type="text"
-                    value={bandMotto}
-                    disabled={!isLeader}
-                    onChange={e => setBandMotto(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm disabled:opacity-60"
-                  />
-                </div>
+                    return (
+                      <tr key={member.id} className="hover:bg-zinc-800/40 transition">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={member.avatar}
+                              alt={member.name}
+                              className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-700"
+                            />
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-white">{member.name}</span>
+                                {isSelf && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
+                                    YOU
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[11px] text-zinc-500 font-mono">{member.email}</span>
+                            </div>
+                          </div>
+                        </td>
 
-                <div>
-                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-                    Founded Year
-                  </label>
-                  <input
-                    type="text"
-                    value={bandYear}
-                    disabled={!isLeader}
-                    onChange={e => setBandYear(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm font-mono disabled:opacity-60"
-                  />
-                </div>
-              </div>
+                        <td className="py-3 px-4 text-zinc-300 font-medium">
+                          {member.instrument}
+                        </td>
 
-              {isLeader && (
-                <div className="pt-2 flex items-center justify-end gap-3">
-                  {bandSaveSuccess && (
-                    <span className="text-emerald-400 font-medium flex items-center gap-1">
-                      <Check className="w-4 h-4" />
-                      <span>Band details updated!</span>
-                    </span>
-                  )}
-                  <button
-                    type="submit"
-                    className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-1.5 shadow-md"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>Save Band Details</span>
-                  </button>
-                </div>
-              )}
-            </form>
+                        <td className="py-3 px-4">
+                          {isadmin && !isSelf ? (
+                            <select
+                              value={member.role}
+                              onChange={e => updateUserRole(member.id, e.target.value as Role)}
+                              className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            >
+                              <option value="admin">Admin</option>
+                              <option value="editor">Editor</option>
+                              <option value="member">Member</option>
+                              <option value="guest">Guest</option>
+                            </select>
+                          ) : (
+                            <span className="font-semibold uppercase tracking-wider text-[11px] px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
+                              {member.role}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          {isadmin && !isSelf ? (
+                            <select
+                              value={member.status || 'active'}
+                              onChange={e => updateUserStatus(member.id, e.target.value as UserStatus)}
+                              className={`rounded-lg px-2 py-1 text-xs font-semibold border ${
+                                member.status === 'suspended'
+                                  ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                                  : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                              }`}
+                            >
+                              <option value="active">Active</option>
+                              <option value="suspended">Suspended</option>
+                              <option value="invited">Invited</option>
+                            </select>
+                          ) : (
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase ${
+                                member.status === 'suspended'
+                                  ? 'bg-rose-500/20 text-rose-300'
+                                  : 'bg-emerald-500/20 text-emerald-300'
+                              }`}
+                            >
+                              {member.status || 'active'}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4 text-zinc-400 font-mono text-[11px]">
+                          {member.lastLogin ? new Date(member.lastLogin).toLocaleDateString() : 'Active'}
+                        </td>
+
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {isadmin && !isSelf && member.status !== 'suspended' && (
+                              <button
+                                type="button"
+                                onClick={() => handleResendInvite(member)}
+                                disabled={invitingUserId !== null}
+                                aria-label={`Resend invitation to ${member.name}`}
+                                title="Send / resend invitation email"
+                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition disabled:opacity-50"
+                              >
+                                {invitingUserId === member.id ? 'Sending…' : 'Resend invite'}
+                              </button>
+                            )}
+                            {isadmin && (
+                              <button
+                                onClick={() => setResettingUser(member)}
+                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition"
+                                title="Reset Password"
+                              >
+                                Reset Pass
+                              </button>
+                            )}
+
+                            {isadmin && !isSelf && (
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Are you sure you want to delete user account "${member.name}"?`)) {
+                                    deleteUserAccount(member.id);
+                                  }
+                                }}
+                                className="p-1.5 text-zinc-500 hover:text-rose-400 rounded hover:bg-rose-500/10 transition"
+                                title="Delete user account"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Role Permissions Matrix */}
@@ -690,8 +789,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-400 font-mono uppercase tracking-wider">
                     <th className="py-2.5 px-3">Capability</th>
-                    <th className="py-2.5 px-3 text-center">Leader / Admin</th>
-                    <th className="py-2.5 px-3 text-center">Songwriter</th>
+                    <th className="py-2.5 px-3 text-center">Admin</th>
+                    <th className="py-2.5 px-3 text-center">Editor</th>
                     <th className="py-2.5 px-3 text-center">Member</th>
                     <th className="py-2.5 px-3 text-center">Guest / Session</th>
                   </tr>
@@ -747,168 +846,6 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 2. USER MANAGEMENT TAB */}
-      {/* ========================================================================= */}
-      {activeSubTab === 'users' && (
-        <div className="space-y-6">
-          {/* Top Actions: Search & Invite */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative sm:w-72">
-              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search by name, email, instrument..."
-                value={userSearch}
-                onChange={e => setUserSearch(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-            </div>
-
-            {isLeader && (
-              <button
-                onClick={() => setIsInviteModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition shadow-md self-start sm:self-auto"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Add / Invite User</span>
-              </button>
-            )}
-          </div>
-
-          {/* User Directory Table */}
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="bg-zinc-950/60 border-b border-zinc-800 text-zinc-400 font-mono uppercase tracking-wider">
-                    <th className="py-3 px-4">User</th>
-                    <th className="py-3 px-4">Instrument</th>
-                    <th className="py-3 px-4">Role</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Last Active</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
-                  {filteredMembers.map(member => {
-                    const isSelf = member.id === currentUser.id;
-
-                    return (
-                      <tr key={member.id} className="hover:bg-zinc-800/40 transition">
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={member.avatar}
-                              alt={member.name}
-                              className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-700"
-                            />
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold text-white">{member.name}</span>
-                                {isSelf && (
-                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
-                                    YOU
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[11px] text-zinc-500 font-mono">{member.email}</span>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-4 text-zinc-300 font-medium">
-                          {member.instrument}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          {isLeader && !isSelf ? (
-                            <select
-                              value={member.role}
-                              onChange={e => updateUserRole(member.id, e.target.value as Role)}
-                              className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                            >
-                              <option value="leader">Leader</option>
-                              <option value="songwriter">Songwriter</option>
-                              <option value="member">Member</option>
-                              <option value="guest">Guest</option>
-                            </select>
-                          ) : (
-                            <span className="font-semibold uppercase tracking-wider text-[11px] px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
-                              {member.role}
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          {isLeader && !isSelf ? (
-                            <select
-                              value={member.status || 'active'}
-                              onChange={e => updateUserStatus(member.id, e.target.value as UserStatus)}
-                              className={`rounded-lg px-2 py-1 text-xs font-semibold border ${
-                                member.status === 'suspended'
-                                  ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
-                                  : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
-                              }`}
-                            >
-                              <option value="active">Active</option>
-                              <option value="suspended">Suspended</option>
-                              <option value="invited">Invited</option>
-                            </select>
-                          ) : (
-                            <span
-                              className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase ${
-                                member.status === 'suspended'
-                                  ? 'bg-rose-500/20 text-rose-300'
-                                  : 'bg-emerald-500/20 text-emerald-300'
-                              }`}
-                            >
-                              {member.status || 'active'}
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 text-zinc-400 font-mono text-[11px]">
-                          {member.lastLogin ? new Date(member.lastLogin).toLocaleDateString() : 'Active'}
-                        </td>
-
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {isLeader && (
-                              <button
-                                onClick={() => setResettingUser(member)}
-                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition"
-                                title="Reset Password"
-                              >
-                                Reset Pass
-                              </button>
-                            )}
-
-                            {isLeader && !isSelf && (
-                              <button
-                                onClick={() => {
-                                  if (confirm(`Are you sure you want to delete user account "${member.name}"?`)) {
-                                    deleteUserAccount(member.id);
-                                  }
-                                }}
-                                className="p-1.5 text-zinc-500 hover:text-rose-400 rounded hover:bg-rose-500/10 transition"
-                                title="Delete user account"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
       {/* 3. AUTHENTICATION MANAGEMENT TAB */}
       {/* ========================================================================= */}
       {activeSubTab === 'auth' && (
@@ -920,9 +857,9 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <KeyRound className="w-5 h-5 text-amber-400" />
                 <h3 className="font-bold text-white text-base">Authentication Policies &amp; Security Guards</h3>
               </div>
-              {!isLeader && (
+              {!isadmin && (
                 <span className="text-xs px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 font-mono">
-                  Leader Only
+                  Admin Only
                 </span>
               )}
             </div>
@@ -938,11 +875,11 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                     min="15"
                     max="1440"
                     value={localAuthSettings.sessionTimeoutMinutes}
-                    disabled={!isLeader}
+                    disabled={!isadmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, sessionTimeoutMinutes: parseInt(e.target.value, 10) })}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono disabled:opacity-60"
                   />
-                  <p className="text-[11px] text-zinc-500 mt-1">Automatic logout after inactivity</p>
+                  <p className="text-[11px] text-zinc-500 mt-1">Session expires after this time from sign-in</p>
                 </div>
 
                 <div>
@@ -951,10 +888,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    min="6"
+                    min="12"
                     max="32"
                     value={localAuthSettings.minPasswordLength}
-                    disabled={!isLeader}
+                    disabled={!isadmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, minPasswordLength: parseInt(e.target.value, 10) })}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono disabled:opacity-60"
                   />
@@ -970,7 +907,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                     min="3"
                     max="10"
                     value={localAuthSettings.maxFailedLogins}
-                    disabled={!isLeader}
+                    disabled={!isadmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, maxFailedLogins: parseInt(e.target.value, 10) })}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono disabled:opacity-60"
                   />
@@ -983,14 +920,14 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <label className="flex items-center gap-3 p-3 rounded-xl bg-zinc-950/60 border border-zinc-800 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={localAuthSettings.requireTwoFactor}
-                    disabled={!isLeader}
+                    checked={false}
+                    disabled
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, requireTwoFactor: e.target.checked })}
                     className="rounded accent-amber-500 w-4 h-4"
                   />
                   <div>
                     <p className="font-semibold text-zinc-200">Enforce Two-Factor Authentication (2FA)</p>
-                    <p className="text-[11px] text-zinc-500">Require TOTP authentication for all band leaders and members</p>
+                    <p className="text-[11px] text-zinc-500">Future Feature</p>
                   </div>
                 </label>
 
@@ -998,7 +935,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <input
                     type="checkbox"
                     checked={localAuthSettings.requireSpecialChar}
-                    disabled={!isLeader}
+                    disabled={!isadmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, requireSpecialChar: e.target.checked })}
                     className="rounded accent-amber-500 w-4 h-4"
                   />
@@ -1009,7 +946,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </label>
               </div>
 
-              {isLeader && (
+              {isadmin && (
                 <div className="pt-2 flex items-center justify-end gap-3">
                   {authSaveSuccess && (
                     <span className="text-emerald-400 font-medium flex items-center gap-1">
@@ -1039,7 +976,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </h3>
               </div>
 
-              {isLeader && auditLogs.length > 0 && (
+              {isadmin && auditLogs.length > 0 && (
                 <button
                   onClick={clearAuditLogs}
                   className="px-2.5 py-1 text-zinc-400 hover:text-rose-400 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-[11px] transition"
@@ -1096,8 +1033,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-500/40"
                 />
                 <div>
-                  <h3 className="font-bold text-white text-base">Your Musician Profile</h3>
-                  <p className="text-xs text-zinc-400">Update your stage persona, instruments, bio, and contact info</p>
+                  <h3 className="font-bold text-white text-base">Your Profile</h3>
+                  <p className="text-xs text-zinc-400">Update your name, instruments, bio, and contact info</p>
                 </div>
               </div>
             </div>
@@ -1125,7 +1062,6 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                     type="text"
                     value={profileStageName}
                     onChange={e => setProfileStageName(e.target.value)}
-                    placeholder="e.g. Dave 'Echo' Coffin"
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm"
                   />
                 </div>
@@ -1145,13 +1081,12 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
                 <div>
                   <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
-                    Phone / Text (For Rehearsal Alerts)
+                    Phone / Text
                   </label>
                   <input
                     type="tel"
                     value={profilePhone}
                     onChange={e => setProfilePhone(e.target.value)}
-                    placeholder="+1 (555) 234-8901"
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm"
                   />
                 </div>
@@ -1170,14 +1105,26 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
                 <div className="sm:col-span-2">
                   <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
-                    Avatar Image URL
+                    Profile Image
                   </label>
-                  <input
-                    type="url"
-                    value={profileAvatar}
-                    onChange={e => setProfileAvatar(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-xs font-mono"
-                  />
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={profileAvatar}
+                      alt="Profile image preview"
+                      className="w-16 h-16 rounded-full object-cover border border-zinc-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsProfileCropModalOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-md transition"
+                    >
+                      <Crop className="w-4 h-4" />
+                      <span>Upload &amp; Crop Profile Image</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 mt-2">
+                    Upload a photo, adjust the crop, then select Update Profile to save.
+                  </p>
                 </div>
 
                 <div className="sm:col-span-2">
@@ -1294,6 +1241,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <label className="block text-zinc-400 mb-1">Current Password</label>
                   <input
                     type="password"
+                    autoComplete="current-password"
                     value={currentPasswordInput}
                     onChange={e => setCurrentPasswordInput(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-white"
@@ -1305,6 +1253,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <label className="block text-zinc-400 mb-1">New Password</label>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={newPasswordInput}
                     onChange={e => setNewPasswordInput(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-white"
@@ -1316,6 +1265,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <label className="block text-zinc-400 mb-1">Confirm New Password</label>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={confirmPasswordInput}
                     onChange={e => setConfirmPasswordInput(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-white"
@@ -1336,10 +1286,6 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             <div className="p-5 rounded-3xl bg-zinc-950/60 border border-zinc-800 text-xs space-y-3">
               <p className="font-semibold text-zinc-400 uppercase tracking-wider">Account Information</p>
               <div className="space-y-2 text-zinc-300">
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Member ID:</span>
-                  <span className="font-mono">{currentUser.id}</span>
-                </div>
                 <div className="flex justify-between">
                   <span className="text-zinc-500">Current Role:</span>
                   <span className="font-semibold uppercase text-amber-400">{currentUser.role}</span>
@@ -1379,7 +1325,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Chris Martin"
+                  placeholder="e.g. Demo Smith"
                   value={newUserName}
                   onChange={e => setNewUserName(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm"
@@ -1393,7 +1339,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </label>
                 <input
                   type="email"
-                  placeholder="chris@bandjam.app"
+                  placeholder="user@example.com"
                   value={newUserEmail}
                   onChange={e => setNewUserEmail(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm"
@@ -1419,12 +1365,15 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   Initial Password
                 </label>
                 <input
-                  type="text"
+                  type="password"
+                  minLength={localAuthSettings.minPasswordLength}
+                  autoComplete="new-password"
                   value={newUserPassword}
                   onChange={e => setNewUserPassword(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-mono"
                   required
                 />
+                <p className="mt-1.5 text-[11px] text-zinc-500">The invitation includes the sign-in link. Share this initial password separately.</p>
               </div>
 
               <div>
@@ -1436,10 +1385,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   onChange={e => setNewUserRole(e.target.value as Role)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-medium"
                 >
-                  <option value="leader">Leader / Admin</option>
-                  <option value="songwriter">Songwriter</option>
+                  <option value="admin">Admin</option>
+                  <option value="editor">Editor</option>
                   <option value="member">Member</option>
-                  <option value="guest">Guest / Session</option>
+                  <option value="guest">Guest</option>
                 </select>
               </div>
 
@@ -1453,10 +1402,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={!newUserName.trim() || !newUserEmail.trim()}
+                  disabled={isAddingMember || !newUserName.trim() || !newUserEmail.trim()}
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold"
                 >
-                  Save &amp; Invite
+                  {isAddingMember ? 'Saving & Sending…' : 'Save & Invite'}
                 </button>
               </div>
             </form>
@@ -1514,8 +1463,17 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* Image Crop Modal for Band Logo */}
+      {/* Image Crop Modals */}
       {/* ========================================================================= */}
+      {isProfileCropModalOpen && (
+        <ImageCropModal
+          isOpen={isProfileCropModalOpen}
+          onClose={() => setIsProfileCropModalOpen(false)}
+          initialImageUrl={profileAvatar}
+          imageType="profile"
+          onCropComplete={setProfileAvatar}
+        />
+      )}
       <ImageCropModal
         isOpen={isCropModalOpen}
         onClose={() => setIsCropModalOpen(false)}

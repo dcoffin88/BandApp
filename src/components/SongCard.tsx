@@ -77,11 +77,11 @@ export const SongCard: React.FC<SongCardProps> = ({
     }
   };
 
-  const handleAddComment = (e: React.FormEvent) => {
+  const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCommentText.trim()) return;
     const timestamp = isCurrentPlaying ? Math.round(currentTime) : undefined;
-    addComment(song.id, newCommentText, timestamp);
+    if (!await addComment(song.id, newCommentText, timestamp)) return;
     setNewCommentText('');
   };
 
@@ -190,7 +190,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                   }
                 }}
                 className="p-1.5 text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
-                title="Delete track (Leader only)"
+                title="Delete track (Admin only)"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
