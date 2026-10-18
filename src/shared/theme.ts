@@ -1,4 +1,4 @@
-import type { AppSettings, ThemeColor } from '../types/band.ts';
+import type { UserAppearance, ThemeColor } from '../types/band.ts';
 
 export const CUSTOM_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 export const THEME_COLORS: Record<Exclude<ThemeColor, 'custom'>, string> = {
@@ -15,7 +15,7 @@ export const THEME_COLORS: Record<Exclude<ThemeColor, 'custom'>, string> = {
   pink: '#ec4899',
 };
 
-export function getAccentColor(settings: AppSettings): string {
+export function getAccentColor(settings: UserAppearance): string {
   return settings.primaryColor === 'custom' &&
     CUSTOM_COLOR_PATTERN.test(settings.customColor || '')
     ? settings.customColor!
@@ -23,7 +23,7 @@ export function getAccentColor(settings: AppSettings): string {
         THEME_COLORS.amber;
 }
 
-export function applyTheme(settings: AppSettings): () => void {
+export function applyTheme(settings: UserAppearance): () => void {
   const root = document.documentElement;
   root.setAttribute('data-theme', settings.primaryColor);
   const color = getAccentColor(settings);

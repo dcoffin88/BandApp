@@ -251,9 +251,6 @@ test('signed-out sessions expose saved branding without private workspace data',
     const updated = await f.action(admin.cookie, 'app.update', {
       headerLogoUrl: logo,
       headerLogoShape: 'circle',
-      primaryColor: 'custom',
-      customColor: '#3366cc',
-      appearance: 'light',
     });
     assert.equal(updated.status, 200);
     await f.restart();
@@ -268,9 +265,183 @@ test('signed-out sessions expose saved branding without private workspace data',
     assert.equal(anonymous.currentUser, null);
     assert.equal(anonymous.appSettings.headerLogoUrl, logo);
     assert.equal(anonymous.appSettings.headerLogoShape, 'circle');
-    assert.equal(anonymous.appSettings.customColor, '#3366cc');
-    assert.equal(anonymous.appSettings.appearance, 'light');
+    assert.equal(anonymous.appSettings.primaryColor, 'amber');
+    assert.equal(anonymous.appSettings.appearance, 'dark');
     assert.equal((await f.request('/api/state')).status, 401);
+  } finally {
+    await f.close();
+  }
+});
+
+test('appearance is personal, validated, persisted and cannot modify the band header', async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.login();
+    const originalHeader = f.store.read().appSettings.headerLogoUrl;
+    for (const role of ['member', 'editor', 'guest']) {
+      assert.equal(
+        (
+          await f.action(admin.cookie, 'member.add', {
+            name: role,
+            email: `${role}@example.com`,
+            password,
+            role,
+            instrument: 'Guitar',
+          })
+        ).status,
+        200,
+      );
+      const account = await f.login(`${role}@example.com`);
+      const appearance = {
+        primaryColor: 'custom',
+        customColor: '#3366cc',
+        appearance: 'light',
+        radius: 'full',
+        accentGlow: false,
+      };
+      const saved = await f.action(
+        account.cookie,
+        'appearance.update',
+        appearance,
+      );
+      assert.equal(saved.status, 200);
+      const result = await saved.json();
+      assert.deepEqual(result.state.currentUser.appearanceSettings, appearance);
+      assert.equal(
+        result.state.appSettings.customColor,
+        appearance.customColor,
+      );
+      assert.equal(
+        (
+          await f.action(account.cookie, 'appearance.update', {
+            headerLogoUrl: '',
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await f.action(account.cookie, 'appearance.update', {
+            userId: admin.state.currentUser.id,
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await f.action(account.cookie, 'appearance.update', {
+            customColor: 'red',
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await f.action(account.cookie, 'appearance.update', {
+            appearance: 'invalid',
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await f.action(account.cookie, 'app.update', {
+            headerSubtitle: 'Attack',
+          })
+        ).status,
+        403,
+      );
+    }
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'appearance.update', {
+          primaryColor: 'purple',
+          appearance: 'system',
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await f.action(admin.cookie, 'app.update', { primaryColor: 'rose' }))
+        .status,
+      400,
+    );
+    await f.restart();
+    const member = await f.login('member@example.com');
+    const editor = await f.login('editor@example.com');
+    assert.equal(member.state.appSettings.customColor, '#3366cc');
+    assert.equal(member.state.currentUser.appearanceSettings.radius, 'full');
+    assert.equal(
+      (
+        await f.action(member.cookie, 'appearance.update', {
+          primaryColor: 'cyan',
+        })
+      ).status,
+      200,
+    );
+    const editorState = await (
+      await f.request('/api/state', undefined, editor.cookie)
+    ).json();
+    const adminState = await (
+      await f.request('/api/state', undefined, admin.cookie)
+    ).json();
+    assert.equal(editorState.appSettings.primaryColor, 'custom');
+    assert.equal(adminState.appSettings.primaryColor, 'purple');
+    assert.equal(adminState.appSettings.appearance, 'system');
+    assert.equal(
+      editorState.band.members.find(
+        (m: any) => m.id === member.state.currentUser.id,
+      ).appearanceSettings,
+      undefined,
+    );
+    assert.equal(f.store.read().appSettings.headerLogoUrl, originalHeader);
+    const publicSession = await (await f.request('/api/auth/session')).json();
+    assert.equal(publicSession.appSettings.primaryColor, 'amber');
+    assert.equal(publicSession.appSettings.appearance, 'dark');
+  } finally {
+    await f.close();
+  }
+});
+
+test('existing accounts inherit the old shared appearance once when upgraded', async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.login();
+    const state = f.store.read();
+    state.appSettings = {
+      ...state.appSettings,
+      primaryColor: 'custom',
+      customColor: '#123456',
+      appearance: 'light',
+      radius: 'small',
+      accentGlow: false,
+    };
+    f.store.write(state);
+    const oldUser = { ...f.store.members()[0] };
+    delete oldUser.appearanceSettings;
+    f.store.db
+      .prepare('UPDATE users SET profile=? WHERE id=?')
+      .run(JSON.stringify(oldUser), oldUser.id);
+    await f.restart();
+    const upgraded = await (
+      await f.request('/api/state', undefined, admin.cookie)
+    ).json();
+    assert.equal(
+      upgraded.currentUser.appearanceSettings.customColor,
+      '#123456',
+    );
+    assert.equal(upgraded.currentUser.appearanceSettings.appearance, 'light');
+    assert.equal(upgraded.currentUser.appearanceSettings.accentGlow, false);
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'appearance.update', {
+          primaryColor: 'teal',
+        })
+      ).status,
+      200,
+    );
+    await f.restart();
+    assert.equal(f.store.members()[0].appearanceSettings!.primaryColor, 'teal');
   } finally {
     await f.close();
   }
@@ -396,19 +567,47 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       headerLogoShape: 'circle',
       headerSubtitle: 'Admin header',
     };
-    assert.equal((await f.action(admin.cookie, 'app.update', branding)).status, 200);
-    assert.equal((await f.action(admin.cookie, 'band.update', { name: 'Admin Band' })).status, 200);
+    assert.equal(
+      (await f.action(admin.cookie, 'app.update', branding)).status,
+      200,
+    );
+    assert.equal(
+      (await f.action(admin.cookie, 'band.update', { name: 'Admin Band' }))
+        .status,
+      200,
+    );
     for (const role of ['member', 'guest', 'editor']) {
       const account = await f.login(`${role}@example.com`);
-      assert.equal((await f.action(account.cookie, 'app.update', {
-        ...branding,
-        headerSubtitle: 'Unauthorized header',
-      })).status, 403);
-      assert.equal((await f.action(account.cookie, 'band.update', { name: 'Unauthorized Band' })).status, 403);
+      assert.equal(
+        (
+          await f.action(account.cookie, 'app.update', {
+            ...branding,
+            headerSubtitle: 'Unauthorized header',
+          })
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await f.action(account.cookie, 'band.update', {
+            name: 'Unauthorized Band',
+          })
+        ).status,
+        403,
+      );
     }
-    assert.equal(f.store.read().appSettings.headerSubtitle, branding.headerSubtitle);
-    assert.equal(f.store.read().appSettings.headerLogoUrl, branding.headerLogoUrl);
-    assert.equal(f.store.read().appSettings.headerLogoShape, branding.headerLogoShape);
+    assert.equal(
+      f.store.read().appSettings.headerSubtitle,
+      branding.headerSubtitle,
+    );
+    assert.equal(
+      f.store.read().appSettings.headerLogoUrl,
+      branding.headerLogoUrl,
+    );
+    assert.equal(
+      f.store.read().appSettings.headerLogoShape,
+      branding.headerLogoShape,
+    );
     assert.equal(f.store.read().band.name, 'Admin Band');
     assert.equal(
       (

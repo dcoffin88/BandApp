@@ -7,7 +7,12 @@ import {
   timingSafeEqual,
   createHash,
 } from 'node:crypto';
-import { emptyState, type SharedState } from '../src/shared/defaults.ts';
+import {
+  emptyState,
+  appearanceFrom,
+  DEFAULT_APPEARANCE,
+  type SharedState,
+} from '../src/shared/defaults.ts';
 import type { BandMember } from '../src/types/band.ts';
 
 export function hashPassword(password: string): string {
@@ -82,7 +87,10 @@ export function openDatabase(filename: string) {
     );
   }
   function saveUser(user: BandMember, passwordHash?: string) {
-    const { password: _password, ...profile } = user;
+    const { password: _password, ...profile } = {
+      ...user,
+      appearanceSettings: user.appearanceSettings ?? { ...DEFAULT_APPEARANCE },
+    };
     if (passwordHash) {
       db.prepare(
         'INSERT INTO users (id,email,profile,password_hash) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,profile=excluded.profile,password_hash=excluded.password_hash',
@@ -111,5 +119,16 @@ export function openDatabase(filename: string) {
       throw error;
     }
   }
+  // Preserve the former shared appearance once for existing accounts.
+  transaction(() => {
+    const legacyAppearance = appearanceFrom({
+      ...DEFAULT_APPEARANCE,
+      ...read().appSettings,
+    });
+    for (const user of members()) {
+      if (!user.appearanceSettings)
+        saveUser({ ...user, appearanceSettings: legacyAppearance });
+    }
+  });
   return { db, read, write, members, saveUser, transaction };
 }

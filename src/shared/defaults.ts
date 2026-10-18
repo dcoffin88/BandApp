@@ -10,7 +10,26 @@ import type {
   SmtpSettings,
   SongIdea,
   UserRolePermissions,
+  UserAppearance,
 } from '../types/band.ts';
+
+export const DEFAULT_APPEARANCE: UserAppearance = {
+  appearance: 'dark',
+  radius: 'medium',
+  primaryColor: 'amber',
+  customColor: '#f59e0b',
+  accentGlow: true,
+};
+
+export function appearanceFrom(settings: UserAppearance): UserAppearance {
+  return {
+    appearance: settings.appearance ?? DEFAULT_APPEARANCE.appearance,
+    radius: settings.radius ?? DEFAULT_APPEARANCE.radius,
+    primaryColor: settings.primaryColor,
+    customColor: settings.customColor ?? DEFAULT_APPEARANCE.customColor,
+    accentGlow: settings.accentGlow,
+  };
+}
 
 export const ROLE_PERMISSIONS: Record<Role, UserRolePermissions> = {
   admin: {

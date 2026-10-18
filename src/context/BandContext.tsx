@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import type {
   AppSettings,
+  UserAppearance,
   AudioVersion,
   AuthSettings,
   BandMember,
@@ -26,6 +27,7 @@ import type {
 import {
   emptyState,
   DEFAULT_AVATAR,
+  DEFAULT_APPEARANCE,
   ROLE_PERMISSIONS,
   type SessionState,
   type PublicSessionState,
@@ -52,6 +54,7 @@ interface BandContextType {
   smtpSettings: SmtpSettings;
   emailLogs: EmailNotificationLog[];
   updateAppSettings: (newSettings: Partial<AppSettings>) => Promise<boolean>;
+  updateAppearance: (settings: UserAppearance) => Promise<boolean>;
   updateSmtpSettings: (settings: SmtpSettings) => Promise<boolean>;
   sendTestEmail: (
     toEmail: string,
@@ -191,6 +194,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       appSettings: {
         ...emptyState().appSettings,
         ...(appSettings ?? previous.appSettings),
+        ...DEFAULT_APPEARANCE,
       },
       currentUser: anonymousUser,
       permissions: ROLE_PERMISSIONS.guest,
@@ -457,6 +461,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     changePassword,
     logout,
     updateAppSettings: (settings) => save('app.update', settings),
+    updateAppearance: (settings) => save('appearance.update', settings),
     updateSmtpSettings: (settings) => save('smtp.update', settings),
     sendTestEmail: (toEmail) => mail('/api/smtp/test', { to: toEmail }),
     resendEmail: (logId) => mail('/api/smtp/resend', { logId }),

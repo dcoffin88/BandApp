@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
-import type { AppSettings } from '../types/band.ts';
+import type { UserAppearance } from '../types/band.ts';
 import { CUSTOM_COLOR_PATTERN, getAccentColor } from '../shared/theme.ts';
 
 const ACCENTS = [
@@ -83,8 +83,8 @@ const RADII = [
 ] as const;
 
 interface AppearanceSettingsProps {
-  settings: AppSettings;
-  onChange: (settings: AppSettings) => void;
+  settings: UserAppearance;
+  onChange: (settings: UserAppearance) => void;
   onInvalidColorChange: (invalid: boolean) => void;
 }
 

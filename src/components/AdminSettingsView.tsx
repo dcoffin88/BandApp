@@ -37,10 +37,10 @@ import {
   X,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
-import { AppSettings, AuthSettings, BandMember, Role, UserStatus, MemberInvitationResult } from '../types/band.ts';
+import { AppSettings, AuthSettings, BandMember, Role, UserStatus, MemberInvitationResult, UserAppearance } from '../types/band.ts';
 import { ImageCropModal } from './ImageCropModal.tsx';
 import { SmtpSettingsView } from './SmtpSettingsView.tsx';
-import { DEFAULT_AVATAR } from '../shared/defaults.ts';
+import { DEFAULT_AVATAR, appearanceFrom } from '../shared/defaults.ts';
 import { AppearanceSettings } from './AppearanceSettings.tsx';
 
 interface AdminSettingsViewProps {
@@ -64,6 +64,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     deleteUserAccount,
     updateAuthSettings,
     updateAppSettings,
+    updateAppearance,
     clearAuditLogs,
     addBandMember,
     sendMemberInvite,
@@ -82,6 +83,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
   // App Settings & Header Logo State
   const [localAppSettings, setLocalAppSettings] = useState<AppSettings>(appSettings);
+  const [localAppearance, setLocalAppearance] = useState<UserAppearance>(() => appearanceFrom(currentUser.appearanceSettings ?? appSettings));
+  const [appearanceSaveSuccess, setAppearanceSaveSuccess] = useState(false);
   const [customColorInvalid, setCustomColorInvalid] = useState(false);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [appSettingsSaveSuccess, setAppSettingsSaveSuccess] = useState(false);
@@ -148,10 +151,20 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
   const handleSaveAppSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isadmin || customColorInvalid) return;
-    if (!await updateAppSettings(localAppSettings)) return;
+    if (!isadmin) return;
+    const { headerLogoUrl, headerLogoShape, headerSubtitle } = localAppSettings;
+    if (!await updateAppSettings({ headerLogoUrl, headerLogoShape, headerSubtitle })) return;
     setAppSettingsSaveSuccess(true);
     setTimeout(() => setAppSettingsSaveSuccess(false), 2500);
+  };
+
+  const handleSaveAppearance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (customColorInvalid) return;
+    setAppearanceSaveSuccess(false);
+    if (!await updateAppearance(localAppearance)) return;
+    setAppearanceSaveSuccess(true);
+    setTimeout(() => setAppearanceSaveSuccess(false), 2500);
   };
 
   const handleSaveAuthSettings = async (e: React.FormEvent) => {
@@ -549,56 +562,29 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </div>
               </div>
             </div>
-          </div>
-
-          )}
-
-          {/* App Colors & Theme Palette */}
-          <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <div className="flex items-center gap-2">
-                <Palette className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-white text-base">Appearance</h3>
-              </div>
-            </div>
-
-            <AppearanceSettings settings={localAppSettings} onChange={setLocalAppSettings} onInvalidColorChange={setCustomColorInvalid} />
-
-            {/* Ambient Glow Toggle */}
-            <div className="pt-3 border-t border-zinc-800">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={localAppSettings.accentGlow}
-                  onChange={e => setLocalAppSettings({ ...localAppSettings, accentGlow: e.target.checked })}
-                  className="rounded accent-amber-500 w-4 h-4"
-                />
-                <div>
-                  <p className="font-semibold text-zinc-200 text-xs">Enable Ambient Lighting &amp; Glow</p>
-                  <p className="text-[11px] text-zinc-500">Adds glowing accents to active playback, waveforms, and navigation badges.</p>
-                </div>
-              </label>
-            </div>
-
             {/* Save Button */}
             <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3 text-xs">
               {appSettingsSaveSuccess && (
                 <span className="text-emerald-400 font-medium flex items-center gap-1">
                   <Check className="w-4 h-4" />
-                  <span>App settings and logo saved!</span>
+                  <span>Header saved!</span>
                 </span>
               )}
               <button
                 type="button"
                 onClick={handleSaveAppSettings}
-                disabled={!isadmin || customColorInvalid}
+                disabled={!isadmin}
                 className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
-                <span>Save Appearance &amp; Header</span>
+                <span>Save Header</span>
               </button>
             </div>
           </div>
+
+          )}
+
+
         </div>
       )}
 
@@ -1300,6 +1286,55 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+          
+          {/* App Colors & Theme Palette */}
+          <div className="lg:col-span-12 p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <Palette className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-white text-base">Appearance</h3>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-400">Personalize your view. These settings are saved to your account.</p>
+
+            <AppearanceSettings settings={localAppearance} onChange={setLocalAppearance} onInvalidColorChange={setCustomColorInvalid} />
+
+            {/* Ambient Glow Toggle */}
+            <div className="pt-3 border-t border-zinc-800">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localAppearance.accentGlow}
+                  onChange={e => setLocalAppearance({ ...localAppearance, accentGlow: e.target.checked })}
+                  className="rounded accent-amber-500 w-4 h-4"
+                />
+                <div>
+                  <p className="font-semibold text-zinc-200 text-xs">Enable Ambient Lighting &amp; Glow</p>
+                  <p className="text-[11px] text-zinc-500">Adds glowing accents to active playback, waveforms, and navigation badges.</p>
+                </div>
+              </label>
+            </div>
+
+            {/* Save Button */}
+            <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3 text-xs">
+              {appearanceSaveSuccess && (
+                <span className="text-emerald-400 font-medium flex items-center gap-1">
+                  <Check className="w-4 h-4" />
+                  <span>Your appearance saved!</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleSaveAppearance}
+                disabled={customColorInvalid}
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save Appearance</span>
+              </button>
             </div>
           </div>
         </div>

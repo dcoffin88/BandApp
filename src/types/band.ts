@@ -35,6 +35,7 @@ export interface BandMember {
   lastLogin?: string;
   twoFactorEnabled?: boolean;
   notifications?: UserNotifications;
+  appearanceSettings?: UserAppearance;
   isCurrentUser?: boolean;
   createdAt?: string;
 }
@@ -152,14 +153,17 @@ export interface LoginAuditEntry {
 
 export type ThemeColor = 'amber' | 'emerald' | 'cyan' | 'purple' | 'rose' | 'orange' | 'blue' | 'indigo' | 'teal' | 'lime' | 'pink' | 'custom';
 
-export interface AppSettings {
+export interface UserAppearance {
   appearance?: 'light' | 'dark' | 'system';
   radius?: 'none' | 'small' | 'medium' | 'full';
   primaryColor: ThemeColor;
   customColor?: string;
+  accentGlow: boolean;
+}
+
+export interface AppSettings extends UserAppearance {
   headerLogoUrl: string;
   headerLogoShape: 'circle' | 'rounded' | 'square';
-  accentGlow: boolean;
   headerSubtitle: string;
 }
 

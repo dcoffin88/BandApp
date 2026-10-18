@@ -25,6 +25,7 @@ import {
 } from './database.ts';
 import {
   DEFAULT_AVATAR,
+  DEFAULT_APPEARANCE,
   ROLE_PERMISSIONS,
   type SharedState,
 } from '../src/shared/defaults.ts';
@@ -84,7 +85,7 @@ const authSchema = z
     lockoutDurationMinutes: z.number().int().min(1).max(1440),
   })
   .strict();
-const appSchema = z
+const appearanceSchema = z
   .object({
     appearance: z.enum(['light', 'dark', 'system']),
     radius: z.enum(['none', 'small', 'medium', 'full']),
@@ -108,9 +109,14 @@ const appSchema = z
         /^#[0-9a-fA-F]{6}$/,
         'Use a six-digit hex color, such as #3b82f6.',
       ),
+    accentGlow: z.boolean(),
+  })
+  .partial()
+  .strict();
+const appSchema = z
+  .object({
     headerLogoUrl: avatar,
     headerLogoShape: z.enum(['circle', 'rounded', 'square']),
-    accentGlow: z.boolean(),
     headerSubtitle: short,
   })
   .partial()
@@ -399,6 +405,11 @@ export function createApplication(options: ServerOptions) {
     const isAdmin = user.role === 'admin';
     return {
       ...state,
+      appSettings: {
+        ...state.appSettings,
+        ...DEFAULT_APPEARANCE,
+        ...user.appearanceSettings,
+      },
       smtpSettings: isAdmin
         ? { ...state.smtpSettings, password: '' }
         : {
@@ -416,7 +427,13 @@ export function createApplication(options: ServerOptions) {
         members: state.band.members.map((m) =>
           m.id === user.id || isAdmin
             ? m
-            : { ...m, email: '', phone: undefined, notifications: undefined },
+            : {
+                ...m,
+                email: '',
+                phone: undefined,
+                notifications: undefined,
+                appearanceSettings: undefined,
+              },
         ),
       },
       currentUser: user,
@@ -445,11 +462,7 @@ export function createApplication(options: ServerOptions) {
             headerLogoUrl: appSettings.headerLogoUrl,
             headerLogoShape: appSettings.headerLogoShape,
             headerSubtitle: appSettings.headerSubtitle,
-            primaryColor: appSettings.primaryColor,
-            customColor: appSettings.customColor,
-            appearance: appSettings.appearance,
-            radius: appSettings.radius,
-            accentGlow: appSettings.accentGlow,
+            ...DEFAULT_APPEARANCE,
           },
         });
       }
@@ -729,12 +742,21 @@ export function createApplication(options: ServerOptions) {
           case 'app.update':
             requireAdmin(user);
             state.appSettings = { ...state.appSettings, ...appSchema.parse(p) };
+            break;
+          case 'appearance.update': {
+            const appearanceSettings = {
+              ...DEFAULT_APPEARANCE,
+              ...user.appearanceSettings,
+              ...appearanceSchema.parse(p),
+            };
             if (
-              state.appSettings.primaryColor === 'custom' &&
-              !state.appSettings.customColor
+              appearanceSettings.primaryColor === 'custom' &&
+              !appearanceSettings.customColor
             )
               fail(400, 'Choose a custom color before saving.');
+            store.saveUser({ ...user, appearanceSettings });
             break;
+          }
           case 'auth.update':
             requireAdmin(user);
             state.authSettings = authSchema.parse(p);
