@@ -148,7 +148,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
   const handleSaveAppSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (customColorInvalid) return;
+    if (!isadmin || customColorInvalid) return;
     if (!await updateAppSettings(localAppSettings)) return;
     setAppSettingsSaveSuccess(true);
     setTimeout(() => setAppSettingsSaveSuccess(false), 2500);
@@ -431,6 +431,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           </div>
 
           {/* Header Logo & Name Area Live Mockup */}
+          {isadmin && (
           <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
@@ -550,6 +551,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             </div>
           </div>
 
+          )}
+
           {/* App Colors & Theme Palette */}
           <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -588,7 +591,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleSaveAppSettings}
-                disabled={customColorInvalid}
+                disabled={!isadmin || customColorInvalid}
                 className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
@@ -1474,15 +1477,16 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           onCropComplete={setProfileAvatar}
         />
       )}
-      <ImageCropModal
+      {isadmin && <ImageCropModal
         isOpen={isCropModalOpen}
         onClose={() => setIsCropModalOpen(false)}
         initialImageUrl={localAppSettings.headerLogoUrl}
         onCropComplete={(croppedUrl) => {
+          if (!isadmin) return;
           setLocalAppSettings({ ...localAppSettings, headerLogoUrl: croppedUrl });
           updateAppSettings({ headerLogoUrl: croppedUrl });
         }}
-      />
+      />}
     </div>
   );
 };

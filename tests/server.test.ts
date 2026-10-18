@@ -391,6 +391,25 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
     }
     const member = await f.login('member@example.com'),
       guest = await f.login('guest@example.com');
+    const branding = {
+      headerLogoUrl: 'data:image/png;base64,aGVhZGVy',
+      headerLogoShape: 'circle',
+      headerSubtitle: 'Admin header',
+    };
+    assert.equal((await f.action(admin.cookie, 'app.update', branding)).status, 200);
+    assert.equal((await f.action(admin.cookie, 'band.update', { name: 'Admin Band' })).status, 200);
+    for (const role of ['member', 'guest', 'editor']) {
+      const account = await f.login(`${role}@example.com`);
+      assert.equal((await f.action(account.cookie, 'app.update', {
+        ...branding,
+        headerSubtitle: 'Unauthorized header',
+      })).status, 403);
+      assert.equal((await f.action(account.cookie, 'band.update', { name: 'Unauthorized Band' })).status, 403);
+    }
+    assert.equal(f.store.read().appSettings.headerSubtitle, branding.headerSubtitle);
+    assert.equal(f.store.read().appSettings.headerLogoUrl, branding.headerLogoUrl);
+    assert.equal(f.store.read().appSettings.headerLogoShape, branding.headerLogoShape);
+    assert.equal(f.store.read().band.name, 'Admin Band');
     assert.equal(
       (
         await f.action(member.cookie, 'member.role', {
