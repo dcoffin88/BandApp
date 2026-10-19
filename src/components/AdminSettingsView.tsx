@@ -10,6 +10,7 @@ import {
   Edit2,
   Eye,
   EyeOff,
+  Github,
   Guitar,
   Image as ImageIcon,
   Info,
@@ -40,6 +41,8 @@ import { AppSettings, AuthSettings, BandMember, Role, UserStatus, MemberInvitati
 import { ImageCropModal } from './ImageCropModal.tsx';
 import { SmtpSettingsView } from './SmtpSettingsView.tsx';
 import { DEFAULT_AVATAR } from '../shared/defaults.ts';
+import { useAppVersion } from '../hooks/useAppVersion.ts';
+import { VersionModal } from './VersionModal.tsx';
 
 interface AdminSettingsViewProps {
   initialTab?: 'users' | 'auth' | 'app' | 'smtp';
@@ -67,6 +70,14 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     sendMemberInvite,
     logout,
   } = useBand();
+
+  const {
+    versionInfo,
+    isLoading: isCheckingVersion,
+    checkUpdates,
+    isModalOpen: isVersionModalOpen,
+    setIsModalOpen: setIsVersionModalOpen,
+  } = useAppVersion();
 
   const [selectedSubTab, setActiveSubTab] = useState<'users' | 'auth' | 'app' | 'smtp'>(initialTab);
 
@@ -496,7 +507,83 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
           )}
 
+          {/* Application Version & GitHub Release Tracking */}
+          <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-zinc-800 gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <Github className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">Application Version &amp; Release Tracking</h3>
+                </div>
+              </div>
+            </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
+                <span className="text-zinc-500 uppercase tracking-wider font-semibold text-[10px]">
+                  Installed Version
+                </span>
+                <div className="font-mono text-lg font-bold text-white">
+                  v{versionInfo.currentVersion}
+                </div>
+                <p className="text-zinc-400 text-[11px]">Current active deployment</p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
+                <span className="text-zinc-500 uppercase tracking-wider font-semibold text-[10px]">
+                  Latest GitHub Release
+                </span>
+                <div className={`font-mono text-lg font-bold flex items-center gap-2 ${
+                  versionInfo.updateAvailable ? 'text-amber-500' : 'text-emerald-400'
+                }`}>
+                  <span>{versionInfo.latestTag || `v${versionInfo.latestVersion}`}</span>
+                  {versionInfo.updateAvailable && (
+                    <span className="text-[10px] font-sans font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/40 animate-pulse">
+                      Update Available
+                    </span>
+                  )}
+                </div>
+                <p className="text-zinc-400 text-[11px]">
+                  {versionInfo.updateAvailable
+                    ? 'Newer release is published on GitHub'
+                    : 'Up to date with GitHub releases'}
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex flex-col justify-between space-y-2">
+                <div>
+                  <span className="text-zinc-500 uppercase tracking-wider font-semibold text-[10px]">
+                    Release Source
+                  </span>
+                  <div className="font-semibold text-zinc-200 truncate mt-0.5">
+                    dcoffin88 / BandApp
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <a
+                    href="https://github.com/dcoffin88/BandApp/releases/latest"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-center py-1.5 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition text-[11px]"
+                  >
+                    View Release
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => checkUpdates(true)}
+                    disabled={isCheckingVersion}
+                    className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition disabled:opacity-50"
+                    title="Check for updates now"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isCheckingVersion ? 'animate-spin text-amber-400' : ''}`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1092,6 +1179,15 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           updateAppSettings({ headerLogoUrl: croppedUrl });
         }}
       />}
+
+      {/* Version & Release Details Modal */}
+      <VersionModal
+        isOpen={isVersionModalOpen}
+        onClose={() => setIsVersionModalOpen(false)}
+        versionInfo={versionInfo}
+        isLoading={isCheckingVersion}
+        onCheckUpdates={checkUpdates}
+      />
     </div>
   );
 };

@@ -1,15 +1,10 @@
-import express, {
-  type Request,
-  type Response,
-  type NextFunction,
-} from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import nodemailer from 'nodemailer';
 import { statSync, createReadStream } from 'node:fs';
 import path from 'node:path';
-import { createMediaStorage } from './media.ts';
 import {
   randomUUID,
   randomBytes,
@@ -17,41 +12,45 @@ import {
   createDecipheriv,
   createHash,
 } from 'node:crypto';
+import { createMediaStorage } from './media.ts';
 import {
   openDatabase,
   hashPassword,
   verifyPassword,
   tokenHash,
+  type DatabaseStore,
 } from './database.ts';
 import {
-  DEFAULT_AVATAR,
   DEFAULT_APPEARANCE,
   ROLE_PERMISSIONS,
+  DEFAULT_AVATAR,
   type SharedState,
 } from '../src/shared/defaults.ts';
 import type {
   BandMember,
   EmailEventType,
   EmailNotificationLog,
+  Role,
   SmtpSettings,
 } from '../src/types/band.ts';
 
-const text = z.string().max(10000);
+const text = z.string().max(1e4);
 const short = z.string().trim().max(200);
 const required = short.min(1);
 const email = z.string().trim().toLowerCase().email().max(254);
 const roleSchema = z.enum(['admin', 'editor', 'member', 'guest']);
 const avatar = z
   .string()
-  .max(500000)
+  .max(5e5)
   .refine(
     (v) =>
       !v ||
       v === DEFAULT_AVATAR ||
       /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v) ||
       /^https:\/\//.test(v),
-    'Upload a PNG, JPEG or WebP image.',
+    'Upload a PNG, JPEG or WebP image.'
   );
+
 const notifications = z.object({
   newDemos: z.boolean(),
   newVersions: z.boolean(),
@@ -59,6 +58,7 @@ const notifications = z.object({
   practiceReminders: z.boolean(),
   comments: z.boolean(),
 });
+
 const profileSchema = z
   .object({
     name: required,
@@ -73,6 +73,7 @@ const profileSchema = z
   })
   .partial()
   .strict();
+
 const authSchema = z
   .object({
     sessionTimeoutMinutes: z.number().int().min(5).max(1440),
@@ -85,6 +86,7 @@ const authSchema = z
     lockoutDurationMinutes: z.number().int().min(1).max(1440),
   })
   .strict();
+
 const appearanceSchema = z
   .object({
     appearance: z.enum(['light', 'dark', 'system']),
@@ -105,14 +107,12 @@ const appearanceSchema = z
     ]),
     customColor: z
       .string()
-      .regex(
-        /^#[0-9a-fA-F]{6}$/,
-        'Use a six-digit hex color, such as #3b82f6.',
-      ),
+      .regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color, such as #3b82f6.'),
     accentGlow: z.boolean(),
   })
   .partial()
   .strict();
+
 const appSchema = z
   .object({
     headerLogoUrl: avatar,
@@ -121,19 +121,16 @@ const appSchema = z
   })
   .partial()
   .strict();
+
 const smtpSchema = z
   .object({
     isEnabled: z.boolean(),
-    host: z
-      .string()
-      .trim()
-      .max(253)
-      .regex(/^[a-zA-Z0-9.:-]*$/),
+    host: z.string().trim().max(253).regex(/^[a-zA-Z0-9.:-]*$/),
     port: z.number().int().min(1).max(65535),
     encryption: z.enum(['tls', 'ssl', 'none']),
     authRequired: z.boolean(),
     username: short,
-    password: z.string().max(1000),
+    password: z.string().max(1e3),
     fromName: short,
     fromEmail: z.union([email, z.literal('')]),
     replyTo: z.union([email, z.literal('')]),
@@ -147,6 +144,7 @@ const smtpSchema = z
     }),
   })
   .strict();
+
 const versionSchema = z.object({
   label: required,
   audioUrl: z.string().regex(/^\/api\/uploads\/[a-f0-9-]+$/),
@@ -156,6 +154,7 @@ const versionSchema = z.object({
   fileSize: short.optional(),
   waveformSamples: z.array(z.number().min(0).max(1)).max(1024).optional(),
 });
+
 const songSchema = z.object({
   title: required,
   category: z.enum([
@@ -174,9 +173,10 @@ const songSchema = z.object({
   lyrics: z.object({ draft: text, chordsSheet: text.optional() }).optional(),
   version: versionSchema,
 });
+
 const practiceSchema = z.object({
   title: required,
-  date: z.iso.date(),
+  date: (z as any).iso?.date ? (z as any).iso.date() : z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
   location: required,
@@ -185,64 +185,82 @@ const practiceSchema = z.object({
   goals: z.array(short).max(100),
   notes: text,
 });
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
+
+export class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
+
 function fail(status: number, message: string): never {
   throw new HttpError(status, message);
 }
+
 const requireAdmin = (user: BandMember) => {
   if (user.role !== 'admin') fail(403, 'Admin permission required.');
 };
+
 const now = () => new Date().toISOString();
+
 const identity = (u: BandMember) => ({
   id: u.id,
   name: u.name,
   avatar: u.avatar,
 });
+
 const escapeHtml = (s: string) =>
   s.replace(
     /[&<>"']/g,
     (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ]!,
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[c] || c
   );
 
-export interface ServerOptions {
-  mediaDirectory?: string;
-  development?: boolean;
+export interface ApplicationOptions {
+  development: boolean;
+  mediaDirectory: string;
   databasePath: string;
   appUrl: string;
   secret: string;
+  secureCookies: boolean;
+  trustProxy: number;
+  uploadLimitMb: number;
   adminEmail?: string;
   adminPassword?: string;
   adminName?: string;
   bandName?: string;
-  secureCookies: boolean;
-  trustProxy?: number;
-  uploadLimitMb?: number;
 }
-export function createApplication(options: ServerOptions) {
+
+export function createApplication(options: ApplicationOptions) {
   const store = openDatabase(options.databasePath);
   const { db } = store;
   const media = createMediaStorage(
     store,
-    options.mediaDirectory ||
-      path.join(path.dirname(options.databasePath), 'media'),
+    options.mediaDirectory || path.join(path.dirname(options.databasePath), 'media')
   );
   const app = express();
   const origin = new URL(options.appUrl).origin;
   const key = createHash('sha256').update(options.secret).digest();
-  function encrypt(value: string) {
+
+  const route =
+    (handler: (req: Request, res: Response) => Promise<any> | any) =>
+    (req: Request, res: Response, next: NextFunction) => {
+      Promise.resolve()
+        .then(() => handler(req, res))
+        .catch(next);
+    };
+
+  function encrypt(value: string): string {
     if (!value) return '';
-    const iv = randomBytes(12),
-      cipher = createCipheriv('aes-256-gcm', key, iv);
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
     const data = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
     return [
       iv.toString('hex'),
@@ -250,9 +268,11 @@ export function createApplication(options: ServerOptions) {
       data.toString('hex'),
     ].join(':');
   }
-  function decrypt(value: string) {
+
+  function decrypt(value: string): string {
     if (!value) return '';
     const [iv, tag, data] = value.split(':');
+    if (!iv || !tag || !data) return '';
     const cipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'hex'));
     cipher.setAuthTag(Buffer.from(tag, 'hex'));
     return Buffer.concat([
@@ -260,23 +280,21 @@ export function createApplication(options: ServerOptions) {
       cipher.final(),
     ]).toString('utf8');
   }
+
   const validatePassword = (password: string, state = store.read()) => {
-    z.string()
-      .min(state.authSettings.minPasswordLength)
-      .max(128)
-      .parse(password);
-    if (
-      state.authSettings.requireSpecialChar &&
-      !/[^a-zA-Z0-9\s]/.test(password)
-    )
+    z.string().min(state.authSettings.minPasswordLength).max(128).parse(password);
+    if (state.authSettings.requireSpecialChar && !/[^a-zA-Z0-9\s]/.test(password)) {
       fail(400, 'Password must contain a special character.');
+    }
   };
+
   if (!store.members().length) {
-    if (!options.adminEmail || !options.adminPassword)
+    if (!options.adminEmail || !options.adminPassword) {
       fail(
         500,
-        'Set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD before first startup.',
+        'Set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD before first startup.'
       );
+    }
     const adminEmail = email.parse(options.adminEmail);
     validatePassword(options.adminPassword);
     store.transaction(() => {
@@ -291,16 +309,19 @@ export function createApplication(options: ServerOptions) {
           avatar: DEFAULT_AVATAR,
           createdAt: now(),
         },
-        hashPassword(options.adminPassword!),
+        hashPassword(options.adminPassword!)
       );
       const state = store.read();
       state.band.name = options.bandName || 'BandApp';
       store.write(state);
     });
   }
+
   const dummyHash = hashPassword(randomBytes(32).toString('hex'));
+
   app.disable('x-powered-by');
   if (options.trustProxy) app.set('trust proxy', options.trustProxy);
+
   app.use(
     helmet({
       contentSecurityPolicy: options.development
@@ -316,52 +337,149 @@ export function createApplication(options: ServerOptions) {
             },
           },
       strictTransportSecurity: options.secureCookies ? undefined : false,
-    }),
+    })
   );
-  app.get('/api/health', (_req, res) => {
+
+  app.get('/api/health', (_req: Request, res: Response) => {
     db.prepare('SELECT 1').get();
     res.json({ status: 'ok' });
   });
-  app.use('/api', (_req, res, next) => {
+
+  const CURRENT_APP_VERSION = '1.0.1';
+  const GITHUB_REPO = 'dcoffin88/BandApp';
+  let cachedVersionCheck: {
+    data: any;
+    timestamp: number;
+  } | null = null;
+
+  function compareSemver(v1: string, v2: string): number {
+    const clean = (v: string) =>
+      (v || '')
+        .trim()
+        .replace(/^v/i, '')
+        .split('-')[0]
+        .split('.')
+        .map((n) => parseInt(n, 10) || 0);
+
+    const parts1 = clean(v1);
+    const parts2 = clean(v2);
+    const maxLen = Math.max(parts1.length, parts2.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      const p1 = parts1[i] ?? 0;
+      const p2 = parts2[i] ?? 0;
+      if (p1 > p2) return 1;
+      if (p1 < p2) return -1;
+    }
+    return 0;
+  }
+
+  app.get(
+    '/api/version/check',
+    route(async (_req: Request, res: Response) => {
+      const nowMs = Date.now();
+      if (cachedVersionCheck && nowMs - cachedVersionCheck.timestamp < 300_000) {
+        return res.json(cachedVersionCheck.data);
+      }
+      try {
+        const response = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+          {
+            headers: {
+              'User-Agent': 'BandApp-VersionCheck',
+              Accept: 'application/vnd.github.v3+json',
+            },
+            signal: AbortSignal.timeout(5000),
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`GitHub API returned status ${response.status}`);
+        }
+        const release = (await response.json()) as any;
+        const latestTag = String(release.tag_name || release.name || '').trim();
+        const latestVersion = latestTag.replace(/^v/i, '') || CURRENT_APP_VERSION;
+        const updateAvailable = compareSemver(latestVersion, CURRENT_APP_VERSION) > 0;
+        const data = {
+          currentVersion: CURRENT_APP_VERSION,
+          latestVersion,
+          latestTag: latestTag || `v${latestVersion}`,
+          updateAvailable,
+          releaseName: release.name || latestTag || `BandApp v${latestVersion}`,
+          releaseUrl:
+            release.html_url || `https://github.com/${GITHUB_REPO}/releases/latest`,
+          publishedAt: release.published_at || release.created_at || null,
+          body: (release.body || '').slice(0, 1000),
+          checkedAt: new Date().toISOString(),
+          repoUrl: `https://github.com/${GITHUB_REPO}`,
+        };
+        cachedVersionCheck = { data, timestamp: nowMs };
+        res.json(data);
+      } catch (err: any) {
+        const fallback = cachedVersionCheck?.data || {
+          currentVersion: CURRENT_APP_VERSION,
+          latestVersion: CURRENT_APP_VERSION,
+          latestTag: `v${CURRENT_APP_VERSION}`,
+          updateAvailable: false,
+          releaseName: `BandApp v${CURRENT_APP_VERSION}`,
+          releaseUrl: `https://github.com/${GITHUB_REPO}/releases/latest`,
+          publishedAt: null,
+          body: '',
+          checkedAt: new Date().toISOString(),
+          repoUrl: `https://github.com/${GITHUB_REPO}`,
+          error: err?.message || 'Could not reach GitHub',
+        };
+        res.json(fallback);
+      }
+    })
+  );
+
+  app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Cache-Control', 'no-store');
     next();
   });
-  app.use('/api', (req, _res, next) => {
+
+  app.use('/api', (req: Request, _res: Response, next: NextFunction) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-      if (req.get('origin') && req.get('origin') !== origin)
+      if (req.get('origin') && req.get('origin') !== origin) {
         return next(new HttpError(403, 'Request origin is not allowed.'));
+      }
       if (
         req.get('sec-fetch-site') === 'cross-site' ||
         req.get('x-bandapp-request') !== '1'
-      )
+      ) {
         return next(new HttpError(403, 'Missing request protection header.'));
+      }
     }
     next();
   });
+
   app.use(
     '/api',
     rateLimit({
-      windowMs: 60_000,
+      windowMs: 6e4,
       limit: 240,
       standardHeaders: 'draft-8',
       legacyHeaders: false,
       message: { message: 'Too many requests. Try again shortly.' },
-    }),
+    })
   );
+
   app.use(
     '/api/auth',
     rateLimit({
-      windowMs: 60_000,
+      windowMs: 6e4,
       limit: 20,
       skip: (req) => req.method === 'GET',
       standardHeaders: 'draft-8',
       legacyHeaders: false,
       message: { message: 'Too many sign-in attempts. Try again shortly.' },
-    }),
+    })
   );
+
   app.use(express.json({ limit: '2mb' }));
+
   const cookieName = 'bandapp_session';
-  const cookies = (req: Request) =>
+  const cookies = (req: Request): Record<string, string> =>
     Object.fromEntries(
       (req.get('cookie') || '')
         .split(';')
@@ -369,28 +487,33 @@ export function createApplication(options: ServerOptions) {
         .map((v) => {
           const i = v.indexOf('=');
           return [v.slice(0, i).trim(), v.slice(i + 1)];
-        }),
+        })
     );
+
   const token = (req: Request) => cookies(req)[cookieName] || '';
+
   function authenticate(req: Request): BandMember {
     const session = db
       .prepare('SELECT user_id,expires_at FROM sessions WHERE token_hash=?')
-      .get(tokenHash(token(req)));
-    if (!session || Number(session.expires_at) <= Date.now())
+      .get(tokenHash(token(req))) as { user_id: string; expires_at: number } | undefined;
+    if (!session || Number(session.expires_at) <= Date.now()) {
       fail(401, 'Please sign in.');
+    }
     const user = store.members().find((u) => u.id === session.user_id);
-    if (!user || user.status !== 'active')
+    if (!user || user.status !== 'active') {
       fail(401, 'Please sign in with an active account.');
+    }
     return user;
   }
+
   function createSession(user: BandMember, res: Response) {
     const value = randomBytes(32).toString('hex');
-    const maxAge = store.read().authSettings.sessionTimeoutMinutes * 60_000;
+    const maxAge = store.read().authSettings.sessionTimeoutMinutes * 6e4;
     db.prepare('DELETE FROM sessions WHERE expires_at<=?').run(Date.now());
     db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(
       tokenHash(value),
       user.id,
-      Date.now() + maxAge,
+      Date.now() + maxAge
     );
     res.cookie(cookieName, value, {
       httpOnly: true,
@@ -400,6 +523,7 @@ export function createApplication(options: ServerOptions) {
       maxAge,
     });
   }
+
   function snapshot(user: BandMember) {
     const state = store.read();
     const isAdmin = user.role === 'admin';
@@ -433,23 +557,17 @@ export function createApplication(options: ServerOptions) {
                 phone: undefined,
                 notifications: undefined,
                 appearanceSettings: undefined,
-              },
+              }
         ),
       },
       currentUser: user,
       permissions: ROLE_PERMISSIONS[user.role],
     };
   }
-  const route =
-    (handler: (req: Request, res: Response) => unknown | Promise<unknown>) =>
-    (req: Request, res: Response, next: NextFunction) => {
-      Promise.resolve()
-        .then(() => handler(req, res))
-        .catch(next);
-    };
+
   app.get(
     '/api/auth/session',
-    route((req, res) => {
+    route((req: Request, res: Response) => {
       try {
         res.json(snapshot(authenticate(req)));
       } catch (error) {
@@ -466,13 +584,14 @@ export function createApplication(options: ServerOptions) {
           },
         });
       }
-    }),
+    })
   );
+
   function audit(
     req: Request,
     userName: string,
     success: boolean,
-    userId?: string,
+    userId?: string
   ) {
     const state = store.read();
     state.auditLogs.unshift({
@@ -485,27 +604,29 @@ export function createApplication(options: ServerOptions) {
       method: 'Email & Password',
       deviceInfo: (req.get('user-agent') || '').slice(0, 200),
     });
-    state.auditLogs = state.auditLogs.slice(0, 1000);
+    state.auditLogs = state.auditLogs.slice(0, 1e3);
     store.write(state);
   }
+
   app.post(
     '/api/auth/login',
-    route((req, res) => {
+    route((req: Request, res: Response) => {
       const input = z
         .object({ email, password: z.string().min(1).max(128) })
         .parse(req.body);
       const state = store.read();
       const attempts = db
         .prepare('SELECT * FROM login_attempts WHERE email=?')
-        .get(input.email);
-      if (attempts && Number(attempts.locked_until) > Date.now())
+        .get(input.email) as { failures: number; locked_until: number } | undefined;
+      if (attempts && Number(attempts.locked_until) > Date.now()) {
         fail(429, 'Account temporarily locked. Try again later.');
+      }
       const row = db
         .prepare('SELECT id,password_hash FROM users WHERE email=?')
-        .get(input.email);
+        .get(input.email) as { id: string; password_hash: string } | undefined;
       const correct = verifyPassword(
         input.password,
-        row ? String(row.password_hash) : dummyHash,
+        row ? String(row.password_hash) : dummyHash
       );
       const user = row && state.band.members.find((u) => u.id === row.id);
       if (!correct || !user || user.status === 'suspended') {
@@ -515,10 +636,10 @@ export function createApplication(options: ServerOptions) {
             : 1;
         const lockedUntil =
           failures >= state.authSettings.maxFailedLogins
-            ? Date.now() + state.authSettings.lockoutDurationMinutes * 60_000
+            ? Date.now() + state.authSettings.lockoutDurationMinutes * 6e4
             : 0;
         db.prepare(
-          'INSERT INTO login_attempts VALUES (?,?,?) ON CONFLICT(email) DO UPDATE SET failures=excluded.failures,locked_until=excluded.locked_until',
+          'INSERT INTO login_attempts VALUES (?,?,?) ON CONFLICT(email) DO UPDATE SET failures=excluded.failures,locked_until=excluded.locked_until'
         ).run(input.email, failures, lockedUntil);
         audit(req, input.email, false);
         fail(401, 'Invalid email or password.');
@@ -530,14 +651,14 @@ export function createApplication(options: ServerOptions) {
       audit(req, user.name, true, user.id);
       createSession(user, res);
       res.json(snapshot(user));
-    }),
+    })
   );
-  // Accounts are provisioned by an Admin, never through public self-registration.
+
   app.post(
     '/api/auth/logout',
-    route((req, res) => {
+    route((req: Request, res: Response) => {
       db.prepare('DELETE FROM sessions WHERE token_hash=?').run(
-        tokenHash(token(req)),
+        tokenHash(token(req))
       );
       res.clearCookie(cookieName, {
         path: '/',
@@ -546,9 +667,10 @@ export function createApplication(options: ServerOptions) {
         sameSite: 'strict',
       });
       res.json({ success: true });
-    }),
+    })
   );
-  app.use('/api', (req, res, next) => {
+
+  app.use('/api', (req: Request, res: Response, next: NextFunction) => {
     try {
       res.locals.user = authenticate(req);
       next();
@@ -556,14 +678,16 @@ export function createApplication(options: ServerOptions) {
       next(error);
     }
   });
+
   app.get(
     '/api/state',
-    route((_req, res) => res.json(snapshot(res.locals.user))),
+    route((_req: Request, res: Response) => res.json(snapshot(res.locals.user)))
   );
+
   app.post(
     '/api/auth/password',
-    route((req, res) => {
-      const user: BandMember = res.locals.user;
+    route((req: Request, res: Response) => {
+      const user = res.locals.user as BandMember;
       const input = z
         .object({
           currentPassword: z.string().max(128),
@@ -572,9 +696,10 @@ export function createApplication(options: ServerOptions) {
         .parse(req.body);
       const row = db
         .prepare('SELECT password_hash FROM users WHERE id=?')
-        .get(user.id)!;
-      if (!verifyPassword(input.currentPassword, String(row.password_hash)))
+        .get(user.id) as { password_hash: string } | undefined;
+      if (!row || !verifyPassword(input.currentPassword, String(row.password_hash))) {
         fail(400, 'Current password does not match.');
+      }
       validatePassword(input.newPassword);
       store.transaction(() => {
         store.saveUser(user, hashPassword(input.newPassword));
@@ -582,25 +707,28 @@ export function createApplication(options: ServerOptions) {
       });
       createSession(user, res);
       res.json({ success: true });
-    }),
+    })
   );
+
   app.post(
     '/api/uploads',
     express.raw({
       type: () => true,
       limit: `${options.uploadLimitMb || 100}mb`,
     }),
-    route((req, res) => {
-      const user: BandMember = res.locals.user;
-      if (!ROLE_PERMISSIONS[user.role].canUploadDemo)
+    route((req: Request, res: Response) => {
+      const user = res.locals.user as BandMember;
+      if (!ROLE_PERMISSIONS[user.role].canUploadDemo) {
         fail(403, 'Upload permission required.');
+      }
       const mime = (req.get('content-type') || '').split(';')[0];
       if (
         !/^audio\/[a-zA-Z0-9.+-]+$/.test(mime) ||
         !Buffer.isBuffer(req.body) ||
         !req.body.length
-      )
+      ) {
         fail(400, 'Choose a non-empty audio file.');
+      }
       const id = randomUUID();
       const category = z
         .enum(['idea', 'chorus', 'riff', 'bass', 'full', 'verse', 'bridge'])
@@ -609,29 +737,33 @@ export function createApplication(options: ServerOptions) {
       media.write(relative, req.body);
       try {
         db.prepare(
-          "INSERT INTO uploads (id,owner_id,mime,data,created_at,relative_path) VALUES (?,?,?,X'',?,?)",
+          "INSERT INTO uploads (id,owner_id,mime,data,created_at,relative_path) VALUES (?,?,?,X'',?,?)"
         ).run(id, user.id, mime, Date.now(), relative);
       } catch (error) {
         media.remove(relative);
         throw error;
       }
       res.status(201).json({ audioUrl: `/api/uploads/${id}` });
-    }),
+    })
   );
+
   app.get(
     '/api/uploads/:id',
-    route((req, res) => {
+    route((req: Request, res: Response) => {
       const row = db
         .prepare('SELECT mime,relative_path FROM uploads WHERE id=?')
-        .get(String(req.params.id));
+        .get(String(req.params.id)) as
+        | { mime: string; relative_path: string }
+        | undefined;
       if (!row) fail(404, 'Audio not found.');
       const relative = String(row.relative_path);
-      if (!media.exists(relative))
+      if (!media.exists(relative)) {
         fail(404, 'Audio file is missing from the media mount.');
+      }
       const filename = media.resolve(relative);
       const size = statSync(filename).size;
-      const stream = (start: number, end: number) =>
-        createReadStream(filename, { start, end })
+      const stream = (start2: number, end: number) =>
+        createReadStream(filename, { start: start2, end })
           .on('error', (error) => res.destroy(error))
           .pipe(res);
       res.set({
@@ -642,48 +774,53 @@ export function createApplication(options: ServerOptions) {
       const range = req.get('range');
       if (range) {
         const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-        if (!match || (!match[1] && !match[2]))
+        if (!match || (!match[1] && !match[2])) {
           return res.status(416).set('Content-Range', `bytes */${size}`).end();
-        const start = match[1]
+        }
+        const start2 = match[1]
           ? Number(match[1])
           : Math.max(0, size - Number(match[2]));
         const end =
-          match[1] && match[2]
-            ? Math.min(Number(match[2]), size - 1)
-            : size - 1;
+          match[1] && match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
         if (
-          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(start2) ||
           !Number.isSafeInteger(end) ||
-          start < 0 ||
-          start >= size ||
-          end < start
-        )
+          start2 < 0 ||
+          start2 >= size ||
+          end < start2
+        ) {
           return res.status(416).set('Content-Range', `bytes */${size}`).end();
+        }
         res.status(206).set({
-          'Content-Range': `bytes ${start}-${end}/${size}`,
-          'Content-Length': String(end - start + 1),
+          'Content-Range': `bytes ${start2}-${end}/${size}`,
+          'Content-Length': String(end - start2 + 1),
         });
-        return stream(start, end);
+        return stream(start2, end);
       }
       res.set('Content-Length', String(size));
       stream(0, size - 1);
-    }),
+    })
   );
-  function ensureVersion(url: string, user: BandMember) {
+
+  function ensureVersion(url2: string, user: BandMember) {
+    const uploadId = url2.split('/').pop() || '';
     const row = db
       .prepare('SELECT owner_id FROM uploads WHERE id=?')
-      .get(url.split('/').pop()!);
-    if (!row || row.owner_id !== user.id)
+      .get(uploadId) as { owner_id: string } | undefined;
+    if (!row || row.owner_id !== user.id) {
       fail(400, 'Upload this audio file before saving the take.');
+    }
     if (
       store
         .read()
         .songs.some((song) =>
-          song.versions.some((version) => version.audioUrl === url),
+          song.versions.some((version) => version.audioUrl === url2)
         )
-    )
+    ) {
       fail(400, 'This upload is already attached to a take.');
+    }
   }
+
   function protectLastAdmin(user: BandMember, replacement?: BandMember) {
     if (
       user.role === 'admin' &&
@@ -691,39 +828,42 @@ export function createApplication(options: ServerOptions) {
       (!replacement ||
         replacement.role !== 'admin' ||
         replacement.status !== 'active') &&
-      store.members().filter((u) => u.role === 'admin' && u.status === 'active')
-        .length <= 1
-    )
+      store
+        .members()
+        .filter((u) => u.role === 'admin' && u.status === 'active').length <= 1
+    ) {
       fail(400, 'Keep at least one active Admin account.');
+    }
   }
+
   app.post(
     '/api/actions',
-    route(async (req, res) => {
-      const user: BandMember = res.locals.user;
+    route(async (req: Request, res: Response) => {
+      const user = res.locals.user as BandMember;
       const { action, payload: p } = z
         .object({
           action: required,
           payload: z.record(z.string(), z.unknown()).default({}),
         })
         .parse(req.body);
-      let result: unknown;
+      let result: any;
       let invitationRecipient: BandMember | undefined;
       const deletedMedia: string[] = [];
-      let event:
-        | { type: Exclude<EmailEventType, 'member_invite'>; text: string }
-        | undefined;
+      let event: { type: EmailEventType; text: string } | undefined;
+
       store.transaction(() => {
-        const state = store.read(),
-          permissions = ROLE_PERMISSIONS[user.role];
+        const state = store.read();
+        const permissions = ROLE_PERMISSIONS[user.role];
         const member = () =>
-          state.band.members.find((u) => u.id === p.userId) ||
+          state.band.members.find((u) => u.id === (p.userId as string)) ||
           fail(404, 'Member not found.');
         const song = () =>
-          state.songs.find((s) => s.id === p.songId) ||
+          state.songs.find((s) => s.id === (p.songId as string)) ||
           fail(404, 'Song not found.');
         const practice = () =>
-          state.practices.find((s) => s.id === p.practiceId) ||
+          state.practices.find((s) => s.id === (p.practiceId as string)) ||
           fail(404, 'Practice not found.');
+
         switch (action) {
           case 'band.update': {
             requireAdmin(user);
@@ -752,8 +892,9 @@ export function createApplication(options: ServerOptions) {
             if (
               appearanceSettings.primaryColor === 'custom' &&
               !appearanceSettings.customColor
-            )
+            ) {
               fail(400, 'Choose a custom color before saving.');
+            }
             store.saveUser({ ...user, appearanceSettings });
             break;
           }
@@ -793,8 +934,9 @@ export function createApplication(options: ServerOptions) {
               })
               .parse(p);
             validatePassword(data.password, state);
-            if (state.band.members.some((u) => u.email === data.email))
+            if (state.band.members.some((u) => u.email === data.email)) {
               fail(409, 'Email address already exists.');
+            }
             const { password, ...fields } = data;
             const newMember: BandMember = {
               ...fields,
@@ -811,8 +953,9 @@ export function createApplication(options: ServerOptions) {
           case 'member.invite': {
             requireAdmin(user);
             const target = member();
-            if (target.status === 'suspended')
+            if (target.status === 'suspended') {
               fail(400, 'Activate this account before sending an invitation.');
+            }
             invitationRecipient = target;
             result = { memberId: target.id };
             break;
@@ -824,17 +967,18 @@ export function createApplication(options: ServerOptions) {
             if (
               updates.email &&
               state.band.members.some(
-                (u) => u.id !== target.id && u.email === updates.email,
+                (u) => u.id !== target.id && u.email === updates.email
               )
-            )
+            ) {
               fail(409, 'Email address already exists.');
+            }
             store.saveUser({ ...target, ...updates });
             break;
           }
           case 'member.password': {
             requireAdmin(user);
-            const target = member(),
-              password = z.string().max(128).parse(p.password);
+            const target = member();
+            const password = z.string().max(128).parse(p.password);
             validatePassword(password, state);
             store.saveUser(target, hashPassword(password));
             db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
@@ -845,12 +989,13 @@ export function createApplication(options: ServerOptions) {
             requireAdmin(user);
             const target = member();
             const updated = { ...target };
-            if (action === 'member.role')
+            if (action === 'member.role') {
               updated.role = roleSchema.parse(p.role);
-            else
+            } else {
               updated.status = z
                 .enum(['active', 'suspended', 'invited'])
                 .parse(p.status);
+            }
             protectLastAdmin(target, updated);
             store.saveUser(updated);
             db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
@@ -864,8 +1009,9 @@ export function createApplication(options: ServerOptions) {
             break;
           }
           case 'song.add': {
-            if (!permissions.canUploadDemo)
+            if (!permissions.canUploadDemo) {
               fail(403, 'Upload permission required.');
+            }
             const data = songSchema.parse(p);
             ensureVersion(data.version.audioUrl, user);
             const version = {
@@ -892,7 +1038,7 @@ export function createApplication(options: ServerOptions) {
               createdAt: now(),
               createdBy: identity(user),
             };
-            state.songs.unshift(result as SharedState['songs'][number]);
+            state.songs.unshift(result);
             event = {
               type: 'new_demo',
               text: `${user.name} uploaded ${data.title}.`,
@@ -900,8 +1046,9 @@ export function createApplication(options: ServerOptions) {
             break;
           }
           case 'song.version': {
-            if (!permissions.canUploadVersion)
+            if (!permissions.canUploadVersion) {
               fail(403, 'Upload permission required.');
+            }
             const target = song();
             const data = versionSchema.parse(p.version);
             ensureVersion(data.audioUrl, user);
@@ -921,8 +1068,9 @@ export function createApplication(options: ServerOptions) {
             break;
           }
           case 'song.lyrics': {
-            if (!permissions.canEditLyrics)
+            if (!permissions.canEditLyrics) {
               fail(403, 'Editing permission required.');
+            }
             const target = song();
             target.lyrics = {
               draft: text.parse(p.draft),
@@ -962,10 +1110,12 @@ export function createApplication(options: ServerOptions) {
           }
           case 'song.active': {
             const target = song();
-            if (!permissions.canUploadVersion)
+            if (!permissions.canUploadVersion) {
               fail(403, 'Editing permission required.');
-            if (!target.versions.some((v) => v.id === p.versionId))
+            }
+            if (!target.versions.some((v) => v.id === p.versionId)) {
               fail(404, 'Version not found.');
+            }
             target.activeVersionId = String(p.versionId);
             break;
           }
@@ -973,28 +1123,33 @@ export function createApplication(options: ServerOptions) {
             requireAdmin(user);
             const target = song();
             for (const version of target.versions) {
+              const uploadId = version.audioUrl.split('/').pop() || '';
               const upload = db
                 .prepare('SELECT relative_path FROM uploads WHERE id=?')
-                .get(version.audioUrl.split('/').pop()!);
-              if (upload?.relative_path)
+                .get(uploadId) as
+                | { relative_path?: string }
+                | undefined;
+              if (upload?.relative_path) {
                 deletedMedia.push(String(upload.relative_path));
-              db.prepare('DELETE FROM uploads WHERE id=?').run(
-                version.audioUrl.split('/').pop()!,
-              );
+              }
+              db.prepare('DELETE FROM uploads WHERE id=?').run(uploadId);
             }
             state.songs = state.songs.filter((s) => s.id !== target.id);
-            for (const session of state.practices)
+            for (const session of state.practices) {
               session.setlistSongIds = session.setlistSongIds.filter(
-                (id) => id !== target.id,
+                (id) => id !== target.id
               );
+            }
             break;
           }
           case 'practice.add': {
-            if (!permissions.canSchedulePractice)
+            if (!permissions.canSchedulePractice) {
               fail(403, 'Scheduling permission required.');
+            }
             const data = practiceSchema.parse(p);
-            if (data.endTime <= data.startTime)
+            if (data.endTime <= data.startTime) {
               fail(400, 'Practice must end after it starts.');
+            }
             state.practices.unshift({
               ...data,
               id: randomUUID(),
@@ -1017,10 +1172,10 @@ export function createApplication(options: ServerOptions) {
             break;
           }
           case 'practice.rsvp': {
-            const target = practice(),
-              status = z
-                .enum(['attending', 'tentative', 'declined'])
-                .parse(p.status);
+            const target = practice();
+            const status = z
+              .enum(['attending', 'tentative', 'declined'])
+              .parse(p.status);
             target.rsvps = target.rsvps.filter((r) => r.userId !== user.id);
             target.rsvps.push({
               userId: user.id,
@@ -1032,11 +1187,12 @@ export function createApplication(options: ServerOptions) {
             break;
           }
           case 'practice.delete':
-            if (!permissions.canSchedulePractice)
+            if (!permissions.canSchedulePractice) {
               fail(403, 'Scheduling permission required.');
+            }
             practice();
             state.practices = state.practices.filter(
-              (s) => s.id !== p.practiceId,
+              (s) => s.id !== p.practiceId
             );
             break;
           default:
@@ -1044,6 +1200,7 @@ export function createApplication(options: ServerOptions) {
         }
         store.write(state);
       });
+
       for (const relative of deletedMedia) {
         try {
           media.remove(relative);
@@ -1051,6 +1208,7 @@ export function createApplication(options: ServerOptions) {
           console.error('Could not remove deleted audio:', error);
         }
       }
+
       if (invitationRecipient) {
         const recipient = invitationRecipient;
         const bandName = store.read().band.name;
@@ -1060,7 +1218,7 @@ export function createApplication(options: ServerOptions) {
           `[${bandName}] You're invited to the band workspace`,
           `<h2>Join ${escapeHtml(bandName)}</h2><p>Hi ${escapeHtml(recipient.name)},</p><p>${escapeHtml(user.name)} invited you to the band's workspace, where you can share demos, lyrics and rehearsal plans.</p><p><a href="${escapeHtml(origin)}">Sign in to ${escapeHtml(bandName)}</a></p><p>Your sign-in email is <strong>${escapeHtml(recipient.email)}</strong>.</p><p>Your Band Admin will share your initial password separately. After signing in, you can change it under Profile Management.</p>`,
           'member_invite',
-          true,
+          true
         );
         result = {
           memberId: recipient.id,
@@ -1074,16 +1232,22 @@ export function createApplication(options: ServerOptions) {
           },
         };
       }
+
       res.json({
-        state: snapshot(store.members().find((u) => u.id === user.id) || user),
+        state: snapshot(
+          store.members().find((u) => u.id === user.id) || user
+        ),
         result,
       });
-      if (event)
+
+      if (event) {
         void notify(user, event.type, event.text).catch((error) =>
-          console.error('Notification failed:', error.message),
+          console.error('Notification failed:', error.message)
         );
-    }),
+      }
+    })
   );
+
   function transport(settings: SmtpSettings, plainPassword?: string) {
     if (!settings.host) fail(400, 'SMTP host is required.');
     return nodemailer.createTransport({
@@ -1101,19 +1265,20 @@ export function createApplication(options: ServerOptions) {
                 : plainPassword,
           }
         : undefined,
-      connectionTimeout: 8000,
-      greetingTimeout: 8000,
-      socketTimeout: 15000,
+      connectionTimeout: 8e3,
+      greetingTimeout: 8e3,
+      socketTimeout: 15e3,
     });
   }
+
   async function deliver(
     to: string,
     toName: string,
     subject: string,
     html: string,
     type: EmailEventType,
-    requireDelivery = false,
-  ) {
+    requireDelivery = false
+  ): Promise<EmailNotificationLog> {
     const settings = store.read().smtpSettings;
     const log: EmailNotificationLog = {
       id: randomUUID(),
@@ -1154,18 +1319,15 @@ export function createApplication(options: ServerOptions) {
     }
     const state = store.read();
     state.emailLogs.unshift(log);
-    state.emailLogs = state.emailLogs.slice(0, 1000);
+    state.emailLogs = state.emailLogs.slice(0, 1e3);
     store.write(state);
     return log;
   }
-  async function notify(
-    user: BandMember,
-    type: Exclude<EmailEventType, 'member_invite'>,
-    message: string,
-  ) {
+
+  async function notify(user: BandMember, type: EmailEventType, message: string) {
     const state = store.read();
     if (!state.smtpSettings.isEnabled) return;
-    const trigger = {
+    const trigger: Record<string, keyof SmtpSettings['notificationTriggers']> = {
       new_demo: 'newDemos',
       new_version: 'newVersions',
       lyric_edit: 'lyricEdits',
@@ -1173,8 +1335,9 @@ export function createApplication(options: ServerOptions) {
       practice_reminder: 'practiceReminder',
       comment: 'comments',
       test_probe: 'newDemos',
-    } as const;
-    const preference = {
+      member_invite: 'newDemos',
+    };
+    const preference: Record<string, string> = {
       new_demo: 'newDemos',
       new_version: 'newVersions',
       lyric_edit: 'lyricEdits',
@@ -1182,26 +1345,29 @@ export function createApplication(options: ServerOptions) {
       practice_reminder: 'practiceReminders',
       comment: 'comments',
       test_probe: 'newDemos',
-    } as const;
-    if (!state.smtpSettings.notificationTriggers[trigger[type]]) return;
+      member_invite: 'newDemos',
+    };
+    const triggerKey = trigger[type];
+    if (!triggerKey || !state.smtpSettings.notificationTriggers[triggerKey]) return;
     for (const recipient of state.band.members.filter(
       (m) =>
         m.status === 'active' &&
         m.id !== user.id &&
-        m.notifications?.[preference[type]] !== false,
+        (m.notifications as any)?.[preference[type]] !== false
     )) {
       await deliver(
         recipient.email,
         recipient.name,
         `[${state.band.name}] ${message}`,
         `<p>${escapeHtml(message)}</p><p><a href="${escapeHtml(origin)}">Open BandApp</a></p>`,
-        type,
+        type
       );
     }
   }
+
   app.post(
     '/api/smtp/verify',
-    route(async (req, res) => {
+    route(async (req: Request, res: Response) => {
       requireAdmin(res.locals.user);
       const fields = z
         .object({
@@ -1209,7 +1375,7 @@ export function createApplication(options: ServerOptions) {
           port: z.coerce.number().int().min(1).max(65535),
           encryption: smtpSchema.shape.encryption,
           username: short,
-          password: z.string().max(1000),
+          password: z.string().max(1e3),
           authRequired: z.boolean().optional(),
         })
         .parse(req.body);
@@ -1218,16 +1384,18 @@ export function createApplication(options: ServerOptions) {
         ...fields,
         authRequired: fields.authRequired ?? Boolean(fields.username),
       };
-      if (!fields.password)
+      if (!fields.password) {
         settings.password = store.read().smtpSettings.password;
+      }
       await transport(settings, fields.password || undefined).verify();
       res.json({ success: true, message: 'SMTP connection verified.' });
-    }),
+    })
   );
+
   app.post(
     '/api/smtp/test',
-    route(async (req, res) => {
-      const user: BandMember = res.locals.user;
+    route(async (req: Request, res: Response) => {
+      const user = res.locals.user as BandMember;
       requireAdmin(user);
       const to = email.parse(req.body.to);
       const log = await deliver(
@@ -1235,7 +1403,7 @@ export function createApplication(options: ServerOptions) {
         user.name,
         'BandApp SMTP test',
         '<p>Your BandApp email connection is working.</p>',
-        'test_probe',
+        'test_probe'
       );
       res.json({
         success: log.status !== 'failed',
@@ -1247,12 +1415,13 @@ export function createApplication(options: ServerOptions) {
         log,
         state: snapshot(user),
       });
-    }),
+    })
   );
+
   app.post(
     '/api/smtp/resend',
-    route(async (req, res) => {
-      const user: BandMember = res.locals.user;
+    route(async (req: Request, res: Response) => {
+      const user = res.locals.user as BandMember;
       requireAdmin(user);
       const old =
         store.read().emailLogs.find((l) => l.id === req.body.logId) ||
@@ -1263,42 +1432,51 @@ export function createApplication(options: ServerOptions) {
         old.subject,
         old.htmlContent,
         old.eventType,
-        old.eventType === 'member_invite',
+        old.eventType === 'member_invite'
       );
       res.json({
         success: log.status !== 'failed',
         message: log.errorMessage || 'Email processed.',
         state: snapshot(user),
       });
-    }),
+    })
   );
-  app.use('/api', (_req, _res, next) =>
-    next(new HttpError(404, 'API endpoint not found.')),
+
+  app.use(
+    '/api',
+    (_req: Request, _res: Response, next: NextFunction) =>
+      next(new HttpError(404, 'API endpoint not found.'))
   );
-  const errorHandler: express.ErrorRequestHandler = (
-    error,
-    _req,
-    res,
-    _next,
+
+  const errorHandler = (
+    error: any,
+    _req: Request,
+    res: Response,
+    _next: NextFunction
   ) => {
-    if (error instanceof z.ZodError)
-      return void res.status(400).json({
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
         message: error.issues
           .map((i) => `${i.path.join('.')}: ${i.message}`)
           .join('; '),
       });
-    if (error instanceof HttpError)
-      return void res.status(error.status).json({ message: error.message });
-    if (error.status === 413)
-      return void res
+    }
+    if (error instanceof HttpError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    if (error.status === 413) {
+      return res
         .status(413)
         .json({ message: 'Upload exceeds the configured size limit.' });
-    if (error instanceof SyntaxError && 'body' in error)
-      return void res.status(400).json({ message: 'Invalid JSON request.' });
+    }
+    if (error instanceof SyntaxError && 'body' in error) {
+      return res.status(400).json({ message: 'Invalid JSON request.' });
+    }
     console.error(error);
     res
       .status(500)
       .json({ message: 'The server could not complete this request.' });
   };
+
   return { app, store, errorHandler };
 }
