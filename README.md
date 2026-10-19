@@ -1,4 +1,4 @@
-<img src=".github/assets/bandapp.svg" alt="BandApp guitar logo" width="96" height="96" />
+<img src=".github/assets/bandapp.svg" alt="BandApp Logo" width="96" height="96" />
 
 # BandApp
 
@@ -7,6 +7,8 @@
 BandApp provides a centralized, self-hosted environment for band collaboration, with role-based permissions, secure authentication, audio storage, and customizable user profiles.
 
 ## Features
+
+<img src=".github/assets/bandapp-screen-default.png" alt="BandApp demos and audio dashboard" width="900" />
 
 - **Audio Management** - Upload, organize, and access recordings through an authenticated API.
 - **Lyrics & Rehearsals** - Collaborate on lyrics and manage rehearsal activities.
@@ -21,9 +23,13 @@ BandApp provides a centralized, self-hosted environment for band collaboration, 
 
 Each member can customize their appearance under **Profile & Settings → Appearance**.
 
+<img src=".github/assets/bandapp-screen-profile.png" alt="BandApp profile and appearance settings" width="900" />
+
 Existing accounts inherit the previous shared appearance settings once during an upgrade.
 
 Band-wide branding, including the logo, logo shape, name, and subtitle—is managed exclusively by Admins under **App Settings**.
+
+<img src=".github/assets/bandapp-screen-settings.png" alt="BandApp administrator settings" width="900" />
 
 ---
 
@@ -164,6 +170,8 @@ Changing those initial values later will **not** reset an existing Admin passwor
 ### 5. Invite Members
 
 Admins can create accounts through **User Management**.
+
+<img src=".github/assets/bandapp-screen-users.png" alt="BandApp user management and role permissions" width="900" />
 
 When a member is created:
 
