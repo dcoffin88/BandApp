@@ -184,17 +184,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <span>Profile &amp; Settings</span>
                     </button>
 
-                    {currentUser.role === 'admin' && <button
-                      onClick={() => {
-                        setActiveTab('admin');
-                        if (onSelectAdminSubTab) onSelectAdminSubTab('app');
-                        setShowUserDropdown(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
-                    >
-                      <Settings className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Admin Settings</span>
-                    </button>}
+                    {currentUser.role === 'admin' && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setActiveTab('admin');
+                            if (onSelectAdminSubTab) onSelectAdminSubTab('app');
+                            setShowUserDropdown(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
+                        >
+                          <Settings className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Admin &amp; App Settings</span>
+                        </button>
+                      </>
+                    )}
                   </div>
 
                   {/* Log Out Button */}
