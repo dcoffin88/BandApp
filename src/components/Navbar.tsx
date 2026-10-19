@@ -199,7 +199,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
 
                   {/* Log Out Button */}
-                  <div className="pt-2 border-t border-zinc-800">
+                  <div className="pt-2">
                     <button
                       onClick={() => {
                         setShowUserDropdown(false);
