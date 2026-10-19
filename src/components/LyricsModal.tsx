@@ -29,19 +29,22 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
 }) => {
   const { updateLyrics, permissions, currentUser } = useBand();
 
-  if (!isOpen || !song) return null;
-
-  const [draft, setDraft] = useState(song.lyrics?.draft || '');
-  const [chordsSheet, setChordsSheet] = useState(song.lyrics?.chordsSheet || '');
+  const [draft, setDraft] = useState(song?.lyrics?.draft || '');
+  const [chordsSheet, setChordsSheet] = useState(song?.lyrics?.chordsSheet || '');
   const [activeTab, setActiveTab] = useState<'lyrics' | 'chords'>('lyrics');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  React.useEffect(() => {
+    setDraft(song?.lyrics?.draft || '');
+    setChordsSheet(song?.lyrics?.chordsSheet || '');
+  }, [song?.id, isOpen]);
+  if (!isOpen || !song) return null;
   const canEdit = permissions.canEditLyrics;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!canEdit) return;
-    updateLyrics(song.id, draft, chordsSheet);
+    if (!await updateLyrics(song.id, draft, chordsSheet)) return;
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2500);
   };
@@ -132,7 +135,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
             </button>
           </div>
 
-          {/* Quick section insert buttons for songwriters */}
+          {/* Quick section insert buttons for editors */}
           {canEdit && (
             <div className="flex items-center gap-1">
               <span className="text-zinc-500 mr-1 hidden sm:inline">Add:</span>
@@ -156,7 +159,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
             <div className="p-3 rounded-xl bg-zinc-800/60 border border-zinc-700 text-zinc-300 text-xs flex items-center gap-2">
               <Lock className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
-                <strong>Read-Only Mode:</strong> Your current role (<em>{currentUser.role}</em>) does not have edit permissions. Switch to Leader or Songwriter to edit.
+                <strong>Read-Only Mode:</strong> Your current role (<em>{currentUser.role}</em>) does not have edit permissions. Switch to Admin or Editor to edit.
               </span>
             </div>
           )}

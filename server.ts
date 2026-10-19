@@ -1,149 +1,120 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import dotenv from 'dotenv';
-import nodemailer from 'nodemailer';
+import { createApplication } from './server/app.ts';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json({ limit: '10mb' }));
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+process.umask(0o077);
+const root = path.dirname(fileURLToPath(import.meta.url));
+const production = process.env.NODE_ENV === 'production';
+const port = Number(process.env.PORT || 3000);
+if (!Number.isInteger(port) || port < 1 || port > 65535)
+  throw new Error('Invalid PORT.');
+const appUrl =
+  process.env.APP_URL || (production ? '' : 'http://localhost:' + port);
+if (!appUrl) throw new Error('APP_URL is required in production.');
+const url = new URL(appUrl);
+if (
+  !['http:', 'https:'].includes(url.protocol) ||
+  url.pathname !== '/' ||
+  url.search ||
+  url.hash ||
+  url.username ||
+  url.password
+)
+  throw new Error('APP_URL must be an HTTP(S) origin without a path.');
+const secret = process.env.APP_SECRET || '';
+if (secret.length < 32)
+  throw new Error('APP_SECRET must contain at least 32 characters.');
+const trustProxy = Number(process.env.TRUST_PROXY_HOPS || 0);
+if (!Number.isInteger(trustProxy) || trustProxy < 0)
+  throw new Error('Invalid TRUST_PROXY_HOPS.');
+const uploadLimitMb = Number(process.env.MAX_UPLOAD_MB || 100);
+if (
+  !Number.isInteger(uploadLimitMb) ||
+  uploadLimitMb < 1 ||
+  uploadLimitMb > 500
+)
+  throw new Error('MAX_UPLOAD_MB must be between 1 and 500.');
+const { app, store, errorHandler } = createApplication({
+  development: !production,
+  mediaDirectory: process.env.MEDIA_DIR || './media',
+  databasePath: path.resolve(
+    process.env.DATA_DIR || './data',
+    'bandapp.sqlite',
+  ),
+  appUrl,
+  secret,
+  secureCookies: url.protocol === 'https:',
+  trustProxy,
+  uploadLimitMb,
+  adminEmail: process.env.INITIAL_ADMIN_EMAIL,
+  adminPassword: process.env.INITIAL_ADMIN_PASSWORD,
+  adminName: process.env.INITIAL_ADMIN_NAME,
+  bandName: process.env.INITIAL_BAND_NAME,
 });
 
-// Verify SMTP connection
-app.post('/api/smtp/verify', async (req, res) => {
-  try {
-    const { host, port, encryption, username, password } = req.body;
-
-    if (!host) {
-      return res.status(400).json({ success: false, message: 'SMTP host is required' });
-    }
-
-    const secure = encryption === 'ssl' || Number(port) === 465;
-    const transporter = nodemailer.createTransport({
-      host,
-      port: Number(port) || 587,
-      secure,
-      auth: username ? { user: username, pass: password || '' } : undefined,
-      connectionTimeout: 8000,
-      greetingTimeout: 8000,
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
-
-    await transporter.verify();
-    return res.json({
-      success: true,
-      message: `Successfully connected and authenticated to ${host}:${port} (${encryption.toUpperCase()})`,
-    });
-  } catch (error: any) {
-    console.error('SMTP verify error:', error);
-    return res.status(400).json({
-      success: false,
-      message: error.message || 'SMTP server connection or authentication failed.',
-    });
-  }
-});
-
-// Send notification email
-app.post('/api/smtp/send', async (req, res) => {
-  try {
-    const { to, toName, subject, html, smtpSettings } = req.body;
-
-    if (!to) {
-      return res.status(400).json({ success: false, message: 'Recipient email address is required' });
-    }
-
-    if (!smtpSettings || !smtpSettings.isEnabled) {
-      return res.json({
-        success: true,
-        status: 'simulated',
-        message: 'SMTP is disabled. Notification recorded to simulated band outbox.',
+async function start() {
+  if (production) {
+    const dist = path.join(root, 'dist');
+    if (!existsSync(path.join(dist, 'index.html')))
+      throw new Error('Run npm run build before starting production.');
+    app.use(
+      '/assets',
+      express.static(path.join(dist, 'assets'), {
+        immutable: true,
+        maxAge: '1y',
+        fallthrough: false,
+      }),
+    );
+    app.use(express.static(dist, { index: false, maxAge: 0 }));
+    app.get('*', (req, res, next) => {
+      if (path.extname(req.path)) return res.status(404).end();
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(dist, 'index.html'), (error) => {
+        if (error) next(error);
       });
-    }
-
-    // If host and credentials are present, attempt actual delivery via nodemailer
-    if (smtpSettings.host && smtpSettings.username && smtpSettings.password) {
-      const secure = smtpSettings.encryption === 'ssl' || Number(smtpSettings.port) === 465;
-
-      const transporter = nodemailer.createTransport({
-        host: smtpSettings.host,
-        port: Number(smtpSettings.port) || 587,
-        secure,
-        auth: {
-          user: smtpSettings.username,
-          pass: smtpSettings.password,
-        },
-        connectionTimeout: 10000,
-        tls: {
-          rejectUnauthorized: false,
-        },
-      });
-
-      const senderFrom = `"${smtpSettings.fromName || 'BandJam'}" <${smtpSettings.fromEmail || smtpSettings.username}>`;
-
-      const info = await transporter.sendMail({
-        from: senderFrom,
-        to: toName ? `"${toName}" <${to}>` : to,
-        replyTo: smtpSettings.replyTo || undefined,
-        subject: subject || 'Band Notification',
-        html: html || '<p>Band notification message</p>',
-      });
-
-      console.log('Real email delivered via SMTP:', info.messageId);
-      return res.json({
-        success: true,
-        status: 'sent',
-        messageId: info.messageId,
-        message: `Email successfully delivered to ${to} via ${smtpSettings.host}`,
-      });
-    } else {
-      // Mock / Simulated delivery when password or host is pending
-      return res.json({
-        success: true,
-        status: 'simulated',
-        message: 'Credentials incomplete for live external relay; logged to band outbox.',
-      });
-    }
-  } catch (error: any) {
-    console.error('SMTP send error:', error);
-    return res.status(500).json({
-      success: false,
-      status: 'failed',
-      message: error.message || 'Failed to dispatch email over SMTP.',
-    });
-  }
-});
-
-// Vite server middleware setup
-async function startServer() {
-  if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   } else {
-    const vite = await createViteServer({
+    const { createServer } = await import('vite');
+    const vite = await createServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   }
-
-  app.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`BandJam server running on http://0.0.0.0:${PORT}`);
+  app.use(errorHandler);
+  const server = app.listen(port, '0.0.0.0', () =>
+    console.log('BandApp listening on port ' + port),
+  );
+  server.requestTimeout = 120_000;
+  server.headersTimeout = 30_000;
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    console.log('Stopping BandApp...');
+    const deadline = setTimeout(() => process.exit(1), 15_000);
+    deadline.unref();
+    server.close(() => {
+      store.db.close();
+      clearTimeout(deadline);
+      process.exit(0);
+    });
+    server.closeIdleConnections();
+  };
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
+  server.on('error', (error) => {
+    console.error(error);
+    store.db.close();
+    process.exit(1);
   });
 }
-
-startServer();
+start().catch((error) => {
+  console.error(error);
+  store.db.close();
+  process.exit(1);
+});

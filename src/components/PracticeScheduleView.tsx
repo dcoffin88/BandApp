@@ -51,11 +51,11 @@ export const PracticeScheduleView: React.FC = () => {
     setGoals(goals.filter((_, i) => i !== index));
   };
 
-  const handleCreatePractice = (e: React.FormEvent) => {
+  const handleCreatePractice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !date) return;
 
-    addPracticeSession({
+    const saved = await addPracticeSession({
       title: title.trim(),
       date,
       startTime,
@@ -66,6 +66,7 @@ export const PracticeScheduleView: React.FC = () => {
       notes: notes.trim(),
     });
 
+    if (!saved) return;
     setIsAddModalOpen(false);
     setTitle('');
     setDate('');
@@ -154,7 +155,7 @@ export const PracticeScheduleView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Leader action: delete session */}
+                  {/* Admin action: delete session */}
                   {permissions.canManageMembers && (
                     <button
                       onClick={() => {
@@ -316,7 +317,7 @@ export const PracticeScheduleView: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Studio Run-Through, Writing Session, Tour Prep..."
+                  placeholder="e.g. Studio Run-Through, Writing Session, Show Prep..."
                   value={title}
                   onChange={e => setTitle(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"

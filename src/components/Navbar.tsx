@@ -21,10 +21,10 @@ import { useBand } from '../context/BandContext.tsx';
 import { Role } from '../types/band.ts';
 
 interface NavbarProps {
-  activeTab: 'songs' | 'lyrics' | 'practice' | 'admin';
-  setActiveTab: (tab: 'songs' | 'lyrics' | 'practice' | 'admin') => void;
+  activeTab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile';
+  setActiveTab: (tab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile') => void;
   onOpenUploadModal: () => void;
-  onSelectAdminSubTab?: (subTab: 'band' | 'users' | 'auth' | 'profile' | 'app') => void;
+  onSelectAdminSubTab?: (subTab: 'users' | 'auth' | 'app' | 'smtp') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -33,7 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenUploadModal,
   onSelectAdminSubTab,
 }) => {
-  const { band, currentUser, switchUser, permissions, updateBandName, logout, appSettings } = useBand();
+  const { band, currentUser, permissions, updateBandName, logout, appSettings } = useBand();
   const [isEditingBandName, setIsEditingBandName] = useState(false);
   const [bandNameInput, setBandNameInput] = useState(band.name);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -48,13 +48,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const getRoleBadge = (role: Role) => {
     switch (role) {
-      case 'leader':
-        return { label: 'Leader / Admin', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
-      case 'songwriter':
-        return { label: 'Songwriter', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
+      case 'admin':
+        return { label: 'Admin', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
+      case 'editor':
+        return { label: 'Editor', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
       case 'member':
         return { label: 'Band Member', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' };
       case 'guest':
+      default:
         return { label: 'Session / Guest', color: 'bg-zinc-700/50 text-zinc-300 border-zinc-600' };
     }
   };
@@ -78,7 +79,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Top bar with Band Name and Current User */}
         <div className="flex items-center justify-between py-3 border-b border-zinc-800/80 gap-3">
           {/* Band Name & Header Logo Area */}
-          <div className="flex items-center gap-3 min-w-0">
+          <a
+            href="/"
+            aria-label={`${band.name} — go to demos`}
+            onClick={event => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              setActiveTab('songs');
+              setShowUserDropdown(false);
+            }}
+            className="flex items-center gap-3 min-w-0 rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-500"
+          >
             {appSettings?.headerLogoUrl ? (
               <img
                 src={appSettings.headerLogoUrl}
@@ -97,61 +108,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             )}
 
-            {isEditingBandName ? (
-              <form onSubmit={handleSaveBandName} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={bandNameInput}
-                  onChange={e => setBandNameInput(e.target.value)}
-                  className="bg-zinc-900 border border-amber-500/50 rounded-lg px-2.5 py-1 text-base sm:text-lg font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  autoFocus
-                />
-                <button
-                  type="submit"
-                  className="p-1.5 rounded-md bg-amber-500 text-zinc-950 hover:bg-amber-400 font-medium"
-                >
-                  <Check className="w-4 h-4" />
-                </button>
-              </form>
-            ) : (
-              <div className="flex flex-col group min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white font-sans truncate">
-                    {band.name}
-                  </h1>
-                  {permissions.canManageMembers && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => {
-                          setBandNameInput(band.name);
-                          setIsEditingBandName(true);
-                        }}
-                        title="Edit Band Name (Leader Only)"
-                        className="p-1 text-zinc-400 hover:text-zinc-200"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setActiveTab('admin');
-                          if (onSelectAdminSubTab) onSelectAdminSubTab('app');
-                        }}
-                        title="Customize Header Logo & Colors"
-                        className="p-1 text-zinc-400 hover:text-amber-400"
-                      >
-                        <Palette className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {(appSettings?.headerSubtitle || band.motto) && (
-                  <span className="text-[11px] text-zinc-400 leading-tight truncate">
-                    {appSettings?.headerSubtitle || band.motto}
-                  </span>
-                )}
+            <div className="flex flex-col group min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white font-sans truncate">
+                  {band.name}
+                </h1>
               </div>
-            )}
-          </div>
+              {(appSettings?.headerSubtitle || band.motto) && (
+                <span className="text-[11px] text-zinc-400 leading-tight truncate">
+                  {appSettings?.headerSubtitle || band.motto}
+                </span>
+              )}
+            </div>
+          </a>
 
           {/* User Profile, Settings, & Logout Dropdown */}
           <div className="relative">
@@ -178,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <ChevronDown className="w-4 h-4 text-zinc-400" />
             </button>
 
-            {/* Dropdown for Role & Profile Switching */}
+            {/* Dropdown for Role */}
             {showUserDropdown && (
               <>
                 <div
@@ -206,82 +175,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="py-1 border-b border-zinc-800 space-y-0.5 text-xs">
                     <button
                       onClick={() => {
+                        setActiveTab('profile');
+                        setShowUserDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
+                    >
+                      <UserCog className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Profile &amp; Settings</span>
+                    </button>
+
+                    {currentUser.role === 'admin' && <button
+                      onClick={() => {
                         setActiveTab('admin');
                         if (onSelectAdminSubTab) onSelectAdminSubTab('app');
                         setShowUserDropdown(false);
                       }}
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
                     >
-                      <Palette className="w-3.5 h-3.5 text-amber-400" />
-                      <span>App Colors &amp; Header Logo</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setActiveTab('admin');
-                        if (onSelectAdminSubTab) onSelectAdminSubTab('profile');
-                        setShowUserDropdown(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
-                    >
-                      <UserCog className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Profile &amp; Gear Rig</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setActiveTab('admin');
-                        if (onSelectAdminSubTab) onSelectAdminSubTab('band');
-                        setShowUserDropdown(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
-                    >
                       <Settings className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Full Admin &amp; Settings Center</span>
-                    </button>
-                  </div>
-
-                  {/* Switch Member Demo Accounts */}
-                  <div className="pt-1">
-                    <p className="px-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Fast Switch Member
-                    </p>
-                    <div className="space-y-0.5 max-h-40 overflow-y-auto">
-                      {band.members.map(member => {
-                        const mBadge = getRoleBadge(member.role);
-                        const isCurrent = member.id === currentUser.id;
-                        return (
-                          <button
-                            key={member.id}
-                            onClick={() => {
-                              switchUser(member.id);
-                              setShowUserDropdown(false);
-                            }}
-                            className={`w-full flex items-center justify-between p-1.5 rounded-lg text-left text-xs transition ${
-                              isCurrent
-                                ? 'bg-amber-500/15 border border-amber-500/30 text-white'
-                                : 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <img
-                                src={member.avatar}
-                                alt={member.name}
-                                className="w-5 h-5 rounded-full object-cover shrink-0"
-                              />
-                              <span className="truncate font-medium text-[11px]">{member.name}</span>
-                            </div>
-                            <span className={`text-[9px] px-1 py-0.2 rounded border font-mono uppercase shrink-0 ${mBadge.color}`}>
-                              {member.role}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                      <span>Admin Settings</span>
+                    </button>}
                   </div>
 
                   {/* Log Out Button */}
-                  <div className="pt-2 border-t border-zinc-800">
+                  <div className="pt-2">
                     <button
                       onClick={() => {
                         setShowUserDropdown(false);
@@ -334,17 +251,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Calendar className="w-4 h-4" />
               <span>Practice Schedule</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('admin')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition whitespace-nowrap ${
-                activeTab === 'admin'
-                  ? 'bg-zinc-800 text-amber-400 shadow-inner'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              <span>Admin &amp; Settings</span>
             </button>
           </nav>
 

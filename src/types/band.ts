@@ -1,4 +1,4 @@
-export type Role = 'leader' | 'songwriter' | 'member' | 'guest';
+export type Role = 'admin' | 'editor' | 'member' | 'guest';
 
 export type UserStatus = 'active' | 'suspended' | 'invited';
 
@@ -35,6 +35,7 @@ export interface BandMember {
   lastLogin?: string;
   twoFactorEnabled?: boolean;
   notifications?: UserNotifications;
+  appearanceSettings?: UserAppearance;
   isCurrentUser?: boolean;
   createdAt?: string;
 }
@@ -150,13 +151,19 @@ export interface LoginAuditEntry {
   deviceInfo: string;
 }
 
-export type ThemeColor = 'amber' | 'emerald' | 'cyan' | 'purple' | 'rose' | 'orange';
+export type ThemeColor = 'amber' | 'emerald' | 'cyan' | 'purple' | 'rose' | 'orange' | 'blue' | 'indigo' | 'teal' | 'lime' | 'pink' | 'custom';
 
-export interface AppSettings {
+export interface UserAppearance {
+  appearance?: 'light' | 'dark' | 'system';
+  radius?: 'none' | 'small' | 'medium' | 'full';
   primaryColor: ThemeColor;
+  customColor?: string;
+  accentGlow: boolean;
+}
+
+export interface AppSettings extends UserAppearance {
   headerLogoUrl: string;
   headerLogoShape: 'circle' | 'rounded' | 'square';
-  accentGlow: boolean;
   headerSubtitle: string;
 }
 
@@ -184,6 +191,7 @@ export interface SmtpSettings {
 }
 
 export type EmailEventType =
+  | 'member_invite'
   | 'new_demo'
   | 'new_version'
   | 'lyric_edit'
@@ -191,6 +199,18 @@ export type EmailEventType =
   | 'practice_reminder'
   | 'comment'
   | 'test_probe';
+
+export interface MemberInvitationResult {
+  status: 'sent' | 'failed';
+  message: string;
+  logId?: string;
+}
+
+export interface AddMemberResult {
+  success: boolean;
+  memberId?: string;
+  invitation?: MemberInvitationResult;
+}
 
 export interface EmailNotificationLog {
   id: string;

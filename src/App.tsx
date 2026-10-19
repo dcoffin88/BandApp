@@ -7,6 +7,7 @@ import { LyricsStudioView } from './components/LyricsStudioView.tsx';
 import { Navbar } from './components/Navbar.tsx';
 import { NewVersionModal } from './components/NewVersionModal.tsx';
 import { PracticeScheduleView } from './components/PracticeScheduleView.tsx';
+import { ProfileSettingsView } from './components/ProfileSettingsView.tsx';
 import { SongListMainView } from './components/SongListMainView.tsx';
 import { UploadDemoModal } from './components/UploadDemoModal.tsx';
 import { AudioPlayerProvider, useAudioPlayer } from './context/AudioPlayerContext.tsx';
@@ -14,9 +15,9 @@ import { BandProvider, useBand } from './context/BandContext.tsx';
 import { SongIdea } from './types/band.ts';
 
 const AppContent: React.FC = () => {
-  const { isAuthenticated } = useBand();
-  const [activeTab, setActiveTab] = useState<'songs' | 'lyrics' | 'practice' | 'admin'>('songs');
-  const [adminSubTab, setAdminSubTab] = useState<'band' | 'users' | 'auth' | 'profile' | 'app'>('band');
+  const { isAuthenticated, currentUser } = useBand();
+  const [activeTab, setActiveTab] = useState<'songs' | 'lyrics' | 'practice' | 'admin' | 'profile'>('songs');
+  const [adminSubTab, setAdminSubTab] = useState<'users' | 'auth' | 'app' | 'smtp'>('app');
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [lyricsModalSong, setLyricsModalSong] = useState<SongIdea | null>(null);
@@ -29,7 +30,7 @@ const AppContent: React.FC = () => {
     return <AuthView />;
   }
 
-  const handleSelectAdminSubTab = (subTab: 'band' | 'users' | 'auth' | 'profile' | 'app') => {
+  const handleSelectAdminSubTab = (subTab: 'users' | 'auth' | 'app' | 'smtp') => {
     setAdminSubTab(subTab);
     setActiveTab('admin');
   };
@@ -60,7 +61,9 @@ const AppContent: React.FC = () => {
 
         {activeTab === 'practice' && <PracticeScheduleView />}
 
-        {activeTab === 'admin' && (
+        {activeTab === 'profile' && <ProfileSettingsView />}
+
+        {activeTab === 'admin' && currentUser.role === 'admin' && (
           <AdminSettingsView
             key={adminSubTab}
             initialTab={adminSubTab}
@@ -74,10 +77,10 @@ const AppContent: React.FC = () => {
       />
 
       {/* Modals */}
-      <UploadDemoModal
+      {isUploadModalOpen && <UploadDemoModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
-      />
+      />}
 
       <LyricsModal
         song={lyricsModalSong}
@@ -85,21 +88,23 @@ const AppContent: React.FC = () => {
         onClose={() => setLyricsModalSong(null)}
       />
 
-      <NewVersionModal
+      {newVersionModalSong && <NewVersionModal
         song={newVersionModalSong}
         isOpen={!!newVersionModalSong}
         onClose={() => setNewVersionModalSong(null)}
-      />
+      />}
     </div>
   );
 };
 
+const SessionContent: React.FC = () => {
+  const { currentUser, isAuthenticated } = useBand();
+  return <AudioPlayerProvider key={isAuthenticated ? currentUser.id : 'signed-out'}><AppContent /></AudioPlayerProvider>;
+};
 export default function App() {
   return (
     <BandProvider>
-      <AudioPlayerProvider>
-        <AppContent />
-      </AudioPlayerProvider>
+      <SessionContent />
     </BandProvider>
   );
 }

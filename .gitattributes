@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Release scripts must run with Bash on Linux and Git Bash on Windows.
+*.sh text eol=lf

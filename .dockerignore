@@ -1,0 +1,17 @@
+node_modules
+dist
+server.js
+.git
+.github
+.env
+.env.*
+!.env.example
+data
+media
+backups
+coverage
+*.log
+*.sqlite*
+*.db*
+tests
+README.md
