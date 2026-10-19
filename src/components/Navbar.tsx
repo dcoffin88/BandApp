@@ -13,12 +13,16 @@ import {
   Plus,
   Settings,
   Shield,
+  Tag,
   UserCheck,
   UserCog,
   Users,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { Role } from '../types/band.ts';
+import { useAppVersion } from '../hooks/useAppVersion.ts';
+import { VersionBadge } from './VersionBadge.tsx';
+import { VersionModal } from './VersionModal.tsx';
 
 interface NavbarProps {
   activeTab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile';
@@ -34,6 +38,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectAdminSubTab,
 }) => {
   const { band, currentUser, permissions, updateBandName, logout, appSettings } = useBand();
+  const {
+    versionInfo,
+    isLoading: isCheckingVersion,
+    checkUpdates,
+    isModalOpen: isVersionModalOpen,
+    setIsModalOpen: setIsVersionModalOpen,
+  } = useAppVersion();
   const [isEditingBandName, setIsEditingBandName] = useState(false);
   const [bandNameInput, setBandNameInput] = useState(band.name);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -122,101 +133,111 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </a>
 
-          {/* User Profile, Settings, & Logout Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowUserDropdown(!showUserDropdown)}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-700/80 transition shadow-sm text-left"
-              title="Member account & role settings"
-            >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-7 h-7 rounded-full object-cover ring-2 ring-zinc-700 shrink-0"
-              />
-              <div className="hidden sm:block text-xs">
-                <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
-                  {currentUser.name}
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-mono ${roleBadge.color}`}
-                  >
-                    {roleBadge.label}
-                  </span>
-                </div>
-              </div>
-              <ChevronDown className="w-4 h-4 text-zinc-400" />
-            </button>
+          {/* Right Header Area: Version Badge & User Profile */}
+          {/* <div className="flex items-center gap-2 sm:gap-3"> */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <VersionBadge
+              versionInfo={versionInfo}
+              isLoading={isCheckingVersion}
+              onClick={() => setIsVersionModalOpen(true)}
+            />
 
-            {/* Dropdown for Role */}
-            {showUserDropdown && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowUserDropdown(false)}
+            {/* User Profile, Settings, & Logout Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserDropdown(!showUserDropdown)}
+                className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-700/80 transition shadow-sm text-left"
+                title="Member account & role settings"
+              >
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className="w-7 h-7 rounded-full object-cover ring-2 ring-zinc-700 shrink-0"
                 />
-                <div className="absolute right-0 mt-2 w-72 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl z-50 p-2 text-zinc-200 space-y-1">
-                  {/* Current User Quick Header */}
-                  <div className="p-2.5 border-b border-zinc-800 mb-1 flex items-center gap-2.5">
-                    <img
-                      src={currentUser.avatar}
-                      alt={currentUser.name}
-                      className="w-8 h-8 rounded-full object-cover ring-1 ring-amber-500"
-                    />
-                    <div className="min-w-0">
-                      <p className="font-bold text-white text-xs truncate">{currentUser.name}</p>
-                      <p className="text-[11px] text-zinc-400 truncate">{currentUser.email}</p>
-                      <span className={`text-[9px] px-1.5 py-0.2 rounded border font-mono uppercase inline-block mt-0.5 ${roleBadge.color}`}>
-                        {roleBadge.label}
-                      </span>
+                <div className="hidden sm:block text-xs">
+                  <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
+                    {currentUser.name}
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-mono ${roleBadge.color}`}
+                    >
+                      {roleBadge.label}
+                    </span>
+                  </div>
+                </div>
+                <ChevronDown className="w-4 h-4 text-zinc-400" />
+              </button>
+
+              {/* Dropdown for Role */}
+              {showUserDropdown && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowUserDropdown(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-72 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl z-50 p-2 text-zinc-200 space-y-1">
+                    {/* Current User Quick Header */}
+                    <div className="p-2.5 border-b border-zinc-800 mb-1 flex items-center gap-2.5">
+                      <img
+                        src={currentUser.avatar}
+                        alt={currentUser.name}
+                        className="w-8 h-8 rounded-full object-cover ring-1 ring-amber-500"
+                      />
+                      <div className="min-w-0">
+                        <p className="font-bold text-white text-xs truncate">{currentUser.name}</p>
+                        <p className="text-[11px] text-zinc-400 truncate">{currentUser.email}</p>
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded border font-mono uppercase inline-block mt-0.5 ${roleBadge.color}`}>
+                          {roleBadge.label}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Navigation Links inside Dropdown */}
+                    <div className="py-1 border-b border-zinc-800 space-y-0.5 text-xs">
+                      <button
+                        onClick={() => {
+                          setActiveTab('profile');
+                          setShowUserDropdown(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
+                      >
+                        <UserCog className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Profile &amp; Settings</span>
+                      </button>
+
+                      {currentUser.role === 'admin' && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setActiveTab('admin');
+                              if (onSelectAdminSubTab) onSelectAdminSubTab('app');
+                              setShowUserDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
+                          >
+                            <Settings className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Admin &amp; App Settings</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Log Out Button */}
+                    <div className="pt-2">
+                      <button
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          logout();
+                        }}
+                        className="w-full flex items-center gap-2 p-2 rounded-lg text-rose-400 hover:bg-rose-500/10 text-xs font-semibold transition"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Log Out of Session</span>
+                      </button>
                     </div>
                   </div>
-
-                  {/* Navigation Links inside Dropdown */}
-                  <div className="py-1 border-b border-zinc-800 space-y-0.5 text-xs">
-                    <button
-                      onClick={() => {
-                        setActiveTab('profile');
-                        setShowUserDropdown(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
-                    >
-                      <UserCog className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Profile &amp; Settings</span>
-                    </button>
-
-                    {currentUser.role === 'admin' && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setActiveTab('admin');
-                            if (onSelectAdminSubTab) onSelectAdminSubTab('app');
-                            setShowUserDropdown(false);
-                          }}
-                          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
-                        >
-                          <Settings className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Admin &amp; App Settings</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Log Out Button */}
-                  <div className="pt-2">
-                    <button
-                      onClick={() => {
-                        setShowUserDropdown(false);
-                        logout();
-                      }}
-                      className="w-full flex items-center gap-2 p-2 rounded-lg text-rose-400 hover:bg-rose-500/10 text-xs font-semibold transition"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Log Out of Session</span>
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -270,6 +291,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
       </div>
+
+      {/* Version & Release Details Modal */}
+      <VersionModal
+        isOpen={isVersionModalOpen}
+        onClose={() => setIsVersionModalOpen(false)}
+        versionInfo={versionInfo}
+        isLoading={isCheckingVersion}
+        onCheckUpdates={checkUpdates}
+      />
     </header>
   );
 };

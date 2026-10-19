@@ -6,7 +6,10 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { createServer, type Socket } from 'node:net';
 import { backup, DatabaseSync } from 'node:sqlite';
-import { createApplication, type ServerOptions } from '../server/app.ts';
+import {
+  createApplication,
+  type ApplicationOptions,
+} from '../server/app.ts';
 import { verifyPassword } from '../server/database.ts';
 
 const password = 'Correct-Horse-123!';
@@ -162,12 +165,15 @@ test('member invitations send through SMTP, report failures and can be resent wi
 
 async function fixture() {
   const directory = mkdtempSync(path.join(tmpdir(), 'bandapp-test-'));
-  const options: ServerOptions = {
+  const options: ApplicationOptions = {
+    development: false,
     databasePath: path.join(directory, 'bandapp.sqlite'),
     mediaDirectory: path.join(directory, 'separate-media'),
     appUrl: 'http://localhost:3000',
     secret: 'test-secret-with-at-least-32-characters',
     secureCookies: false,
+    trustProxy: 0,
+    uploadLimitMb: 100,
     adminEmail: 'admin@example.com',
     adminPassword: password,
     bandName: 'Test Band',

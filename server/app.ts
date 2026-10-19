@@ -249,6 +249,14 @@ export function createApplication(options: ApplicationOptions) {
   const origin = new URL(options.appUrl).origin;
   const key = createHash('sha256').update(options.secret).digest();
 
+  const route =
+    (handler: (req: Request, res: Response) => Promise<any> | any) =>
+    (req: Request, res: Response, next: NextFunction) => {
+      Promise.resolve()
+        .then(() => handler(req, res))
+        .catch(next);
+    };
+
   function encrypt(value: string): string {
     if (!value) return '';
     const iv = randomBytes(12);
@@ -336,6 +344,94 @@ export function createApplication(options: ApplicationOptions) {
     db.prepare('SELECT 1').get();
     res.json({ status: 'ok' });
   });
+
+  const CURRENT_APP_VERSION = '1.0.1';
+  const GITHUB_REPO = 'dcoffin88/BandApp';
+  let cachedVersionCheck: {
+    data: any;
+    timestamp: number;
+  } | null = null;
+
+  function compareSemver(v1: string, v2: string): number {
+    const clean = (v: string) =>
+      (v || '')
+        .trim()
+        .replace(/^v/i, '')
+        .split('-')[0]
+        .split('.')
+        .map((n) => parseInt(n, 10) || 0);
+
+    const parts1 = clean(v1);
+    const parts2 = clean(v2);
+    const maxLen = Math.max(parts1.length, parts2.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      const p1 = parts1[i] ?? 0;
+      const p2 = parts2[i] ?? 0;
+      if (p1 > p2) return 1;
+      if (p1 < p2) return -1;
+    }
+    return 0;
+  }
+
+  app.get(
+    '/api/version/check',
+    route(async (_req: Request, res: Response) => {
+      const nowMs = Date.now();
+      if (cachedVersionCheck && nowMs - cachedVersionCheck.timestamp < 300_000) {
+        return res.json(cachedVersionCheck.data);
+      }
+      try {
+        const response = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+          {
+            headers: {
+              'User-Agent': 'BandApp-VersionCheck',
+              Accept: 'application/vnd.github.v3+json',
+            },
+            signal: AbortSignal.timeout(5000),
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`GitHub API returned status ${response.status}`);
+        }
+        const release = (await response.json()) as any;
+        const latestTag = String(release.tag_name || release.name || '').trim();
+        const latestVersion = latestTag.replace(/^v/i, '') || CURRENT_APP_VERSION;
+        const updateAvailable = compareSemver(latestVersion, CURRENT_APP_VERSION) > 0;
+        const data = {
+          currentVersion: CURRENT_APP_VERSION,
+          latestVersion,
+          latestTag: latestTag || `v${latestVersion}`,
+          updateAvailable,
+          releaseName: release.name || latestTag || `BandApp v${latestVersion}`,
+          releaseUrl:
+            release.html_url || `https://github.com/${GITHUB_REPO}/releases/latest`,
+          publishedAt: release.published_at || release.created_at || null,
+          body: (release.body || '').slice(0, 1000),
+          checkedAt: new Date().toISOString(),
+          repoUrl: `https://github.com/${GITHUB_REPO}`,
+        };
+        cachedVersionCheck = { data, timestamp: nowMs };
+        res.json(data);
+      } catch (err: any) {
+        const fallback = cachedVersionCheck?.data || {
+          currentVersion: CURRENT_APP_VERSION,
+          latestVersion: CURRENT_APP_VERSION,
+          latestTag: `v${CURRENT_APP_VERSION}`,
+          updateAvailable: false,
+          releaseName: `BandApp v${CURRENT_APP_VERSION}`,
+          releaseUrl: `https://github.com/${GITHUB_REPO}/releases/latest`,
+          publishedAt: null,
+          body: '',
+          checkedAt: new Date().toISOString(),
+          repoUrl: `https://github.com/${GITHUB_REPO}`,
+          error: err?.message || 'Could not reach GitHub',
+        };
+        res.json(fallback);
+      }
+    })
+  );
 
   app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -468,14 +564,6 @@ export function createApplication(options: ApplicationOptions) {
       permissions: ROLE_PERMISSIONS[user.role],
     };
   }
-
-  const route =
-    (handler: (req: Request, res: Response) => Promise<any> | any) =>
-    (req: Request, res: Response, next: NextFunction) => {
-      Promise.resolve()
-        .then(() => handler(req, res))
-        .catch(next);
-    };
 
   app.get(
     '/api/auth/session',
