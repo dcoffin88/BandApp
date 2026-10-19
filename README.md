@@ -1,6 +1,7 @@
-<img src=".github/assets/bandapp.svg" alt="BandApp Logo" width="96" height="96" />
-
-# BandApp
+<div align="center">
+  <img src=".github/assets/bandapp.svg" alt="BandApp Logo" width="96" height="96" />
+  <h1>BandApp</h1>
+</div>
 
 **A shared workspace for bands to manage audio recordings, lyrics, rehearsals, and members.**
 
