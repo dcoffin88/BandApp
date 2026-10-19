@@ -77,11 +77,11 @@ export const NewVersionModal: React.FC<NewVersionModalProps> = ({
     setErrorMsg('');
 
     try {
-      let fileToSend: File | Blob | undefined = undefined;
-      if (sourceMode === 'file' && selectedFile) {
-        fileToSend = selectedFile;
-      } else if (sourceMode === 'mic' && recordedBlob) {
-        fileToSend = recordedBlob;
+      const fileToSend = sourceMode === 'file' ? selectedFile : recordedBlob;
+      if (!fileToSend) {
+        setErrorMsg('Choose an audio file or finish recording before saving.');
+        setIsSubmitting(false);
+        return;
       }
 
       await addSongVersion(

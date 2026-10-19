@@ -942,7 +942,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Demo Smith"
+                  placeholder="e.g. Jordan Smith"
                   value={newUserName}
                   onChange={e => setNewUserName(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm"

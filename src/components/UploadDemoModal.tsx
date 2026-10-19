@@ -91,12 +91,11 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
     setErrorMsg('');
 
     try {
-      let audioBlobToSend: File | Blob | undefined = undefined;
-
-      if (sourceMode === 'file' && selectedFile) {
-        audioBlobToSend = selectedFile;
-      } else if (sourceMode === 'mic' && recordedBlob) {
-        audioBlobToSend = recordedBlob;
+      const audioBlobToSend = sourceMode === 'file' ? selectedFile : recordedBlob;
+      if (!audioBlobToSend) {
+        setErrorMsg('Choose an audio file or finish recording before uploading.');
+        setIsSubmitting(false);
+        return;
       }
 
       const newSong = await addSongIdea(

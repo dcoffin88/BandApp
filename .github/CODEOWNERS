@@ -1,0 +1,13 @@
+# Owners must have write access. To require approval, configure a branch rule
+# for main/dev with "Require review from Code Owners".
+/server/                     @dcoffin88
+/server.ts                   @dcoffin88
+/src/context/BandContext.tsx @dcoffin88
+/.github/                    @dcoffin88
+/scripts/release.sh          @dcoffin88
+/Dockerfile                  @dcoffin88
+/compose.yaml                @dcoffin88
+/package.json                @dcoffin88
+/package-lock.json           @dcoffin88
+/LICENSE                     @dcoffin88
+/CLA.md                      @dcoffin88

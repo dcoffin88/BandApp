@@ -32,7 +32,6 @@ import {
   type SessionState,
   type PublicSessionState,
 } from '../shared/defaults.ts';
-import { createSynthesizedAudioDemo } from '../utils/audioGenerator.ts';
 import { applyTheme } from '../shared/theme.ts';
 
 interface AuthResponse {
@@ -91,7 +90,7 @@ interface BandContextType {
   ) => Promise<boolean>;
   addSongIdea: (
     song: Omit<SongIdea, 'id' | 'createdAt' | 'createdBy' | 'activeVersionId'>,
-    initialVersionFile?: File | Blob,
+    initialVersionFile: File | Blob,
   ) => Promise<SongIdea>;
   addSongVersion: (
     songId: string,
@@ -99,7 +98,7 @@ interface BandContextType {
       AudioVersion,
       'id' | 'versionNumber' | 'uploadedAt' | 'uploadedBy'
     >,
-    audioFile?: File | Blob,
+    audioFile: File | Blob,
   ) => Promise<void>;
   updateLyrics: (
     songId: string,
@@ -323,43 +322,27 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }
   async function upload(
-    file: File | Blob | undefined,
+    file: File | Blob,
     category: string,
     version?: Partial<AudioVersion>,
   ) {
-    let blob = file,
-      duration = version?.duration || 14;
+    const blob = file;
+    let duration = version?.duration || 14;
     let temporaryUrl = '';
     try {
-      if (!blob) {
-        const synth = await createSynthesizedAudioDemo(
-          category === 'bass'
-            ? 'bass'
-            : category === 'riff'
-              ? 'riff'
-              : category === 'chorus'
-                ? 'chorus'
-                : 'idea',
-          14,
-        );
-        temporaryUrl = synth.blobUrl;
-        blob = await (await fetch(temporaryUrl)).blob();
-        duration = synth.duration;
-      } else {
-        temporaryUrl = URL.createObjectURL(blob);
-        const audio = new Audio(temporaryUrl);
-        await new Promise<void>((resolve) => {
-          const finish = () => {
-            if (Number.isFinite(audio.duration)) duration = audio.duration;
-            audio.removeAttribute('src');
-            audio.load();
-            resolve();
-          };
-          audio.onloadedmetadata = finish;
-          audio.onerror = finish;
-          setTimeout(finish, 1500);
-        });
-      }
+      temporaryUrl = URL.createObjectURL(blob);
+      const audio = new Audio(temporaryUrl);
+      await new Promise<void>((resolve) => {
+        const finish = () => {
+          if (Number.isFinite(audio.duration)) duration = audio.duration;
+          audio.removeAttribute('src');
+          audio.load();
+          resolve();
+        };
+        audio.onloadedmetadata = finish;
+        audio.onerror = finish;
+        setTimeout(finish, 1500);
+      });
       const mime = blob.type.split(';')[0] || 'audio/wav';
       const response = await fetch(
         `/api/uploads?category=${encodeURIComponent(category)}`,
@@ -391,7 +374,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
   }
   async function addSongIdea(
     song: Omit<SongIdea, 'id' | 'createdAt' | 'createdBy' | 'activeVersionId'>,
-    file?: File | Blob,
+    file: File | Blob,
   ) {
     try {
       const version = await upload(file, song.category, {
@@ -422,7 +405,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       AudioVersion,
       'id' | 'versionNumber' | 'uploadedAt' | 'uploadedBy'
     >,
-    file?: File | Blob,
+    file: File | Blob,
   ) {
     try {
       const target = state.songs.find((s) => s.id === songId);

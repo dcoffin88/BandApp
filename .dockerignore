@@ -2,6 +2,7 @@ node_modules
 dist
 server.js
 .git
+.github
 .env
 .env.*
 !.env.example

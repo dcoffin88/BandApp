@@ -63,7 +63,7 @@ export const SmtpSettingsView: React.FC = () => {
   const [verifyResult, setVerifyResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Test Email Probe State
-  const [testRecipient, setTestRecipient] = useState(currentUser.email || 'dave@BandApp.app');
+  const [testRecipient, setTestRecipient] = useState(currentUser.email);
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
