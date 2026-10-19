@@ -102,7 +102,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [localAuthSettings, setLocalAuthSettings] = useState<AuthSettings>(authSettings);
   const [authSaveSuccess, setAuthSaveSuccess] = useState(false);
 
-  const isadmin = currentUser.role === 'admin';
+  const isAdmin = currentUser.role === 'admin';
   const activeSubTab = selectedSubTab;
 
   // Handlers
@@ -116,7 +116,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
   const handleSaveAppSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isadmin) return;
+    if (!isAdmin) return;
     const { headerLogoUrl, headerLogoShape, headerSubtitle } = localAppSettings;
     if (!await updateAppSettings({ headerLogoUrl, headerLogoShape, headerSubtitle })) return;
     setAppSettingsSaveSuccess(true);
@@ -181,7 +181,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     m.role.toLowerCase().includes(userSearch.toLowerCase())
   );
 
-  if (!isadmin) return null;
+  if (!isAdmin) return null;
 
   return (
     <div className="space-y-6">
@@ -217,7 +217,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
       {/* Sub-tab Navigation */}
       <div className="flex items-center gap-2 p-1 bg-zinc-900/90 rounded-2xl border border-zinc-800 overflow-x-auto text-xs font-semibold">
-        {isadmin && <>
+        {isAdmin && <>
         <button
           onClick={() => setActiveSubTab('app')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${
@@ -255,15 +255,15 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </button>
         </>}
 
-        {isadmin && <button onClick={() => setActiveSubTab('smtp')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${activeSubTab === 'smtp' ? 'bg-amber-500 text-zinc-950 shadow-md font-bold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}><Mail className="w-4 h-4"/><span>Email Settings</span></button>}
+        {isAdmin && <button onClick={() => setActiveSubTab('smtp')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${activeSubTab === 'smtp' ? 'bg-amber-500 text-zinc-950 shadow-md font-bold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}><Mail className="w-4 h-4"/><span>Email Settings</span></button>}
       </div>
 
-      {isadmin && activeSubTab === 'smtp' && <SmtpSettingsView />}
+      {isAdmin && activeSubTab === 'smtp' && <SmtpSettingsView />}
 
       {/* ========================================================================= */}
       {/* APP SETTINGS (BAND IDENTITY & HEADER LOGO / NAME AREA EDITOR) */}
       {/* ========================================================================= */}
-      {isadmin && activeSubTab === 'app' && (
+      {isAdmin && activeSubTab === 'app' && (
         <div className="space-y-6">
           {/* Band Profile Editor Form */}
           <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-5">
@@ -272,7 +272,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <Guitar className="w-5 h-5 text-amber-400" />
                 <h3 className="font-bold text-white text-base">Band Identity &amp; Metadata</h3>
               </div>
-              {!isadmin && (
+              {!isAdmin && (
                 <span className="text-xs px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 font-mono">
                   Admin Edit Only
                 </span>
@@ -288,7 +288,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <input
                     type="text"
                     value={bandName}
-                    disabled={!isadmin}
+                    disabled={!isAdmin}
                     onChange={e => setBandName(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm disabled:opacity-60"
                     required
@@ -302,7 +302,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <input
                     type="text"
                     value={bandGenre}
-                    disabled={!isadmin}
+                    disabled={!isAdmin}
                     onChange={e => setBandGenre(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm disabled:opacity-60"
                   />
@@ -315,7 +315,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <input
                     type="text"
                     value={bandMotto}
-                    disabled={!isadmin}
+                    disabled={!isAdmin}
                     onChange={e => setBandMotto(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm disabled:opacity-60"
                   />
@@ -328,14 +328,14 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <input
                     type="text"
                     value={bandYear}
-                    disabled={!isadmin}
+                    disabled={!isAdmin}
                     onChange={e => setBandYear(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white text-sm font-mono disabled:opacity-60"
                   />
                 </div>
               </div>
 
-              {isadmin && (
+              {isAdmin && (
                 <div className="pt-2 flex items-center justify-end gap-3">
                   {bandSaveSuccess && (
                     <span className="text-emerald-400 font-medium flex items-center gap-1">
@@ -356,7 +356,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           </div>
 
           {/* Header Logo & Name Area Live Mockup */}
-          {isadmin && (
+          {isAdmin && (
           <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
@@ -485,7 +485,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleSaveAppSettings}
-                disabled={!isadmin}
+                disabled={!isAdmin}
                 className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
@@ -503,7 +503,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       {/* ========================================================================= */}
       {/* 2. USER MANAGEMENT TAB */}
       {/* ========================================================================= */}
-      {isadmin && activeSubTab === 'users' && (
+      {isAdmin && activeSubTab === 'users' && (
         <div className="space-y-6">
           {/* Top Actions: Search & Invite */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -518,7 +518,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               />
             </div>
 
-            {isadmin && (
+            {isAdmin && (
               <button
                 onClick={() => setIsInviteModalOpen(true)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition shadow-md self-start sm:self-auto"
@@ -581,7 +581,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                         </td>
 
                         <td className="py-3 px-4">
-                          {isadmin && !isSelf ? (
+                          {isAdmin && !isSelf ? (
                             <select
                               value={member.role}
                               onChange={e => updateUserRole(member.id, e.target.value as Role)}
@@ -600,7 +600,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                         </td>
 
                         <td className="py-3 px-4">
-                          {isadmin && !isSelf ? (
+                          {isAdmin && !isSelf ? (
                             <select
                               value={member.status || 'active'}
                               onChange={e => updateUserStatus(member.id, e.target.value as UserStatus)}
@@ -633,7 +633,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {isadmin && !isSelf && member.status !== 'suspended' && (
+                            {isAdmin && !isSelf && member.status !== 'suspended' && (
                               <button
                                 type="button"
                                 onClick={() => handleResendInvite(member)}
@@ -645,7 +645,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                                 {invitingUserId === member.id ? 'Sending…' : 'Resend invite'}
                               </button>
                             )}
-                            {isadmin && (
+                            {isAdmin && (
                               <button
                                 onClick={() => setResettingUser(member)}
                                 className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition"
@@ -655,7 +655,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                               </button>
                             )}
 
-                            {isadmin && !isSelf && (
+                            {isAdmin && !isSelf && (
                               <button
                                 onClick={() => {
                                   if (confirm(`Are you sure you want to delete user account "${member.name}"?`)) {
@@ -749,7 +749,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       {/* ========================================================================= */}
       {/* 3. AUTHENTICATION MANAGEMENT TAB */}
       {/* ========================================================================= */}
-      {isadmin && activeSubTab === 'auth' && (
+      {isAdmin && activeSubTab === 'auth' && (
         <div className="space-y-6">
           {/* Security & Authentication Policies */}
           <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-5">
@@ -758,7 +758,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <KeyRound className="w-5 h-5 text-amber-400" />
                 <h3 className="font-bold text-white text-base">Authentication Policies &amp; Security Guards</h3>
               </div>
-              {!isadmin && (
+              {!isAdmin && (
                 <span className="text-xs px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 font-mono">
                   Admin Only
                 </span>
@@ -776,7 +776,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                     min="15"
                     max="1440"
                     value={localAuthSettings.sessionTimeoutMinutes}
-                    disabled={!isadmin}
+                    disabled={!isAdmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, sessionTimeoutMinutes: parseInt(e.target.value, 10) })}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono disabled:opacity-60"
                   />
@@ -792,7 +792,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                     min="12"
                     max="32"
                     value={localAuthSettings.minPasswordLength}
-                    disabled={!isadmin}
+                    disabled={!isAdmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, minPasswordLength: parseInt(e.target.value, 10) })}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono disabled:opacity-60"
                   />
@@ -808,7 +808,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                     min="3"
                     max="10"
                     value={localAuthSettings.maxFailedLogins}
-                    disabled={!isadmin}
+                    disabled={!isAdmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, maxFailedLogins: parseInt(e.target.value, 10) })}
                     className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono disabled:opacity-60"
                   />
@@ -836,7 +836,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <input
                     type="checkbox"
                     checked={localAuthSettings.requireSpecialChar}
-                    disabled={!isadmin}
+                    disabled={!isAdmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, requireSpecialChar: e.target.checked })}
                     className="rounded accent-amber-500 w-4 h-4"
                   />
@@ -847,7 +847,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </label>
               </div>
 
-              {isadmin && (
+              {isAdmin && (
                 <div className="pt-2 flex items-center justify-end gap-3">
                   {authSaveSuccess && (
                     <span className="text-emerald-400 font-medium flex items-center gap-1">
@@ -877,7 +877,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </h3>
               </div>
 
-              {isadmin && auditLogs.length > 0 && (
+              {isAdmin && auditLogs.length > 0 && (
                 <button
                   onClick={clearAuditLogs}
                   className="px-2.5 py-1 text-zinc-400 hover:text-rose-400 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-[11px] transition"
@@ -922,7 +922,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       {/* ========================================================================= */}
       {/* Invite Member Modal */}
       {/* ========================================================================= */}
-      {isadmin && isInviteModalOpen && (
+      {isAdmin && isInviteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl space-y-4 text-xs">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -1033,7 +1033,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       {/* ========================================================================= */}
       {/* Password Reset Modal */}
       {/* ========================================================================= */}
-      {isadmin && resettingUser && (
+      {isAdmin && resettingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl space-y-4 text-xs">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -1082,12 +1082,12 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       {/* ========================================================================= */}
       {/* Image Crop Modals */}
       {/* ========================================================================= */}
-      {isadmin && <ImageCropModal
+      {isAdmin && <ImageCropModal
         isOpen={isCropModalOpen}
         onClose={() => setIsCropModalOpen(false)}
         initialImageUrl={localAppSettings.headerLogoUrl}
         onCropComplete={(croppedUrl) => {
-          if (!isadmin) return;
+          if (!isAdmin) return;
           setLocalAppSettings({ ...localAppSettings, headerLogoUrl: croppedUrl });
           updateAppSettings({ headerLogoUrl: croppedUrl });
         }}

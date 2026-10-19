@@ -25,7 +25,7 @@ export const BandRolesView: React.FC = () => {
   const [role, setRole] = useState<Role>('member');
   const [email, setEmail] = useState('');
 
-  const isadmin = permissions.canManageMembers;
+  const isAdmin = permissions.canManageMembers;
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,7 +78,7 @@ export const BandRolesView: React.FC = () => {
           </p>
         </div>
 
-        {isadmin && (
+        {isAdmin && (
           <button
             onClick={() => setIsAddMemberOpen(true)}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs sm:text-sm shadow-md transition self-start sm:self-auto"
@@ -196,8 +196,8 @@ export const BandRolesView: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                  {/* Role selector (editable by admin) */}
-                  {isadmin ? (
+                  {/* Role selector (editable by Admin) */}
+                  {isAdmin ? (
                     <select
                       value={member.role}
                       onChange={e => updateUserRole(member.id, e.target.value as Role)}
