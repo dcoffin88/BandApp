@@ -1,4 +1,4 @@
- <img src=".github/assets/bandapp.svg" alt="BandApp guitar logo" width="96" height="96" />
+<img src=".github/assets/bandapp.svg" alt="BandApp guitar logo" width="96" height="96" />
 
 # BandApp
 
@@ -52,6 +52,8 @@ INITIAL_ADMIN_EMAIL=admin@example.com
 INITIAL_ADMIN_PASSWORD=replace-with-a-unique-password-of-at-least-12-characters
 APP_URL=http://localhost:3000
 APP_PORT=3000
+TRUST_PROXY_HOPS=0
+MAX_UPLOAD_MB=100
 PUID=1000
 PGID=1000
 ```
@@ -89,6 +91,7 @@ Ensure both directories are writable by the selected UID/GID. If their ownership
 | `INITIAL_ADMIN_PASSWORD` | Unique initial Admin password, at least 12 characters; only used for provisioning |
 | `APP_URL` | Exact public origin, including scheme and hostname |
 | `TRUST_PROXY_HOPS` | Set to `1` when behind exactly one trusted reverse proxy |
+| `MAX_UPLOAD_MB` | Maximum audio upload size in MB, from `1` to `500`; defaults to `100` |
 | `APP_PORT` | Host port for BandApp, defaults to `3000`; leave container port at `3000` |
 | `PUID` | Numeric host user ID (`id -u`) used by the Compose `user:` setting |
 | `PGID` | Numeric host group ID (`id -g`) used by the Compose `user:` setting |
@@ -102,6 +105,7 @@ services:
   app:
     image: ghcr.io/dcoffin88/bandapp:latest
     user: "${PUID}:${PGID}"
+    init: true
     env_file:
       - .env
     ports:
@@ -114,7 +118,7 @@ services:
         - CMD
         - node
         - -e
-        - "require('node:http').get('http://127.0.0.1:3000/', r => { r.resume(); process.exit(r.statusCode >= 200 && r.statusCode < 400 ? 0 : 1) }).on('error', () => process.exit(1))"
+        - "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
       interval: 30s
       timeout: 5s
       retries: 3
@@ -122,8 +126,14 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs:
-      - /tmp
-    stop_grace_period: 30s
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 768m
+    stop_grace_period: 20s
     logging:
       driver: json-file
       options:
