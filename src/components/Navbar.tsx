@@ -182,7 +182,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
                     >
                       <UserCog className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Profile &amp; Gear Rig</span>
+                      <span>Profile &amp; Settings</span>
                     </button>
 
                     {currentUser.role === 'admin' && <button
