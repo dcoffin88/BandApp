@@ -6,7 +6,7 @@ Guest permissions. SQLite stores band data, audio file metadata, password hashes
 Browsers no longer store accounts or SMTP credentials.
 
 Each account saves its own theme, accent color, corner radius and glow preference
-under **Profile Management → Appearance**. These preferences live in the SQLite
+under **Profile & Settings → Appearance**. These preferences live in the SQLite
 user profile and follow the account across browsers. Existing accounts inherit the
 previous shared appearance once during upgrade. The band logo, shape, name and
 subtitle remain shared and can be edited only by Admins under **App Settings**.

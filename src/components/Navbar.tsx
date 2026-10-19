@@ -21,10 +21,10 @@ import { useBand } from '../context/BandContext.tsx';
 import { Role } from '../types/band.ts';
 
 interface NavbarProps {
-  activeTab: 'songs' | 'lyrics' | 'practice' | 'admin';
-  setActiveTab: (tab: 'songs' | 'lyrics' | 'practice' | 'admin') => void;
+  activeTab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile';
+  setActiveTab: (tab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile') => void;
   onOpenUploadModal: () => void;
-  onSelectAdminSubTab?: (subTab: 'users' | 'auth' | 'profile' | 'app' | 'smtp') => void;
+  onSelectAdminSubTab?: (subTab: 'users' | 'auth' | 'app' | 'smtp') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -175,8 +175,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="py-1 border-b border-zinc-800 space-y-0.5 text-xs">
                     <button
                       onClick={() => {
-                        setActiveTab('admin');
-                        if (onSelectAdminSubTab) onSelectAdminSubTab('profile');
+                        setActiveTab('profile');
                         setShowUserDropdown(false);
                       }}
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
