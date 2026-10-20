@@ -11,6 +11,7 @@ import {
   RotateCw,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { SongIdea } from '../types/band.ts';
@@ -30,6 +31,7 @@ export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ onOpenLyri
     volume,
     isMuted,
     isLooping,
+    closePlayer,
     togglePlay,
     seekTo,
     cyclePlaybackRate,
@@ -190,6 +192,18 @@ export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ onOpenLyri
                 onChange={e => setVolume(parseFloat(e.target.value))}
                 className="w-16 h-1 bg-zinc-700 rounded-lg accent-amber-500 cursor-pointer"
               />
+            </div>
+
+            <div className="flex items-center pl-2 border-l border-zinc-700">
+              <button
+                type="button"
+                onClick={closePlayer}
+                className="w-8 h-8 flex items-center justify-center shrink-0 rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300 shadow-sm transition hover:border-rose-500/70 hover:bg-rose-500/15 hover:text-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70"
+                title="Close audio player"
+                aria-label="Close audio player"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>

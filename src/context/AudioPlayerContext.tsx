@@ -12,6 +12,7 @@ interface AudioPlayerContextType {
   isMuted: boolean;
   isLooping: boolean;
   playSong: (song: SongIdea, version?: AudioVersion) => void;
+  closePlayer: () => void;
   togglePlay: () => void;
   pause: () => void;
   seekTo: (seconds: number) => void;
@@ -133,6 +134,20 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
+  const closePlayer = () => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    }
+    setCurrentSong(null);
+    setCurrentVersion(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  };
+
   const pause = () => {
     if (audioRef.current && isPlaying) {
       audioRef.current.pause();
@@ -211,6 +226,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
         isMuted,
         isLooping,
         playSong,
+        closePlayer,
         togglePlay,
         pause,
         seekTo,
