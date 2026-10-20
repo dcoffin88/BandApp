@@ -42,6 +42,7 @@ import { ImageCropModal } from './ImageCropModal.tsx';
 import { SmtpSettingsView } from './SmtpSettingsView.tsx';
 import { DEFAULT_AVATAR } from '../shared/defaults.ts';
 import { useAppVersion } from '../hooks/useAppVersion.ts';
+import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionModal } from './VersionModal.tsx';
 
 interface AdminSettingsViewProps {
@@ -393,7 +394,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   />
                 ) : (
                   <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center shadow-lg shadow-amber-500/20 text-zinc-950 font-black">
-                    <Guitar className="w-6 h-6 text-zinc-950" />
+                    <RehearsalHQLogo className="w-6 h-6 text-zinc-950" />
                   </div>
                 )}
 
@@ -435,14 +436,14 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                       type="button"
                       onClick={() => setLocalAppSettings({ ...localAppSettings, headerLogoUrl: '' })}
                       className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs font-semibold transition"
-                      title="Revert to guitar icon"
+                      title="Revert to default icon"
                     >
                       Reset to Icon
                     </button>
                   )}
                 </div>
                 <p className="text-[11px] text-zinc-500">
-                  Upload logo or photo. The crop tool lets you zoom, pan, rotate, and crop.
+                  Upload logo or photo.
                 </p>
               </div>
 
@@ -512,7 +513,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-zinc-800 gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                  <Github className="w-4 h-4" />
+                  <RehearsalHQLogo className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="font-bold text-white text-base">Application Version &amp; Release Tracking</h3>
@@ -558,13 +559,13 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                     Release Source
                   </span>
                   <div className="font-semibold text-zinc-200 truncate mt-0.5">
-                    dcoffin88 / BandApp
+                    dcoffin88 / RehearsalHQ
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 pt-1">
                   <a
-                    href="https://github.com/dcoffin88/BandApp/releases/latest"
+                    href="https://github.com/dcoffin88/RehearsalHQ/releases/latest"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-1 text-center py-1.5 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition text-[11px]"

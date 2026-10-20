@@ -12,6 +12,7 @@ import {
   Tag,
   X,
 } from 'lucide-react';
+import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { AppVersionInfo } from '../utils/versionService.ts';
 
 interface VersionModalProps {
@@ -69,13 +70,13 @@ export const VersionModal: React.FC<VersionModalProps> = ({
         <div className="flex items-center justify-between px-5 py-4 bg-zinc-950/40">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <Github className="w-4 h-4" />
+              <RehearsalHQLogo className="w-4 h-4" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                Version &amp; Release Info
+                RehearsalHQ
               </h3>
-              <p className="text-[11px] text-zinc-400">GitHub Repository</p>
+              <p className="text-[11px] text-zinc-400">Version &amp; Release Info</p>
             </div>
           </div>
           <button
@@ -115,7 +116,7 @@ export const VersionModal: React.FC<VersionModalProps> = ({
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <div>
                   <div className="font-bold text-emerald-400 text-xs">
-                    BandApp is up to date
+                    RehearsalHQ is up to date
                   </div>
                   <p className="text-[11px] text-emerald-300/80 mt-0.5">
                     You are running the latest version.
@@ -154,7 +155,7 @@ export const VersionModal: React.FC<VersionModalProps> = ({
             >
               <span className="flex items-center gap-1.5">
                 <Github className="w-3.5 h-3.5 text-zinc-400" />
-                <span>dcoffin88 / BandApp Repository</span>
+                <span>dcoffin88 / RehearsalHQ Repository</span>
               </span>
               <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
             </a>

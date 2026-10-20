@@ -36,6 +36,6 @@ If applicable, add screenshots to help explain your problem.
 **Additional context**
 Add any other context about the problem here.
 
-**BandApp deployment**
+**RehearsalHQ deployment**
 Include the release/tag and whether you use Docker Compose or local npm.
 Redact passwords, cookies, SMTP credentials, APP_SECRET, and private band content.

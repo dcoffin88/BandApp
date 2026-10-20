@@ -312,7 +312,7 @@ export function createApplication(options: ApplicationOptions) {
         hashPassword(options.adminPassword!)
       );
       const state = store.read();
-      state.band.name = options.bandName || 'BandApp';
+      state.band.name = options.bandName || 'RehearsalHQ';
       store.write(state);
     });
   }
@@ -345,8 +345,8 @@ export function createApplication(options: ApplicationOptions) {
     res.json({ status: 'ok' });
   });
 
-  const CURRENT_APP_VERSION = '1.0.1';
-  const GITHUB_REPO = 'dcoffin88/BandApp';
+  const CURRENT_APP_VERSION = '1.0.2';
+  const GITHUB_REPO = 'dcoffin88/RehearsalHQ';
   let cachedVersionCheck: {
     data: any;
     timestamp: number;
@@ -386,7 +386,7 @@ export function createApplication(options: ApplicationOptions) {
           `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
           {
             headers: {
-              'User-Agent': 'BandApp-VersionCheck',
+              'User-Agent': 'RehearsalHQ-VersionCheck',
               Accept: 'application/vnd.github.v3+json',
             },
             signal: AbortSignal.timeout(5000),
@@ -404,7 +404,7 @@ export function createApplication(options: ApplicationOptions) {
           latestVersion,
           latestTag: latestTag || `v${latestVersion}`,
           updateAvailable,
-          releaseName: release.name || latestTag || `BandApp v${latestVersion}`,
+          releaseName: release.name || latestTag || `RehearsalHQ v${latestVersion}`,
           releaseUrl:
             release.html_url || `https://github.com/${GITHUB_REPO}/releases/latest`,
           publishedAt: release.published_at || release.created_at || null,
@@ -420,7 +420,7 @@ export function createApplication(options: ApplicationOptions) {
           latestVersion: CURRENT_APP_VERSION,
           latestTag: `v${CURRENT_APP_VERSION}`,
           updateAvailable: false,
-          releaseName: `BandApp v${CURRENT_APP_VERSION}`,
+          releaseName: `RehearsalHQ v${CURRENT_APP_VERSION}`,
           releaseUrl: `https://github.com/${GITHUB_REPO}/releases/latest`,
           publishedAt: null,
           body: '',
@@ -445,7 +445,7 @@ export function createApplication(options: ApplicationOptions) {
       }
       if (
         req.get('sec-fetch-site') === 'cross-site' ||
-        req.get('x-bandapp-request') !== '1'
+        req.get('x-rehearsalhq-request') !== '1'
       ) {
         return next(new HttpError(403, 'Missing request protection header.'));
       }
@@ -478,7 +478,7 @@ export function createApplication(options: ApplicationOptions) {
 
   app.use(express.json({ limit: '2mb' }));
 
-  const cookieName = 'bandapp_session';
+  const cookieName = 'rehearsalhq_session';
   const cookies = (req: Request): Record<string, string> =>
     Object.fromEntries(
       (req.get('cookie') || '')
@@ -1359,7 +1359,7 @@ export function createApplication(options: ApplicationOptions) {
         recipient.email,
         recipient.name,
         `[${state.band.name}] ${message}`,
-        `<p>${escapeHtml(message)}</p><p><a href="${escapeHtml(origin)}">Open BandApp</a></p>`,
+        `<p>${escapeHtml(message)}</p><p><a href="${escapeHtml(origin)}">Open RehearsalHQ</a></p>`,
         type
       );
     }
@@ -1401,8 +1401,8 @@ export function createApplication(options: ApplicationOptions) {
       const log = await deliver(
         to,
         user.name,
-        'BandApp SMTP test',
-        '<p>Your BandApp email connection is working.</p>',
+        'RehearsalHQ SMTP test',
+        '<p>Your RehearsalHQ email connection is working.</p>',
         'test_probe'
       );
       res.json({

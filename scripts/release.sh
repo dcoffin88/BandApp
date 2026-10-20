@@ -2,12 +2,24 @@
 set -euo pipefail
 
 CHECK_ONLY=false
-if [[ "${1:-}" == "--check" ]]; then
-  CHECK_ONLY=true
+PUBLISH=true
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --check)
+      CHECK_ONLY=true
+      ;;
+    --no-publish)
+      PUBLISH=false
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
   shift
-fi
+done
 if [[ $# -ne 1 ]]; then
-  echo "Usage: bash scripts/release.sh [--check] <version> (e.g. 1.0.0 or v1.1.0-beta.1)" >&2
+  echo "Usage: bash scripts/release.sh [--check] [--no-publish] <version> (e.g. 1.0.0 or v1.1.0-beta.1)" >&2
   exit 1
 fi
 VERSION="${1#v}"
@@ -43,6 +55,17 @@ const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
 if (pkg.version !== lock.version || pkg.version !== lock.packages[''].version) {
   throw new Error('Package and lockfile versions are out of sync.');
 }
+const versionFiles = ['server/app.ts', 'src/utils/versionService.ts'];
+const versionPattern =
+  /\b(?:export\s+)?const\s+CURRENT_APP_VERSION\s*=\s*['"]([^'"]+)['"]\s*;/;
+for (const file of versionFiles) {
+  const source = readFileSync(file, 'utf8');
+  const match = source.match(versionPattern);
+  if (!match) throw new Error(`Could not find CURRENT_APP_VERSION in ${file}.`);
+  if (match[1] !== pkg.version) {
+    throw new Error(`${file} reports ${match[1]}, but package.json reports ${pkg.version}.`);
+  }
+}
 if (pkg.version === process.argv[2]) throw new Error('Choose a new release version.');
 NODE
 
@@ -55,10 +78,71 @@ npm run lint
 npm test
 npm run build
 npm version "$VERSION" --no-git-tag-version --ignore-scripts
-git add -- package.json package-lock.json
-git commit -m "chore: bump version to ${VERSION}"
-git tag -a "$TAG" -m "BandApp $TAG"
 
-echo "Created release commit and tag $TAG locally. Review them, then push both atomically:"
-echo "  git push --atomic origin main $TAG"
-echo "The tag push triggers CI and publishes ghcr.io/dcoffin88/bandapp."
+node --input-type=module - "$VERSION" <<'NODE'
+import { readFileSync, writeFileSync } from 'node:fs';
+
+const version = process.argv[2];
+const files = [
+  'server/app.ts',
+  'src/utils/versionService.ts',
+];
+
+const pattern =
+  /(\b(?:export\s+)?const\s+CURRENT_APP_VERSION\s*=\s*['"])([^'"]+)(['"]\s*;)/;
+
+for (const file of files) {
+  const source = readFileSync(file, 'utf8');
+
+  if (!pattern.test(source)) {
+    throw new Error(`Could not find CURRENT_APP_VERSION in ${file}.`);
+  }
+
+  const updated = source.replace(
+    pattern,
+    (_match, prefix, _current, suffix) =>
+      `${prefix}${version}${suffix}`,
+  );
+
+  writeFileSync(file, updated);
+}
+NODE
+
+git add -- \
+  package.json \
+  package-lock.json \
+  server/app.ts \
+  src/utils/versionService.ts
+git commit -m "chore: bump version to ${VERSION}"
+git tag -a "$TAG" -m "RehearsalHQ $TAG"
+
+echo "Created release commit and tag $TAG locally."
+
+if ! "$PUBLISH"; then
+  echo "Publishing was skipped. To publish later:"
+  echo "  git push --atomic origin main $TAG"
+  echo "  gh release create $TAG --title \"RehearsalHQ $TAG\" --draft --generate-notes --verify-tag"
+  exit 0
+fi
+
+if ! command -v gh >/dev/null 2>&1; then
+  echo "Error: GitHub CLI (gh) is required to create the draft release." >&2
+  echo "The release commit and tag remain local; nothing was pushed." >&2
+  exit 1
+fi
+if ! gh auth status >/dev/null 2>&1; then
+  echo "Error: authenticate GitHub CLI with 'gh auth login' before publishing." >&2
+  echo "The release commit and tag remain local; nothing was pushed." >&2
+  exit 1
+fi
+
+read -r -p "Press Enter to push main and $TAG atomically to origin..."
+git push --atomic origin main "$TAG"
+echo "The tag push triggered CI and the GHCR publish workflow."
+
+read -r -p "Press Enter to create the draft GitHub release for $TAG..."
+gh release create "$TAG" \
+  --title "RehearsalHQ $TAG" \
+  --draft \
+  --generate-notes \
+  --verify-tag

@@ -43,7 +43,7 @@ const { app, store, errorHandler } = createApplication({
   mediaDirectory: process.env.MEDIA_DIR || './media',
   databasePath: path.resolve(
     process.env.DATA_DIR || './data',
-    'bandapp.sqlite',
+    'rehearsalhq.sqlite',
   ),
   appUrl,
   secret,
@@ -87,7 +87,7 @@ async function start() {
   }
   app.use(errorHandler);
   const server = app.listen(port, '0.0.0.0', () =>
-    console.log('BandApp listening on port ' + port),
+    console.log('RehearsalHQ listening on port ' + port),
   );
   server.requestTimeout = 120_000;
   server.headersTimeout = 30_000;
@@ -95,7 +95,7 @@ async function start() {
   const stop = () => {
     if (stopping) return;
     stopping = true;
-    console.log('Stopping BandApp...');
+    console.log('Stopping RehearsalHQ...');
     const deadline = setTimeout(() => process.exit(1), 15_000);
     deadline.unref();
     server.close(() => {

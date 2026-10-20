@@ -158,7 +158,7 @@ export const SmtpSettingsView: React.FC = () => {
     try {
       const res = await fetch('/api/smtp/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-BandApp-Request': '1' },
+        headers: { 'Content-Type': 'application/json', 'X-RehearsalHQ-Request': '1' },
         body: JSON.stringify({
           host: localSettings.host,
           port: localSettings.port,
@@ -509,7 +509,7 @@ export const SmtpSettingsView: React.FC = () => {
                 value={localSettings.fromEmail}
                 disabled={!isAdmin}
                 onChange={e => setLocalSettings({ ...localSettings, fromEmail: e.target.value.trim() })}
-                placeholder="notifications@BandApp.app"
+                placeholder="notifications@RehearsalHQ.app"
                 className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2 text-white font-mono placeholder-zinc-600 disabled:opacity-60"
               />
               <p className="text-[10px] text-zinc-500 mt-1">Sender address (must match relay policy)</p>
@@ -658,7 +658,7 @@ export const SmtpSettingsView: React.FC = () => {
               type="email"
               value={testRecipient}
               onChange={e => setTestRecipient(e.target.value)}
-              placeholder="e.g. member@BandApp.app"
+              placeholder="e.g. member@RehearsalHQ.app"
               className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
               required
             />
@@ -914,7 +914,7 @@ export const SmtpSettingsView: React.FC = () => {
             <div className="px-6 py-3 bg-zinc-950/80 border-b border-zinc-800 text-xs space-y-1 font-mono text-zinc-400">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-zinc-500">From:</span> "{localSettings.fromName || band.name}" &lt;{localSettings.fromEmail || 'notifications@BandApp.app'}&gt;
+                  <span className="text-zinc-500">From:</span> "{localSettings.fromName || band.name}" &lt;{localSettings.fromEmail || 'notifications@RehearsalHQ.app'}&gt;
                 </div>
                 <span className="text-[10px] text-zinc-500">
                   {new Date(previewLog.sentAt).toLocaleString()}

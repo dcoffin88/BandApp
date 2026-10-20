@@ -147,7 +147,7 @@ async function api<T>(
           credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json',
-            'X-BandApp-Request': '1',
+            'X-RehearsalHQ-Request': '1',
           },
           body: JSON.stringify(body),
         },
@@ -349,7 +349,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
         {
           method: 'POST',
           credentials: 'same-origin',
-          headers: { 'Content-Type': mime, 'X-BandApp-Request': '1' },
+          headers: { 'Content-Type': mime, 'X-RehearsalHQ-Request': '1' },
           body: blob,
         },
       );
@@ -509,7 +509,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
   if (!ready)
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-200 flex flex-col items-center justify-center gap-4">
-        <p>{error || 'Connecting to BandApp…'}</p>
+        <p>{error || 'Connecting to RehearsalHQ…'}</p>
         {error && (
           <button
             onClick={() => void loadSession()}

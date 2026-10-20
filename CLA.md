@@ -21,7 +21,7 @@ By submitting a pull request to this repository, you agree to the following:
    have clearly identified any third-party material and confirmed it is
    compatible with this agreement.
 
-This CLA is necessary to allow BandApp to be distributed under both the
+This CLA is necessary to allow RehearsalHQ to be distributed under both the
 open-source (GPL-3.0) and commercial licenses. It does not transfer
 ownership of your contribution.
 

@@ -1,8 +1,8 @@
-name: bandapp
+name: rehearsalhq
 services:
   app:
     build: .
-    image: bandapp:local
+    image: rehearsalhq:local
     restart: unless-stopped
     init: true
     ports:
@@ -17,12 +17,12 @@ services:
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
       INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-Band Admin}
-      INITIAL_BAND_NAME: ${INITIAL_BAND_NAME:-BandApp}
+      INITIAL_BAND_NAME: ${INITIAL_BAND_NAME:-RehearsalHQ}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
     volumes:
-      - bandapp_data:/app/data
-      - ${MEDIA_MOUNT:-bandapp_media}:/media
+      - rehearsalhq_data:/app/data
+      - ${MEDIA_MOUNT:-rehearsalhq_media}:/media
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=32m
@@ -39,5 +39,5 @@ services:
         max-size: "10m"
         max-file: "3"
 volumes:
-  bandapp_data:
-  bandapp_media:
+  rehearsalhq_data:
+  rehearsalhq_media:

@@ -95,7 +95,7 @@ export function emptyState(): SharedState {
     revision: 0,
     band: {
       id: 'band',
-      name: 'BandApp',
+      name: 'RehearsalHQ',
       genre: '',
       motto: '',
       foundedYear: '',
@@ -122,7 +122,7 @@ export function emptyState(): SharedState {
       headerLogoUrl: '',
       headerLogoShape: 'rounded',
       accentGlow: true,
-      headerSubtitle: 'Band Collaboration & Demo Vault',
+      headerSubtitle: 'Your band\'s home base.',
     },
     smtpSettings: {
       isEnabled: false,
@@ -132,7 +132,7 @@ export function emptyState(): SharedState {
       authRequired: true,
       username: '',
       password: '',
-      fromName: 'BandApp',
+      fromName: 'RehearsalHQ',
       fromEmail: '',
       replyTo: '',
       notificationTriggers: {

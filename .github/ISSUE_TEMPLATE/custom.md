@@ -1,6 +1,6 @@
 ---
 name: General question or discussion
-about: Ask about setup, deployment, or another BandApp topic.
+about: Ask about setup, deployment, or another RehearsalHQ topic.
 title: ''
 labels: ''
 assignees: ''
@@ -11,7 +11,7 @@ assignees: ''
 Describe what you need help with.
 
 **Environment**
-Include your BandApp version, browser, and whether you use Docker Compose.
+Include your RehearsalHQ version, browser, and whether you use Docker Compose.
 
 **What have you tried?**
 Include relevant steps or redacted logs. Do not include passwords, session
