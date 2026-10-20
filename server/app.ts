@@ -345,7 +345,7 @@ export function createApplication(options: ApplicationOptions) {
     res.json({ status: 'ok' });
   });
 
-  const CURRENT_APP_VERSION = '1.0.2';
+  const CURRENT_APP_VERSION = '1.0.3';
   const GITHUB_REPO = 'dcoffin88/RehearsalHQ';
   let cachedVersionCheck: {
     data: any;
