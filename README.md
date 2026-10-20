@@ -1,17 +1,7 @@
 <div align="center">
-
-  <img
-    src=".github/assets/rehearsalhq-header.svg"
-    alt="RehearsalHQ"
-    width="330"
-  />
-
-  <p><strong>Your band's home base.</strong></p>
-
-  <p>
-    <sub>Recordings · Lyrics · Rehearsals · Collaboration</sub>
-  </p>
-
+<img src=".github/assets/rehearsalhq-header.svg" alt="RehearsalHQ" width="330" />
+<p><strong>Your band's home base.</strong></p>
+<p><sub>Recordings · Lyrics · Rehearsals · Collaboration</sub></p>
 </div>
 
 **A shared workspace for bands to manage audio recordings, lyrics, rehearsals, and members.**
@@ -25,10 +15,9 @@ RehearsalHQ provides a centralized, self-hosted environment for band collaborati
 - **Audio Management** - Upload, organize, and access recordings through an authenticated API.
 - **Lyrics & Rehearsals** - Collaborate on lyrics and manage rehearsal activities.
 - **Member Management** - Manage accounts, permissions, and invitations.
-- **Role-Based Access** - Admin, Editor, Member, and Guest permissions enforced by the Express API.
-- **Personalized Appearance** - Individual theme, accent color, corner radius, and glow preferences.
+- **Role-Based Access** - Admin, Editor, Member, and Guest permissions.
+- **Personalized Appearance** - Individual theme preferences.
 - **Email Notifications** - SMTP invitations, delivery tracking, and resend capabilities.
-- **Persistent Storage** - SQLite database and audio files stored in separate host bind mounts.
 - **Docker Deployment** - Prebuilt production image with persistent bind mounts, health checks, and resource limits.
 
 ### Appearance & Branding
@@ -47,161 +36,121 @@ Band-wide branding, including the logo, logo shape, name, and subtitle—is mana
 
 ## Getting Started
 
-### Requirements
+RehearsalHQ is distributed as a prebuilt Docker image for Linux AMD64 and ARM64. You do not need to clone the source code or build the image to install it. Choose either **Docker Compose (recommended)** or **Docker Run** below.
 
-- Docker Engine with Docker Compose
-- Linux container support (AMD64 or ARM64)
-
-### 1. Pull the published image
+### 1. Get the configuration templates
+Download [`compose.example.yaml`](compose.example.yaml) and [`.env.example`](.env.example) from this repository into an empty deployment directory. Copy them to their runtime filenames:
 
 ```bash
-docker pull ghcr.io/dcoffin88/rehearsalhq:latest
+cp compose.example.yaml compose.yaml
+cp .env.example .env
 ```
 
-The `latest` tag tracks stable releases. For predictable deployments, you can instead pin a specific published version tag.
+If you are using the Docker Run method, you only need `.env.example`.
 
-### 2. Configure environment variables
+### 2. Configure `.env`
+Edit `.env` with your own settings. The supplied `.env.example` documents the available variables; in particular, set:
+- `APP_URL` - the **exact URL origin** used in the browser, including the scheme and a non-default port if applicable. For a reverse proxy, use its public HTTPS URL.
+- `APP_SECRET` - a unique random secret. Keep it unchanged across upgrades and backups because saved SMTP credentials depend on it.
+- `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` - the initial administrator's credentials; choose a unique password of at least 12 characters.
+- `INITIAL_ADMIN_NAME` and `INITIAL_BAND_NAME` - initial display names.
+- `TRUST_PROXY_HOPS` - `0` for direct access or `1` behind exactly one trusted reverse proxy.
+- `MAX_UPLOAD_MB` - maximum audio upload size (from `1` to `500` MB).
+- `APP_PORT` - host-side published port for **Compose** (default `3000`); it does not change the internal container port.
+- `PUID` and `PGID` - host user and group used for bind-mount permissions with **Compose**.
 
-Create a `.env` file in your deployment directory:
-
-```dotenv
-APP_SECRET=replace-with-a-secure-random-secret
-INITIAL_ADMIN_EMAIL=admin@example.com
-INITIAL_ADMIN_PASSWORD=replace-with-a-unique-password-of-at-least-12-characters
-APP_URL=http://localhost:3000
-APP_PORT=3000
-TRUST_PROXY_HOPS=0
-MAX_UPLOAD_MB=100
-PUID=1000
-PGID=1000
-```
-
-Generate an application secret with:
+Generate `APP_SECRET` with either command:
 
 ```bash
 openssl rand -hex 32
+# or, if Node.js is installed:
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Replace `APP_SECRET` with the generated value, configure your initial Admin account, and set `APP_URL` to the **exact origin** users will visit. Use an HTTPS URL for a production deployment behind a reverse proxy.
+On Linux, check your user and group IDs with `id -u` and `id -g`. The Docker image runs as a non-root user by default; Compose can override that user with `PUID` and `PGID`.
 
-On your Linux Docker host, run `id` to see your user and group information:
+Create the host directories, ensuring the chosen container UID/GID has write permissions:
 
 ```bash
-id
-id -u
-id -g
+mkdir -p tmp data media
 ```
 
-Put the numeric results of `id -u` and `id -g` into `PUID` and `PGID` in `.env`, respectively. For example, if both commands return `1000`, use `PUID=1000` and `PGID=1000`. Compose uses these values in its `user:` setting so the container process runs with those host IDs. These values are **Compose variables**, not a guarantee that the image reads `PUID` or `PGID` environment variables internally.
+**Important**: `./data` stores the SQLite database, `./media` stores recordings, and `./tmp` supplies writable temporary space for the read-only container. Temporary files in `./tmp` persist across restarts, so review and clean them when appropriate.
 
-Create the host directories before starting the container:
+### 3A. Install with Docker Compose (recommended)
+Use the repository's `compose.example.yaml` copied to `compose.yaml` in step 1. It pulls `ghcr.io/dcoffin88/rehearsalhq:latest`, applies the configuration from `.env`, and bind-mounts `./tmp`, `./data`, and `./media`.
 
 ```bash
-mkdir -p ./data ./media
+docker compose config --quiet
+docker compose pull
+docker compose up -d --wait
+docker compose ps
 ```
 
-Ensure both directories are writable by the selected UID/GID. If their ownership needs correcting, an administrator can run `sudo chown -R "$(id -u):$(id -g)" ./data ./media` after checking that these are the intended directories. Avoid pointing the bind mounts at existing directories whose contents you do not intend to use.
-
-| Variable | Description |
-|---|---|
-| `APP_SECRET` | Random secret; preserve it across container updates and restores |
-| `INITIAL_ADMIN_EMAIL` | Email for the first Admin account; only used for initial database provisioning |
-| `INITIAL_ADMIN_PASSWORD` | Unique initial Admin password, at least 12 characters; only used for provisioning |
-| `APP_URL` | Exact public origin, including scheme and hostname |
-| `TRUST_PROXY_HOPS` | Set to `1` when behind exactly one trusted reverse proxy |
-| `MAX_UPLOAD_MB` | Maximum audio upload size in MB, from `1` to `500`; defaults to `100` |
-| `APP_PORT` | Host port for RehearsalHQ, defaults to `3000`; leave container port at `3000` |
-| `PUID` | Numeric host user ID (`id -u`) used by the Compose `user:` setting |
-| `PGID` | Numeric host group ID (`id -g`) used by the Compose `user:` setting |
-
-### 3. Create a Docker Compose deployment file
-
-Save the following as `compose.deploy.yaml` in the same directory as `.env`:
-
-```yaml
-services:
-  app:
-    image: ghcr.io/dcoffin88/rehearsalhq:latest
-    user: "${PUID}:${PGID}"
-    init: true
-    env_file:
-      - .env
-    ports:
-      - "${APP_PORT:-3000}:3000"
-    volumes:
-      - ./data:/app/data
-      - ./media:/media
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 128
-    mem_limit: 768m
-    stop_grace_period: 20s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-```
-
-The default port mapping `${APP_PORT:-3000}:3000` publishes RehearsalHQ on host port `3000` on all host interfaces. If that port is already in use, set `APP_PORT=3001` in `.env` (equivalent to changing only the first number to `3001:3000`). Then open `http://localhost:3001` and update `APP_URL` to match the actual public origin. The container port must remain `3000`. For an HTTPS reverse-proxy deployment, restrict network access to the application port using firewall rules or a loopback-only binding such as `"127.0.0.1:3000:3000"` when the proxy runs on the Docker host.
-
-### 4. Start RehearsalHQ
+View logs with:
 
 ```bash
-docker compose -f compose.deploy.yaml config --quiet
-docker compose -f compose.deploy.yaml up -d --no-build --wait
-docker compose -f compose.deploy.yaml logs --tail=100 -f app
+docker compose logs --tail=100 -f app
+docker inspect --format '{{.State.Health.Status}}' rehearsalhq
 ```
 
-By default, open **http://localhost:3000** and sign in with the initial Admin credentials in `.env`.
+This method uses `APP_PORT` from `.env` for the published host port. The container always listens on port `3000`.
 
-When the Admin account has been created, remove `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` from `.env` and recreate the container:
+### 3B. Install with Docker CLI (`docker run`)
+If you prefer not to use Compose, the following command runs the **same published image** with equivalent persistent directories and security settings. Run it from the directory containing `.env`, `tmp`, `data`, and `media`:
 
 ```bash
-docker compose -f compose.deploy.yaml up -d --force-recreate --no-build
+docker pull ghcr.io/dcoffin88/rehearsalhq:latest
+
+docker run -d \
+  --name rehearsalhq \
+  --restart unless-stopped \
+  --init \
+  --user 1000:1000 \
+  --env-file .env \
+  -p 3000:3000 \
+  -v "$(pwd)/tmp:/tmp" \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/media:/media" \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --stop-timeout 20 \
+  --log-driver json-file \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
+  ghcr.io/dcoffin88/rehearsalhq:latest
 ```
 
-Changing those initial values later will **not** reset an existing Admin password. Keep `APP_SECRET` unchanged; it is required to decrypt stored SMTP credentials.
+For `docker run`, change `--user 1000:1000` to your intended UID/GID and change the **first** port number in `-p 3000:3000` if the host port is occupied.
+
+To inspect the container:
+
+```bash
+docker logs --tail=100 -f rehearsalhq
+docker inspect --format '{{.State.Health.Status}}' rehearsalhq
+```
+
+### 4. Sign in
+Open the URL specified in `APP_URL` and sign in with the configured initial Admin credentials. Changing `INITIAL_ADMIN_PASSWORD` later does **not** reset an existing account; these settings are used only when provisioning a new database.
+
+For a public deployment, use HTTPS behind a reverse proxy. The example Compose mapping publishes the app on host interfaces; restrict it with firewall rules, or configure a shared Docker network with your reverse proxy and remove the published host port.
 
 ### 5. Invite Members
-
-Admins can create accounts through **User Management**.
-
+Admins can create accounts through `User Management`.
 <img src=".github/assets/rehearsalhq-screen-users.png" alt="RehearsalHQ user management and role permissions" width="900" />
 
 When a member is created:
-
 1. RehearsalHQ sends an invitation using the saved SMTP configuration.
-2. The delivery result is recorded in the **Email Settings** outbox.
-3. Admins can use **Resend invite** to retry delivery without creating another account.
-4. Initial passwords must be communicated separately through a private channel.
+2. The delivery result is recorded in the `Email Settings` outbox.
+3. Initial passwords are never included in invitation emails or email logs and must be communicated separately through a private channel.
 
-Passwords are never included in invitation emails or email logs.
+Members can change their passwords under `Profile Management`.
 
-Members can change their passwords under **Profile Management**.
-
-**Account security notes:**
-
+`Account security notes`:
 - Public registration is disabled.
-- Account impersonation is unavailable.
 - Initial Admin environment variables only provision a new database.
-- Changing the initial Admin password in `.env` does not reset an existing password.
+- Changing the initial Admin password in .env does not reset an existing password.
 
 ---
 
@@ -222,7 +171,7 @@ TRUST_PROXY_HOPS=1
 
 Configure your reverse proxy to:
 
-- Forward requests to port `3000`.
+- Forward requests to port `3000`, or the configured `APP_PORT`.
 - Keep the application port inaccessible from the public internet.
 - Match its request body size limit to `MAX_UPLOAD_MB`.
 - Allow upload requests up to 120 seconds.
@@ -230,11 +179,9 @@ Configure your reverse proxy to:
 
 HTTPS is required for Secure session cookies and remote microphone recording.
 
-The example Compose mapping exposes port `3000` on host interfaces. Restrict access with a firewall or use `127.0.0.1:3000:3000` for a reverse proxy on the host. If the proxy runs in another container, place both services on a shared Docker network and forward traffic to `app:3000`.
-
 ### Container Security
 
-The published Docker image is built using a multi-stage build. The deployment example runs the process as the configured host UID/GID and provides a read-only root filesystem, writable data/media bind mounts, a temporary filesystem, restart behavior, rotated logs, and graceful shutdown.
+The published Docker image is built using a multi-stage build. The deployment example runs the process as the configured host UID/GID and provides a read-only root filesystem, writable tmp/data/media bind mounts, restart behavior, rotated logs, and graceful shutdown.
 
 The Vite development server is not used in production.
 
@@ -288,7 +235,7 @@ Supported categories:
 
 To use an existing host media directory, replace `./media:/media` in the Compose file with an absolute bind mount such as `/srv/rehearsalhq/media:/media`. The database mount `./data:/app/data` can be changed similarly.
 
-Ensure the host directories are writable by the UID/GID configured in `.env` (`PUID` and `PGID`). The `MEDIA_MOUNT` variable applies to the repository's original Compose configuration, not this standalone deployment file.
+Ensure the host directories are writable by the UID/GID configured in `.env` (`PUID` and `PGID`). To use an existing media directory, change the `./media:/media` bind mount in your local `compose.yaml`.
 
 For local npm development, `MEDIA_DIR` defaults to:
 
@@ -320,31 +267,31 @@ Stop application writes during snapshots and use a separate backup directory for
 Stop the application:
 
 ```bash
-docker compose -f compose.deploy.yaml stop app
+docker compose -f compose.yaml stop app
 ```
 
 Create a consistent SQLite backup:
 
 ```bash
-docker compose -f compose.deploy.yaml run --rm --no-deps app node scripts/backup.mjs /app/data/backups/rehearsalhq.sqlite
+docker compose -f compose.yaml run --rm --no-deps app node scripts/backup.mjs /app/data/backups/rehearsalhq.sqlite
 ```
 
 Copy the database backup to the host:
 
 ```bash
-docker compose -f compose.deploy.yaml cp app:/app/data/backups/rehearsalhq.sqlite ./rehearsalhq-backup.sqlite
+docker compose -f compose.yaml cp app:/app/data/backups/rehearsalhq.sqlite ./rehearsalhq-backup.sqlite
 ```
 
 Copy uploaded audio:
 
 ```bash
-docker compose -f compose.deploy.yaml cp app:/media/. ./rehearsalhq-media-backup
+docker compose -f compose.yaml cp app:/media/. ./rehearsalhq-media-backup
 ```
 
 Restart RehearsalHQ:
 
 ```bash
-docker compose -f compose.deploy.yaml start app
+docker compose -f compose.yaml start app
 ```
 
 ### Restore a Backup
@@ -359,7 +306,7 @@ rehearsalhq-media-backup/
 Stop the application:
 
 ```bash
-docker compose -f compose.deploy.yaml stop app
+docker compose -f compose.yaml stop app
 ```
 
 **Warning:** Restoring the database overwrites the current database. Confirm you have the correct backup before proceeding.
@@ -367,7 +314,7 @@ docker compose -f compose.deploy.yaml stop app
 Restore the SQLite database:
 
 ```bash
-docker compose -f compose.deploy.yaml run --rm --no-deps \
+docker compose -f compose.yaml run --rm --no-deps \
   -v "${PWD}/rehearsalhq-backup.sqlite:/backup.sqlite:ro" \
   app node -e "const fs=require('node:fs'); fs.copyFileSync('/backup.sqlite','/app/data/rehearsalhq.sqlite'); for(const suffix of ['-wal','-shm']) fs.rmSync('/app/data/rehearsalhq.sqlite'+suffix,{force:true})"
 ```
@@ -375,7 +322,7 @@ docker compose -f compose.deploy.yaml run --rm --no-deps \
 Restore uploaded media:
 
 ```bash
-docker compose -f compose.deploy.yaml run --rm --no-deps \
+docker compose -f compose.yaml run --rm --no-deps \
   -v "${PWD}/rehearsalhq-media-backup:/media-backup:ro" \
   app node -e "require('node:fs').cpSync('/media-backup','/media',{recursive:true})"
 ```
@@ -383,7 +330,7 @@ docker compose -f compose.deploy.yaml run --rm --no-deps \
 Start the application:
 
 ```bash
-docker compose -f compose.deploy.yaml start app
+docker compose -f compose.yaml start app
 ```
 
 ### Backup Security & Compatibility
@@ -400,10 +347,10 @@ Back up the database and media before updating. Then pull the latest published i
 
 ```bash
 docker pull ghcr.io/dcoffin88/rehearsalhq:latest
-docker compose -f compose.deploy.yaml up -d --no-build --force-recreate --wait
+docker compose -f compose.yaml up -d --no-build --force-recreate --wait
 ```
 
-Your bind-mounted `./data` and `./media` directories are preserved. To deploy a specific version, update the `image:` tag in `compose.deploy.yaml`, pull that tag, and recreate the service.
+Your bind-mounted `./data`, `./media`, and `./tmp` directories are preserved. To deploy a specific version, update the `image:` tag in `compose.yaml`, pull that tag, and recreate the service.
 
 ---
 
@@ -417,7 +364,6 @@ Features include:
 
 - Server-side encryption of SMTP passwords using `APP_SECRET`
 - Password omission from API responses
-- Preservation of saved credentials when the password field is left blank
 - Admin-only SMTP connection testing and invitation resends
 - TLS certificate validation
 - Shared outbox with delivery results and failures
@@ -459,7 +405,7 @@ The 2FA settings control is disabled until the feature is implemented.
 
 Use Node.js **24.13 or newer**, within the Node 24 release line.
 
-For local development from a source checkout, configure `.env` using the repository’s `.env.example` and the environment guidance in [Getting Started](#getting-started).
+For local development from a source checkout, configure `.env` using the repository’s `.env.example` as a starting point. Set `DATA_DIR=./data` and `MEDIA_DIR=./media` for local filesystem storage; Dockerfile environment defaults do not apply to npm run dev.
 
 Install dependencies:
 
@@ -504,8 +450,6 @@ This creates a database-only backup.
 
 For a complete snapshot, stop the application and separately copy the directory configured by `MEDIA_DIR`.
 
-**Note:** Node 24's built-in SQLite API currently emits an experimental-feature warning.
-
 ---
 
 ## Contributing
@@ -520,8 +464,8 @@ Before contributing, review:
 
 ### Branching Strategy
 
-- `dev` — Active development and incoming contributions
-- `main` — Tested, release-ready code
+- `dev` - Active development and incoming contributions
+- `main` - Tested, release-ready code
 
 Contributions should target `dev`. Tested changes are merged into `main` before a release.
 
@@ -544,11 +488,22 @@ CI includes:
 
 Releases are created from a stable `main` checkout with dependencies installed.
 
-### Release steps for forks
+### Release steps for future forks
 
-Use Bash (or Git Bash on Windows). The multiline backup and restore commands above also use Bash syntax.
+Use Bash (or Git Bash on Windows).
 
-#### 1. Verify Release Readiness
+#### 1. Create PR from `dev` to `main`
+1. Wait for CI / App checks to pass.
+2. Review PR.
+3. Merge pull request.
+4. Update your local main:
+```bash
+git switch main
+git pull --ff-only origin main
+git status
+```
+
+#### 2. Verify Release Readiness
 
 ```bash
 bash scripts/release.sh --check 1.0.0
@@ -556,7 +511,7 @@ bash scripts/release.sh --check 1.0.0
 
 This performs preflight checks without modifying the repository.
 
-#### 2. Create a Release
+#### 3. Create a Release
 
 ```bash
 bash scripts/release.sh 1.0.0
@@ -569,36 +524,7 @@ The release script:
 3. Creates a local release commit.
 4. Creates an annotated version tag.
 
-Review the generated commit and tag before pushing.
-
-Use the command printed by the release script to push them atomically.
-
 **Note:** `1.0.0` is an example. Replace it with the intended release version.
-
-### Container Publishing
-
-A version tag pointing to a commit in `main` triggers CI and publishes the application image to:
-
-```text
-ghcr.io/dcoffin88/rehearsalhq
-```
-
-Supported architectures:
-
-- Linux AMD64
-- Linux ARM64
-
-Stable releases receive:
-
-- Full version tags
-- Major/minor version tags
-- `latest`
-
-Prereleases do not update the `latest` tag.
-
-GitHub Actions must be enabled and have permission to publish packages.
-
-The release workflow does not automatically create a GitHub Release entry.
 
 ---
 
