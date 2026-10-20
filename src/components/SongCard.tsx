@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Clock,
   Download,
@@ -24,6 +24,22 @@ interface SongCardProps {
   onOpenLyrics: (song: SongIdea) => void;
   onOpenNewVersion: (song: SongIdea) => void;
 }
+
+const createFallbackWaveform = (versionId: string): number[] => {
+  let seed = 2166136261;
+  for (const character of versionId) {
+    seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
+  }
+
+  return Array.from({ length: 48 }, () => {
+    seed += 0x6d2b79f5;
+    let value = seed;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    const normalized = ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    return normalized * 0.7 + 0.2;
+  });
+};
 
 export const SongCard: React.FC<SongCardProps> = ({
   song,
@@ -106,7 +122,13 @@ export const SongCard: React.FC<SongCardProps> = ({
     }
   };
 
-  const waveformSamples = activeVersion?.waveformSamples || Array.from({ length: 48 }, () => Math.random() * 0.7 + 0.2);
+  const waveformSamples = useMemo(
+    () =>
+      activeVersion?.waveformSamples?.length
+        ? activeVersion.waveformSamples
+        : createFallbackWaveform(activeVersion?.id ?? song.id),
+    [activeVersion?.id, activeVersion?.waveformSamples, song.id],
+  );
 
   return (
     <div className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
@@ -244,7 +266,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                 {/* Waveform bars */}
                 {waveformSamples.map((height, idx) => {
                   const barProgress = idx / waveformSamples.length;
-                  const isPassed = barProgress <= progressRatio;
+                  const isPassed = isCurrentPlaying && barProgress <= progressRatio;
                   const isHoverHead = Math.abs(barProgress - progressRatio) < 0.03;
 
                   return (
