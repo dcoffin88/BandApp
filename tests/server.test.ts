@@ -11,8 +11,21 @@ import {
   type ApplicationOptions,
 } from '../server/app.ts';
 import { verifyPassword } from '../server/database.ts';
+import { memberDisplayName } from '../src/shared/member.ts';
 
 const password = 'Correct-Horse-123!';
+
+test('member display names prefer a trimmed stage name with full-name fallback', () => {
+  assert.equal(memberDisplayName({ name: 'Alex Smith' }), 'Alex Smith');
+  assert.equal(
+    memberDisplayName({ name: 'Alex Smith', stageName: '   ' }),
+    'Alex Smith',
+  );
+  assert.equal(
+    memberDisplayName({ name: 'Alex Smith', stageName: '  Ace  ' }),
+    'Ace',
+  );
+});
 
 async function localSmtp() {
   const messages: string[] = [];
@@ -806,6 +819,15 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
   const f = await fixture();
   try {
     const admin = await f.login();
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.profile', {
+          userId: admin.state.currentUser.id,
+          updates: { stageName: '  The Conductor  ' },
+        })
+      ).status,
+      200,
+    );
     const upload = await f.request(
       '/api/uploads?category=riff',
       undefined,
@@ -840,6 +862,17 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     });
     assert.equal(add.status, 200, await add.clone().text());
     const { result: song } = await add.json();
+    assert.equal(song.createdBy.name, 'The Conductor');
+    assert.equal(song.versions[0].uploadedBy.name, 'The Conductor');
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.comment', {
+          songId: song.id,
+          text: 'Keep this take',
+        })
+      ).status,
+      200,
+    );
     assert.equal(
       (
         await f.action(admin.cookie, 'song.lyrics', {
@@ -861,6 +894,15 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
           setlistSongIds: [song.id],
           goals: [],
           notes: '',
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.profile', {
+          userId: admin.state.currentUser.id,
+          updates: { stageName: 'Maestro' },
         })
       ).status,
       200,
@@ -890,7 +932,13 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       await f.request('/api/state', undefined, admin.cookie)
     ).json();
     assert.equal(state.songs[0].lyrics.draft, 'Shared words');
+    assert.equal(state.songs[0].lyrics.lastEditedBy, 'The Conductor');
+    assert.equal(state.songs[0].createdBy.name, 'Maestro');
+    assert.equal(state.songs[0].versions[0].uploadedBy.name, 'Maestro');
+    assert.equal(state.songs[0].comments[0].userName, 'Maestro');
     assert.equal(state.practices.length, 1);
+    assert.equal(state.practices[0].createdBy, 'The Conductor');
+    assert.equal(state.practices[0].rsvps[0].userName, 'Maestro');
     assert.equal(state.smtpSettings.password, '');
     assert.ok(!JSON.stringify(state).includes('Private-SMTP-secret'));
     const audio = await f.request(audioUrl, undefined, admin.cookie, {

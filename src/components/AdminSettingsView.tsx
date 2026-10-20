@@ -44,6 +44,7 @@ import { DEFAULT_AVATAR, ROLE_PERMISSIONS } from '../shared/defaults.ts';
 import { useAppVersion } from '../hooks/useAppVersion.ts';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionModal } from './VersionModal.tsx';
+import { memberDisplayName } from '../shared/member.ts';
 
 interface AdminSettingsViewProps {
   initialTab?: 'users' | 'auth' | 'app' | 'smtp';
@@ -206,6 +207,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
   const filteredMembers = band.members.filter(m =>
     m.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+    memberDisplayName(m).toLowerCase().includes(userSearch.toLowerCase()) ||
     m.email.toLowerCase().includes(userSearch.toLowerCase()) ||
     m.instrument.toLowerCase().includes(userSearch.toLowerCase()) ||
     m.role.toLowerCase().includes(userSearch.toLowerCase())
@@ -658,6 +660,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
                   {filteredMembers.map(member => {
                     const isSelf = member.id === currentUser.id;
+                    const displayName = memberDisplayName(member);
 
                     return (
                       <tr key={member.id} className="hover:bg-zinc-800/40 transition">
@@ -665,12 +668,12 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                           <div className="flex items-center gap-3">
                             <img
                               src={member.avatar}
-                              alt={member.name}
+                              alt={displayName}
                               className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-700"
                             />
                             <div>
                               <div className="flex items-center gap-1.5">
-                                <span className="font-bold text-white">{member.name}</span>
+                                <span className="font-bold text-white">{displayName}</span>
                                 {isSelf && (
                                   <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
                                     YOU
@@ -743,7 +746,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                                 type="button"
                                 onClick={() => handleResendInvite(member)}
                                 disabled={invitingUserId !== null}
-                                aria-label={`Resend invitation to ${member.name}`}
+                                aria-label={`Resend invitation to ${displayName}`}
                                 title="Send / resend invitation email"
                                 className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition disabled:opacity-50"
                               >
@@ -763,7 +766,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                             {isAdmin && !isSelf && (
                               <button
                                 onClick={() => {
-                                  if (confirm(`Are you sure you want to delete user account "${member.name}"?`)) {
+                                  if (confirm(`Are you sure you want to delete user account "${displayName}"?`)) {
                                     deleteUserAccount(member.id);
                                   }
                                 }}

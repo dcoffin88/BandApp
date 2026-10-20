@@ -33,6 +33,7 @@ import type {
   Role,
   SmtpSettings,
 } from '../src/types/band.ts';
+import { memberDisplayName } from '../src/shared/member.ts';
 
 const text = z.string().max(1e4);
 const short = z.string().trim().max(200);
@@ -206,7 +207,7 @@ const now = () => new Date().toISOString();
 
 const identity = (u: BandMember) => ({
   id: u.id,
-  name: u.name,
+  name: memberDisplayName(u),
   avatar: u.avatar,
 });
 
@@ -648,7 +649,7 @@ export function createApplication(options: ApplicationOptions) {
       user.lastLogin = now();
       store.saveUser(user);
       db.prepare('DELETE FROM login_attempts WHERE email=?').run(input.email);
-      audit(req, user.name, true, user.id);
+      audit(req, memberDisplayName(user), true, user.id);
       createSession(user, res);
       res.json(snapshot(user));
     })
@@ -1030,7 +1031,7 @@ export function createApplication(options: ApplicationOptions) {
               lyrics: {
                 draft: data.lyrics?.draft || '',
                 chordsSheet: data.lyrics?.chordsSheet || '',
-                lastEditedBy: user.name,
+                lastEditedBy: memberDisplayName(user),
                 lastEditedAt: now(),
                 versionNumber: 1,
               },
@@ -1041,7 +1042,7 @@ export function createApplication(options: ApplicationOptions) {
             state.songs.unshift(result);
             event = {
               type: 'new_demo',
-              text: `${user.name} uploaded ${data.title}.`,
+              text: `${memberDisplayName(user)} uploaded ${data.title}.`,
             };
             break;
           }
@@ -1063,7 +1064,7 @@ export function createApplication(options: ApplicationOptions) {
             target.activeVersionId = version.id;
             event = {
               type: 'new_version',
-              text: `${user.name} uploaded a new take for ${target.title}.`,
+              text: `${memberDisplayName(user)} uploaded a new take for ${target.title}.`,
             };
             break;
           }
@@ -1078,13 +1079,13 @@ export function createApplication(options: ApplicationOptions) {
                 p.chordsSheet === undefined
                   ? target.lyrics.chordsSheet
                   : text.parse(p.chordsSheet),
-              lastEditedBy: user.name,
+              lastEditedBy: memberDisplayName(user),
               lastEditedAt: now(),
               versionNumber: target.lyrics.versionNumber + 1,
             };
             event = {
               type: 'lyric_edit',
-              text: `${user.name} updated lyrics for ${target.title}.`,
+              text: `${memberDisplayName(user)} updated lyrics for ${target.title}.`,
             };
             break;
           }
@@ -1093,7 +1094,7 @@ export function createApplication(options: ApplicationOptions) {
             target.comments.push({
               id: randomUUID(),
               userId: user.id,
-              userName: user.name,
+              userName: memberDisplayName(user),
               userAvatar: user.avatar,
               text: text.min(1).parse(p.text),
               timestampSeconds:
@@ -1104,7 +1105,7 @@ export function createApplication(options: ApplicationOptions) {
             });
             event = {
               type: 'comment',
-              text: `${user.name} commented on ${target.title}.`,
+              text: `${memberDisplayName(user)} commented on ${target.title}.`,
             };
             break;
           }
@@ -1156,18 +1157,18 @@ export function createApplication(options: ApplicationOptions) {
               rsvps: [
                 {
                   userId: user.id,
-                  userName: user.name,
+                  userName: memberDisplayName(user),
                   userAvatar: user.avatar,
                   status: 'attending',
                   updatedAt: now(),
                 },
               ],
-              createdBy: user.name,
+              createdBy: memberDisplayName(user),
               createdAt: now(),
             });
             event = {
               type: 'practice_schedule',
-              text: `${user.name} scheduled ${data.title} on ${data.date}.`,
+              text: `${memberDisplayName(user)} scheduled ${data.title} on ${data.date}.`,
             };
             break;
           }
@@ -1179,7 +1180,7 @@ export function createApplication(options: ApplicationOptions) {
             target.rsvps = target.rsvps.filter((r) => r.userId !== user.id);
             target.rsvps.push({
               userId: user.id,
-              userName: user.name,
+              userName: memberDisplayName(user),
               userAvatar: user.avatar,
               status,
               updatedAt: now(),
@@ -1214,9 +1215,9 @@ export function createApplication(options: ApplicationOptions) {
         const bandName = store.read().band.name;
         const log = await deliver(
           recipient.email,
-          recipient.name,
+          memberDisplayName(recipient),
           `[${bandName}] You're invited to the band workspace`,
-          `<h2>Join ${escapeHtml(bandName)}</h2><p>Hi ${escapeHtml(recipient.name)},</p><p>${escapeHtml(user.name)} invited you to the band's workspace, where you can share demos, lyrics and rehearsal plans.</p><p><a href="${escapeHtml(origin)}">Sign in to ${escapeHtml(bandName)}</a></p><p>Your sign-in email is <strong>${escapeHtml(recipient.email)}</strong>.</p><p>Your Band Admin will share your initial password separately. After signing in, you can change it under Profile Management.</p>`,
+          `<h2>Join ${escapeHtml(bandName)}</h2><p>Hi ${escapeHtml(memberDisplayName(recipient))},</p><p>${escapeHtml(memberDisplayName(user))} invited you to the band's workspace, where you can share demos, lyrics and rehearsal plans.</p><p><a href="${escapeHtml(origin)}">Sign in to ${escapeHtml(bandName)}</a></p><p>Your sign-in email is <strong>${escapeHtml(recipient.email)}</strong>.</p><p>Your Band Admin will share your initial password separately. After signing in, you can change it under Profile Management.</p>`,
           'member_invite',
           true
         );
@@ -1357,7 +1358,7 @@ export function createApplication(options: ApplicationOptions) {
     )) {
       await deliver(
         recipient.email,
-        recipient.name,
+        memberDisplayName(recipient),
         `[${state.band.name}] ${message}`,
         `<p>${escapeHtml(message)}</p><p><a href="${escapeHtml(origin)}">Open RehearsalHQ</a></p>`,
         type
@@ -1400,7 +1401,7 @@ export function createApplication(options: ApplicationOptions) {
       const to = email.parse(req.body.to);
       const log = await deliver(
         to,
-        user.name,
+        memberDisplayName(user),
         'RehearsalHQ SMTP test',
         '<p>Your RehearsalHQ email connection is working.</p>',
         'test_probe'

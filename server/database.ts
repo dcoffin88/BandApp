@@ -13,7 +13,54 @@ import {
   emptyState,
   type SharedState,
 } from '../src/shared/defaults.ts';
+import { memberDisplayName } from '../src/shared/member.ts';
 import type { BandMember } from '../src/types/band.ts';
+
+function refreshMemberIdentities(state: SharedState): void {
+  const membersById = new Map(
+    state.band.members.map((member) => [member.id, member]),
+  );
+  const currentIdentity = (userId: string) => {
+    const member = membersById.get(userId);
+    return member
+      ? { name: memberDisplayName(member), avatar: member.avatar }
+      : undefined;
+  };
+
+  for (const song of state.songs) {
+    const creator = currentIdentity(song.createdBy.id);
+    if (creator) Object.assign(song.createdBy, creator);
+
+    for (const version of song.versions) {
+      const uploader = currentIdentity(version.uploadedBy.id);
+      if (uploader) Object.assign(version.uploadedBy, uploader);
+    }
+
+    for (const comment of song.comments) {
+      const commenter = currentIdentity(comment.userId);
+      if (commenter) {
+        comment.userName = commenter.name;
+        comment.userAvatar = commenter.avatar;
+      }
+    }
+  }
+
+  for (const practice of state.practices) {
+    for (const rsvp of practice.rsvps) {
+      const member = currentIdentity(rsvp.userId);
+      if (member) {
+        rsvp.userName = member.name;
+        rsvp.userAvatar = member.avatar;
+      }
+    }
+  }
+
+  for (const entry of state.auditLogs) {
+    if (!entry.userId) continue;
+    const member = currentIdentity(entry.userId);
+    if (member) entry.userName = member.name;
+  }
+}
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex');
@@ -117,6 +164,7 @@ export function openDatabase(filename: string) {
     };
     const state = JSON.parse(String(row.value)) as SharedState;
     state.band.members = members();
+    refreshMemberIdentities(state);
     return state;
   }
 

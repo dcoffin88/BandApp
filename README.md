@@ -221,9 +221,9 @@ Example:
 
 **Storage behavior:**
 
-- `userName` is derived from the uploader's display name at upload time.
+- `userName` is derived from the uploader's name at upload time.
 - Spaces and unsafe folder characters are replaced with underscores.
-- Existing directories remain unchanged when a member changes their display name.
+- Existing directories remain unchanged when a member changes their name.
 - Unique file IDs prevent filename collisions.
 - Audio is served through the authenticated API, not a public static directory.
 

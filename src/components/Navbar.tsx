@@ -23,6 +23,7 @@ import { useAppVersion } from '../hooks/useAppVersion.ts';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionBadge } from './VersionBadge.tsx';
 import { VersionModal } from './VersionModal.tsx';
+import { memberDisplayName } from '../shared/member.ts';
 
 interface NavbarProps {
   activeTab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile';
@@ -48,6 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isEditingBandName, setIsEditingBandName] = useState(false);
   const [bandNameInput, setBandNameInput] = useState(band.name);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const currentUserDisplayName = memberDisplayName(currentUser);
 
   const handleSaveBandName = (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,12 +151,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <img
                   src={currentUser.avatar}
-                  alt={currentUser.name}
+                  alt={currentUserDisplayName}
                   className="w-7 h-7 rounded-full object-cover ring-2 ring-zinc-700 shrink-0"
                 />
                 <div className="hidden sm:block text-xs">
                   <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
-                    {currentUser.name}
+                    {currentUserDisplayName}
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-mono ${roleBadge.color}`}
                     >
@@ -177,11 +179,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="p-2.5 border-b border-zinc-800 mb-1 flex items-center gap-2.5">
                       <img
                         src={currentUser.avatar}
-                        alt={currentUser.name}
+                        alt={currentUserDisplayName}
                         className="w-8 h-8 rounded-full object-cover ring-1 ring-amber-500"
                       />
                       <div className="min-w-0">
-                        <p className="font-bold text-white text-xs truncate">{currentUser.name}</p>
+                        <p className="font-bold text-white text-xs truncate">{currentUserDisplayName}</p>
                         <p className="text-[11px] text-zinc-400 truncate">{currentUser.email}</p>
                         <span className={`text-[9px] px-1.5 py-0.2 rounded border font-mono uppercase inline-block mt-0.5 ${roleBadge.color}`}>
                           {roleBadge.label}

@@ -12,6 +12,7 @@ import { useBand } from '../context/BandContext.tsx';
 import { SongIdea } from '../types/band.ts';
 import { useMicrophoneRecorder } from '../hooks/useMicrophoneRecorder.ts';
 import { MicrophoneSelector } from './MicrophoneSelector.tsx';
+import { memberDisplayName } from '../shared/member.ts';
 
 const KEY_ROOTS = ['C', 'C♯ / D♭', 'D', 'D♯ / E♭', 'E', 'F', 'F♯ / G♭', 'G', 'G♯ / A♭', 'A', 'A♯ / B♭', 'B'];
 
@@ -108,7 +109,7 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
           tags: [category.toUpperCase(), musicalKey, bpm ? `${bpm} BPM` : ''].filter(Boolean),
           lyrics: {
             draft: initialLyrics.trim() || `[Draft Lyrics for ${title}]\n(Add lyrics here...)`,
-            lastEditedBy: currentUser.name,
+            lastEditedBy: memberDisplayName(currentUser),
             lastEditedAt: new Date().toISOString(),
             versionNumber: 1,
           },

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { SongIdea } from '../types/band.ts';
+import { memberDisplayName } from '../shared/member.ts';
 
 interface LyricsModalProps {
   song: SongIdea | null;
@@ -66,7 +67,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
   };
 
   const handleDownloadText = () => {
-    const textToSave = `=== ${song.title} - Lyrics & Chords ===\nCategory: ${song.category.toUpperCase()}\nKey: ${song.musicalKey || 'N/A'}\nBPM: ${song.bpm || 'N/A'}\nLast Edited By: ${song.lyrics.lastEditedBy || currentUser.name}\n\n${draft}\n\n=== Chords Chart ===\n${chordsSheet || '(None specified)'}`;
+    const textToSave = `=== ${song.title} - Lyrics & Chords ===\nCategory: ${song.category.toUpperCase()}\nKey: ${song.musicalKey || 'N/A'}\nBPM: ${song.bpm || 'N/A'}\nLast Edited By: ${song.lyrics.lastEditedBy || memberDisplayName(currentUser)}\n\n${draft}\n\n=== Chords Chart ===\n${chordsSheet || '(None specified)'}`;
     const blob = new Blob([textToSave], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

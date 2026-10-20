@@ -156,7 +156,7 @@ export const ProfileSettingsView: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
-                  Display Name *
+                  Full Name *
                 </label>
                 <input
                   type="text"
