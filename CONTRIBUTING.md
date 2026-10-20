@@ -1,10 +1,10 @@
-# Contributing to BandApp
+# Contributing to RehearsalHQ
 
-Thank you for your interest in BandApp. Please read this before opening a pull request.
+Thank you for your interest in RehearsalHQ. Please read this before opening a pull request.
 
-## How BandApp is built
+## How RehearsalHQ is built
 
-BandApp is a vision-led project. I hold the direction, because a single coherent hand keeps the product consistent and the codebase maintainable, and I write a lot of it. I am no longer trying to write all of it: the project has outgrown what I can review quickly, and a fix waiting a week on me helps nobody. I am open to trusted contributors taking on review and merge rights, earned through a track record of focused, well-judged changes. That shapes what contributions fit:
+RehearsalHQ is a vision-led project. I hold the direction, because a single coherent hand keeps the product consistent and the codebase maintainable, and I write a lot of it. I am no longer trying to write all of it: the project has outgrown what I can review quickly, and a fix waiting a week on me helps nobody. I am open to trusted contributors taking on review and merge rights, earned through a track record of focused, well-judged changes. That shapes what contributions fit:
 
 - **Bug reports and small, focused fixes are very welcome.** A real bug, a translation, a typo, a small correctness or quality fix — these are easy to review and usually merge quickly.
 - **For anything larger — a new feature, a refactor, a new dependency, a change to core behaviour — open an issue to discuss it first, before writing any code.** You'll get an honest answer on whether it fits and whether we'd merge it.
@@ -13,11 +13,11 @@ BandApp is a vision-led project. I hold the direction, because a single coherent
 
 ## One open pull request per author
 
-I review everything myself, and a queue of parallel PRs from one author does not get reviewed faster — it gets reviewed worse. So BandApp works on one open PR per author at a time: pick the change you most want in, and we work through it together. Further PRs opened while you have one active will be closed with thanks, unprejudiced, and can be reopened when your active one merges or closes. Splitting a large PR into several small ones is still the right instinct — open them one at a time, not all at once.
+I review everything myself, and a queue of parallel PRs from one author does not get reviewed faster — it gets reviewed worse. So RehearsalHQ works on one open PR per author at a time: pick the change you most want in, and we work through it together. Further PRs opened while you have one active will be closed with thanks, unprejudiced, and can be reopened when your active one merges or closes. Splitting a large PR into several small ones is still the right instinct — open them one at a time, not all at once.
 
 ## Before You Start
 
-- Search the [issue tracker](https://github.com/dcoffin88/bandapp/issues) — the problem or feature may already be discussed.
+- Search the [issue tracker](https://github.com/dcoffin88/rehearsalhq/issues) — the problem or feature may already be discussed.
 - For anything beyond a small fix, open an issue first to align on the approach (see above).
 - All contributions require agreement to the [Contributor License Agreement](CLA.md).
 
@@ -78,8 +78,8 @@ chore: dependency updates, config changes, etc.
 
 ## Reporting Bugs
 
-Use the [bug report template](https://github.com/dcoffin88/bandapp/issues/new?template=bug_report.md). Include steps to reproduce, expected behaviour, and actual behaviour. Screenshots or logs help.
+Use the [bug report template](https://github.com/dcoffin88/rehearsalhq/issues/new?template=bug_report.md). Include steps to reproduce, expected behaviour, and actual behaviour. Screenshots or logs help.
 
 ## Requesting Features
 
-Use the [feature request template](https://github.com/dcoffin88/bandapp/issues/new?template=feature_request.md). Explain the problem you are trying to solve, not just the solution. This is also the right place to propose something before writing code.
+Use the [feature request template](https://github.com/dcoffin88/rehearsalhq/issues/new?template=feature_request.md). Explain the problem you are trying to solve, not just the solution. This is also the right place to propose something before writing code.

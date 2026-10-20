@@ -33,4 +33,4 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
       - name: Verify production Docker image
-        run: docker build --tag bandapp:ci .
+        run: docker build --tag rehearsalhq:ci .

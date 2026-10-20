@@ -11,11 +11,11 @@ export function useAppVersion() {
     latestVersion: CURRENT_APP_VERSION,
     latestTag: `v${CURRENT_APP_VERSION}`,
     updateAvailable: false,
-    releaseName: `BandApp v${CURRENT_APP_VERSION}`,
-    releaseUrl: 'https://github.com/dcoffin88/BandApp/releases/latest',
+    releaseName: `RehearsalHQ v${CURRENT_APP_VERSION}`,
+    releaseUrl: 'https://github.com/dcoffin88/RehearsalHQ/releases/latest',
     publishedAt: null,
     checkedAt: new Date().toISOString(),
-    repoUrl: 'https://github.com/dcoffin88/BandApp',
+    repoUrl: 'https://github.com/dcoffin88/RehearsalHQ',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -26,7 +26,7 @@ export function useAppVersion() {
       const info = await fetchVersionInfo(force);
       setVersionInfo(info);
     } catch (e) {
-      console.warn('Failed to check latest BandApp version:', e);
+      console.warn('Failed to check latest RehearsalHQ version:', e);
     } finally {
       setIsLoading(false);
     }

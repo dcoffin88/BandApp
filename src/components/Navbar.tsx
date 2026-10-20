@@ -5,7 +5,6 @@ import {
   ChevronDown,
   Edit2,
   FileText,
-  Guitar,
   KeyRound,
   LogOut,
   Music,
@@ -21,6 +20,7 @@ import {
 import { useBand } from '../context/BandContext.tsx';
 import { Role } from '../types/band.ts';
 import { useAppVersion } from '../hooks/useAppVersion.ts';
+import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionBadge } from './VersionBadge.tsx';
 import { VersionModal } from './VersionModal.tsx';
 
@@ -115,7 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   appSettings?.accentGlow ? 'theme-glow-accent' : ''
                 }`}
               >
-                <Guitar className="w-5 h-5 text-zinc-950" />
+                <RehearsalHQLogo className="w-5 h-5 text-zinc-950" />
               </div>
             )}
 

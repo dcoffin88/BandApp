@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { AlertCircle, Eye, EyeOff, Guitar, Lock, Mail } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { useBand } from '../context/BandContext.tsx';
 
 export const AuthView: React.FC = () => {
@@ -23,22 +24,24 @@ export const AuthView: React.FC = () => {
     <div className="min-h-screen bg-zinc-950 text-zinc-200 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
-          {appSettings.headerLogoUrl ? (
-            <img
-              src={appSettings.headerLogoUrl}
-              alt={`${band.name} logo`}
-              className={`w-20 h-20 mx-auto object-cover ring-2 ring-amber-500/40 shadow-lg ${
-                appSettings.headerLogoShape === 'circle' ? 'rounded-full'
-                  : appSettings.headerLogoShape === 'square' ? 'rounded-lg' : 'rounded-2xl'
-              } ${appSettings.accentGlow ? 'theme-glow-accent' : ''}`}
-            />
-          ) : (
-            <Guitar className="w-12 h-12 mx-auto text-amber-400" />
-          )}
-          <h1 className="text-3xl font-black text-white">{band.name}</h1>
-          <p className="text-sm text-zinc-400">
-            Sign in to your band's workspace.
-          </p>
+          <div className="flex flex-col items-center gap-2 text-center">
+            <div className="flex items-center justify-center gap-3">
+              <RehearsalHQLogo
+                className="w-12 h-12 shrink-0 text-amber-400"
+              />
+              <h1 className="text-3xl font-black tracking-tight text-white">
+                RehearsalHQ
+              </h1>
+            </div>
+
+            <p className="text-sm font-medium text-zinc-300">
+              Your band's home base.
+            </p>
+
+            <p className="text-xs text-zinc-500">
+              Recordings · Lyrics · Rehearsals · Collaboration
+            </p>
+          </div>
         </div>
         <form
           onSubmit={submit}

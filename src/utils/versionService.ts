@@ -1,11 +1,11 @@
 /**
- * Version and GitHub release tracking utilities for BandApp
- * Repository: https://github.com/dcoffin88/BandApp
+ * Version and GitHub release tracking utilities for RehearsalHQ
+ * Repository: https://github.com/dcoffin88/RehearsalHQ
  */
 
-export const CURRENT_APP_VERSION = '1.0.1';
+export const CURRENT_APP_VERSION = '1.0.2';
 export const GITHUB_REPO_OWNER = 'dcoffin88';
-export const GITHUB_REPO_NAME = 'BandApp';
+export const GITHUB_REPO_NAME = 'RehearsalHQ';
 export const GITHUB_REPO_URL = `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`;
 export const GITHUB_LATEST_RELEASE_URL = `${GITHUB_REPO_URL}/releases/latest`;
 export const GITHUB_API_RELEASE_URL = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`;
@@ -50,7 +50,7 @@ export function compareSemver(v1: string, v2: string): number {
   return 0;
 }
 
-const STORAGE_KEY = 'bandapp_version_cache_v1';
+const STORAGE_KEY = 'rehearsalhq_version_cache_v1';
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache
 
 /**
@@ -84,7 +84,7 @@ export async function fetchVersionInfo(force = false): Promise<AppVersionInfo> {
   try {
     const res = await fetch('/api/version/check', {
       headers: {
-        'x-bandapp-request': '1',
+        'x-rehearsalhq-request': '1',
       },
       signal: AbortSignal.timeout(4000),
     });
@@ -96,7 +96,7 @@ export async function fetchVersionInfo(force = false): Promise<AppVersionInfo> {
           latestVersion: data.latestVersion,
           latestTag: data.latestTag || `v${data.latestVersion}`,
           updateAvailable: compareSemver(data.latestVersion, CURRENT_APP_VERSION) > 0,
-          releaseName: data.releaseName || `BandApp ${data.latestTag || data.latestVersion}`,
+          releaseName: data.releaseName || `RehearsalHQ ${data.latestTag || data.latestVersion}`,
           releaseUrl: data.releaseUrl || GITHUB_LATEST_RELEASE_URL,
           publishedAt: data.publishedAt || null,
           body: data.body || '',
@@ -132,7 +132,7 @@ export async function fetchVersionInfo(force = false): Promise<AppVersionInfo> {
         latestVersion,
         latestTag: latestTag || `v${latestVersion}`,
         updateAvailable: compareSemver(latestVersion, CURRENT_APP_VERSION) > 0,
-        releaseName: release.name || latestTag || `BandApp v${latestVersion}`,
+        releaseName: release.name || latestTag || `RehearsalHQ v${latestVersion}`,
         releaseUrl: release.html_url || GITHUB_LATEST_RELEASE_URL,
         publishedAt: release.published_at || release.created_at || null,
         body: (release.body || '').slice(0, 1000),
@@ -155,7 +155,7 @@ export async function fetchVersionInfo(force = false): Promise<AppVersionInfo> {
     latestVersion: CURRENT_APP_VERSION,
     latestTag: `v${CURRENT_APP_VERSION}`,
     updateAvailable: false,
-    releaseName: `BandApp v${CURRENT_APP_VERSION}`,
+    releaseName: `RehearsalHQ v${CURRENT_APP_VERSION}`,
     releaseUrl: GITHUB_LATEST_RELEASE_URL,
     publishedAt: null,
     body: '',

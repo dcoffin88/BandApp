@@ -32,7 +32,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
         </span>
 
         <span className="font-mono font-medium text-[11px] text-zinc-300">
-          BandApp v{currentVersion}
+          RehearsalHQ v{currentVersion}
         </span>
 
         <span className="text-zinc-500 text-[10px]">•</span>
@@ -49,7 +49,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
     <button
       onClick={onClick}
       type="button"
-      title={`BandApp v${currentVersion} - Up to date.`}
+      title={`RehearsalHQ v${currentVersion} - Up to date.`}
       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono text-zinc-400 bg-zinc-900/90 border border-zinc-800 hover:border-zinc-700 hover:text-zinc-200 transition shadow-sm cursor-pointer ${className}`}
     >
       {isLoading ? (
@@ -57,7 +57,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
       ) : (
         <Check className="w-3 h-3 text-emerald-400 shrink-0" />
       )}
-      <span>BandApp v{currentVersion}</span>
+      <span>RehearsalHQ v{currentVersion}</span>
     </button>
   );
 };

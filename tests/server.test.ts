@@ -164,10 +164,10 @@ test('member invitations send through SMTP, report failures and can be resent wi
 });
 
 async function fixture() {
-  const directory = mkdtempSync(path.join(tmpdir(), 'bandapp-test-'));
+  const directory = mkdtempSync(path.join(tmpdir(), 'rehearsalhq-test-'));
   const options: ApplicationOptions = {
     development: false,
-    databasePath: path.join(directory, 'bandapp.sqlite'),
+    databasePath: path.join(directory, 'rehearsalhq.sqlite'),
     mediaDirectory: path.join(directory, 'separate-media'),
     appUrl: 'http://localhost:3000',
     secret: 'test-secret-with-at-least-32-characters',
@@ -194,7 +194,7 @@ async function fixture() {
       ...extra,
       method: extra.method || (body === undefined ? 'GET' : 'POST'),
       headers: {
-        'X-BandApp-Request': '1',
+        'X-RehearsalHQ-Request': '1',
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(cookie ? { Cookie: cookie } : {}),
         ...extra.headers,
@@ -502,7 +502,7 @@ test('server login, session protection, secret isolation and password rotation',
           '/api/actions',
           { action: 'band.update', payload: { name: 'Attack' } },
           admin.cookie,
-          { headers: { 'X-BandApp-Request': '' } },
+          { headers: { 'X-RehearsalHQ-Request': '' } },
         )
       ).status,
       403,

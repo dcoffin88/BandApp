@@ -1,15 +1,26 @@
 <div align="center">
-  <img src=".github/assets/bandapp.svg" alt="BandApp Logo" width="96" height="96" />
-  <h1>BandApp</h1>
+
+  <img
+    src=".github/assets/rehearsalhq-header.svg"
+    alt="RehearsalHQ"
+    width="330"
+  />
+
+  <p><strong>Your band's home base.</strong></p>
+
+  <p>
+    <sub>Recordings · Lyrics · Rehearsals · Collaboration</sub>
+  </p>
+
 </div>
 
 **A shared workspace for bands to manage audio recordings, lyrics, rehearsals, and members.**
 
-BandApp provides a centralized, self-hosted environment for band collaboration, with role-based permissions, secure authentication, audio storage, and customizable user profiles.
+RehearsalHQ provides a centralized, self-hosted environment for band collaboration, with role-based permissions, secure authentication, audio storage, and customizable user profiles.
 
 ## Features
 
-<img src=".github/assets/bandapp-screen-default.png" alt="BandApp demos and audio dashboard" width="900" />
+<img src=".github/assets/rehearsalhq-screen-default.png" alt="RehearsalHQ demos and audio dashboard" width="900" />
 
 - **Audio Management** - Upload, organize, and access recordings through an authenticated API.
 - **Lyrics & Rehearsals** - Collaborate on lyrics and manage rehearsal activities.
@@ -24,13 +35,13 @@ BandApp provides a centralized, self-hosted environment for band collaboration, 
 
 Each member can customize their appearance under **Profile & Settings → Appearance**.
 
-<img src=".github/assets/bandapp-screen-profile.png" alt="BandApp profile and appearance settings" width="900" />
+<img src=".github/assets/rehearsalhq-screen-profile.png" alt="RehearsalHQ profile and appearance settings" width="900" />
 
 Existing accounts inherit the previous shared appearance settings once during an upgrade.
 
 Band-wide branding, including the logo, logo shape, name, and subtitle—is managed exclusively by Admins under **App Settings**.
 
-<img src=".github/assets/bandapp-screen-settings.png" alt="BandApp administrator settings" width="900" />
+<img src=".github/assets/rehearsalhq-screen-settings.png" alt="RehearsalHQ administrator settings" width="900" />
 
 ---
 
@@ -44,7 +55,7 @@ Band-wide branding, including the logo, logo shape, name, and subtitle—is mana
 ### 1. Pull the published image
 
 ```bash
-docker pull ghcr.io/dcoffin88/bandapp:latest
+docker pull ghcr.io/dcoffin88/rehearsalhq:latest
 ```
 
 The `latest` tag tracks stable releases. For predictable deployments, you can instead pin a specific published version tag.
@@ -99,7 +110,7 @@ Ensure both directories are writable by the selected UID/GID. If their ownership
 | `APP_URL` | Exact public origin, including scheme and hostname |
 | `TRUST_PROXY_HOPS` | Set to `1` when behind exactly one trusted reverse proxy |
 | `MAX_UPLOAD_MB` | Maximum audio upload size in MB, from `1` to `500`; defaults to `100` |
-| `APP_PORT` | Host port for BandApp, defaults to `3000`; leave container port at `3000` |
+| `APP_PORT` | Host port for RehearsalHQ, defaults to `3000`; leave container port at `3000` |
 | `PUID` | Numeric host user ID (`id -u`) used by the Compose `user:` setting |
 | `PGID` | Numeric host group ID (`id -g`) used by the Compose `user:` setting |
 
@@ -110,7 +121,7 @@ Save the following as `compose.deploy.yaml` in the same directory as `.env`:
 ```yaml
 services:
   app:
-    image: ghcr.io/dcoffin88/bandapp:latest
+    image: ghcr.io/dcoffin88/rehearsalhq:latest
     user: "${PUID}:${PGID}"
     init: true
     env_file:
@@ -148,9 +159,9 @@ services:
         max-file: "3"
 ```
 
-The default port mapping `${APP_PORT:-3000}:3000` publishes BandApp on host port `3000` on all host interfaces. If that port is already in use, set `APP_PORT=3001` in `.env` (equivalent to changing only the first number to `3001:3000`). Then open `http://localhost:3001` and update `APP_URL` to match the actual public origin. The container port must remain `3000`. For an HTTPS reverse-proxy deployment, restrict network access to the application port using firewall rules or a loopback-only binding such as `"127.0.0.1:3000:3000"` when the proxy runs on the Docker host.
+The default port mapping `${APP_PORT:-3000}:3000` publishes RehearsalHQ on host port `3000` on all host interfaces. If that port is already in use, set `APP_PORT=3001` in `.env` (equivalent to changing only the first number to `3001:3000`). Then open `http://localhost:3001` and update `APP_URL` to match the actual public origin. The container port must remain `3000`. For an HTTPS reverse-proxy deployment, restrict network access to the application port using firewall rules or a loopback-only binding such as `"127.0.0.1:3000:3000"` when the proxy runs on the Docker host.
 
-### 4. Start BandApp
+### 4. Start RehearsalHQ
 
 ```bash
 docker compose -f compose.deploy.yaml config --quiet
@@ -172,11 +183,11 @@ Changing those initial values later will **not** reset an existing Admin passwor
 
 Admins can create accounts through **User Management**.
 
-<img src=".github/assets/bandapp-screen-users.png" alt="BandApp user management and role permissions" width="900" />
+<img src=".github/assets/rehearsalhq-screen-users.png" alt="RehearsalHQ user management and role permissions" width="900" />
 
 When a member is created:
 
-1. BandApp sends an invitation using the saved SMTP configuration.
+1. RehearsalHQ sends an invitation using the saved SMTP configuration.
 2. The delivery result is recorded in the **Email Settings** outbox.
 3. Admins can use **Resend invite** to retry delivery without creating another account.
 4. Initial passwords must be communicated separately through a private channel.
@@ -196,7 +207,7 @@ Members can change their passwords under **Profile Management**.
 
 ## Production Deployment
 
-For production environments, deploy BandApp behind an HTTPS reverse proxy.
+For production environments, deploy RehearsalHQ behind an HTTPS reverse proxy.
 
 ### Reverse Proxy Configuration
 
@@ -233,14 +244,14 @@ For additional information, see [Docker's multi-stage build documentation](https
 
 ## Data Storage
 
-BandApp separates database storage from uploaded audio files.
+RehearsalHQ separates database storage from uploaded audio files.
 
 ### Database
 
 The `./data` host directory is bind-mounted at `/app/data` and stores the SQLite database at:
 
 ```text
-/app/data/bandapp.sqlite
+/app/data/rehearsalhq.sqlite
 ```
 
 The database contains band data, audio metadata, password hashes, user preferences, and sessions.
@@ -275,7 +286,7 @@ Supported categories:
 
 ### Custom Media Directory
 
-To use an existing host media directory, replace `./media:/media` in the Compose file with an absolute bind mount such as `/srv/bandapp/media:/media`. The database mount `./data:/app/data` can be changed similarly.
+To use an existing host media directory, replace `./media:/media` in the Compose file with an absolute bind mount such as `/srv/rehearsalhq/media:/media`. The database mount `./data:/app/data` can be changed similarly.
 
 Ensure the host directories are writable by the UID/GID configured in `.env` (`PUID` and `PGID`). The `MEDIA_MOUNT` variable applies to the repository's original Compose configuration, not this standalone deployment file.
 
@@ -315,22 +326,22 @@ docker compose -f compose.deploy.yaml stop app
 Create a consistent SQLite backup:
 
 ```bash
-docker compose -f compose.deploy.yaml run --rm --no-deps app node scripts/backup.mjs /app/data/backups/bandapp.sqlite
+docker compose -f compose.deploy.yaml run --rm --no-deps app node scripts/backup.mjs /app/data/backups/rehearsalhq.sqlite
 ```
 
 Copy the database backup to the host:
 
 ```bash
-docker compose -f compose.deploy.yaml cp app:/app/data/backups/bandapp.sqlite ./bandapp-backup.sqlite
+docker compose -f compose.deploy.yaml cp app:/app/data/backups/rehearsalhq.sqlite ./rehearsalhq-backup.sqlite
 ```
 
 Copy uploaded audio:
 
 ```bash
-docker compose -f compose.deploy.yaml cp app:/media/. ./bandapp-media-backup
+docker compose -f compose.deploy.yaml cp app:/media/. ./rehearsalhq-media-backup
 ```
 
-Restart BandApp:
+Restart RehearsalHQ:
 
 ```bash
 docker compose -f compose.deploy.yaml start app
@@ -341,8 +352,8 @@ docker compose -f compose.deploy.yaml start app
 Place the matching backup files in the project directory:
 
 ```text
-bandapp-backup.sqlite
-bandapp-media-backup/
+rehearsalhq-backup.sqlite
+rehearsalhq-media-backup/
 ```
 
 Stop the application:
@@ -357,15 +368,15 @@ Restore the SQLite database:
 
 ```bash
 docker compose -f compose.deploy.yaml run --rm --no-deps \
-  -v "${PWD}/bandapp-backup.sqlite:/backup.sqlite:ro" \
-  app node -e "const fs=require('node:fs'); fs.copyFileSync('/backup.sqlite','/app/data/bandapp.sqlite'); for(const suffix of ['-wal','-shm']) fs.rmSync('/app/data/bandapp.sqlite'+suffix,{force:true})"
+  -v "${PWD}/rehearsalhq-backup.sqlite:/backup.sqlite:ro" \
+  app node -e "const fs=require('node:fs'); fs.copyFileSync('/backup.sqlite','/app/data/rehearsalhq.sqlite'); for(const suffix of ['-wal','-shm']) fs.rmSync('/app/data/rehearsalhq.sqlite'+suffix,{force:true})"
 ```
 
 Restore uploaded media:
 
 ```bash
 docker compose -f compose.deploy.yaml run --rm --no-deps \
-  -v "${PWD}/bandapp-media-backup:/media-backup:ro" \
+  -v "${PWD}/rehearsalhq-media-backup:/media-backup:ro" \
   app node -e "require('node:fs').cpSync('/media-backup','/media',{recursive:true})"
 ```
 
@@ -383,12 +394,12 @@ docker compose -f compose.deploy.yaml start app
 - Restore backups using the same application release that created them.
 - Verify sign-in and audio playback after every restoration.
 
-### Updating BandApp
+### Updating RehearsalHQ
 
 Back up the database and media before updating. Then pull the latest published image and recreate the application container:
 
 ```bash
-docker pull ghcr.io/dcoffin88/bandapp:latest
+docker pull ghcr.io/dcoffin88/rehearsalhq:latest
 docker compose -f compose.deploy.yaml up -d --no-build --force-recreate --wait
 ```
 
@@ -413,11 +424,11 @@ Features include:
 
 Notifications are attempted after the underlying action succeeds.
 
-Email delivery is best effort. BandApp does not currently provide a durable background email job queue or timed reminder scheduler.
+Email delivery is best effort. RehearsalHQ does not currently provide a durable background email job queue or timed reminder scheduler.
 
 ### Authentication & Security
 
-BandApp uses:
+RehearsalHQ uses:
 
 - Salted scrypt password hashes
 - Opaque HttpOnly/SameSite session cookies
@@ -569,7 +580,7 @@ Use the command printed by the release script to push them atomically.
 A version tag pointing to a commit in `main` triggers CI and publishes the application image to:
 
 ```text
-ghcr.io/dcoffin88/bandapp
+ghcr.io/dcoffin88/rehearsalhq
 ```
 
 Supported architectures:
@@ -593,4 +604,4 @@ The release workflow does not automatically create a GitHub Release entry.
 
 ## License
 
-BandApp is open-source software licensed under the [GNU General Public License v3.0](LICENSE).
+RehearsalHQ is open-source software licensed under the [GNU General Public License v3.0](LICENSE).

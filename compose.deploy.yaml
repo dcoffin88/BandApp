@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/dcoffin88/bandapp:latest
+    image: ghcr.io/dcoffin88/rehearsalhq:latest
     user: "${PUID}:${PGID}"
     env_file:
       - .env

@@ -9,11 +9,11 @@ const target = path.resolve(
     path.join(
       dataDir,
       'backups',
-      `bandapp-${new Date().toISOString().replace(/[:.]/g, '-')}.sqlite`,
+      `rehearsalhq-${new Date().toISOString().replace(/[:.]/g, '-')}.sqlite`,
     ),
 );
 mkdirSync(path.dirname(target), { recursive: true });
-const db = new DatabaseSync(path.join(dataDir, 'bandapp.sqlite'), {
+const db = new DatabaseSync(path.join(dataDir, 'rehearsalhq.sqlite'), {
   readOnly: true,
 });
 try {
