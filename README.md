@@ -1,6 +1,6 @@
 <div align="center">
 <img src=".github/assets/rehearsalhq-header.svg" alt="RehearsalHQ" width="330" />
-<p><strong>Your band's home base.</strong></p>
+<p><strong>Your band's home base</strong></p>
 <p><sub>Recordings · Lyrics · Rehearsals · Collaboration</sub></p>
 </div>
 

@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { AlertCircle, Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { useBand } from '../context/BandContext.tsx';
+import { LegalNoticesModal } from './LegalNoticesModal.tsx';
+
+const REPOSITORY_URL = 'https://github.com/dcoffin88/RehearsalHQ';
 
 export const AuthView: React.FC = () => {
   const { band, login, appSettings } = useBand();
@@ -10,6 +13,7 @@ export const AuthView: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false),
     [loading, setLoading] = useState(false),
     [error, setError] = useState('');
+  const [isLegalNoticesOpen, setIsLegalNoticesOpen] = useState(false);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
@@ -35,7 +39,7 @@ export const AuthView: React.FC = () => {
             </div>
 
             <p className="text-sm font-medium text-zinc-300">
-              Your band's home base.
+              Your band's home base
             </p>
 
             <p className="text-xs text-zinc-500">
@@ -119,7 +123,29 @@ export const AuthView: React.FC = () => {
             Need an account or a password reset? Contact your Band Admin.
           </p>
         </form>
+        <p className="text-center text-xs text-zinc-500">
+          <a
+            href={REPOSITORY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition hover:text-amber-400"
+          >
+            Powered by RehearsalHQ
+          </a>
+          <span aria-hidden="true"> · </span>
+          <button
+            type="button"
+            onClick={() => setIsLegalNoticesOpen(true)}
+            className="transition hover:text-amber-400"
+          >
+            Legal notices
+          </button>
+        </p>
       </div>
+      <LegalNoticesModal
+        isOpen={isLegalNoticesOpen}
+        onClose={() => setIsLegalNoticesOpen(false)}
+      />
     </div>
   );
 };
