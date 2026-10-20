@@ -55,20 +55,44 @@ export function openDatabase(filename: string) {
     CREATE TABLE IF NOT EXISTS uploads (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, mime TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL);
   `);
 
-  const version = db.prepare('SELECT version FROM schema_version').get() as {
+  const versionRow = db.prepare('SELECT version FROM schema_version').get() as {
     version: number;
   };
-  if (version.version !== 1 && version.version !== 2) {
+  let schemaVersion = versionRow.version;
+  if (![1, 2, 3].includes(schemaVersion)) {
     throw new Error(
       'Unsupported database version; restore the matching application release.'
     );
   }
-  if (version.version === 1) {
+  if (schemaVersion === 1) {
     db.exec('BEGIN IMMEDIATE');
     try {
       db.exec(
         "ALTER TABLE uploads ADD COLUMN relative_path TEXT; UPDATE schema_version SET version=2; COMMIT;"
       );
+      schemaVersion = 2;
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  if (schemaVersion === 2) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const rows = db.prepare('SELECT id,profile FROM users').all() as Array<{
+        id: string;
+        profile: string;
+      }>;
+      const updateProfile = db.prepare('UPDATE users SET profile=? WHERE id=?');
+      for (const row of rows) {
+        const profile = JSON.parse(String(row.profile)) as Record<string, unknown>;
+        if (profile.role === 'editor') {
+          profile.role = 'member';
+          updateProfile.run(JSON.stringify(profile), row.id);
+        }
+      }
+      db.exec('UPDATE schema_version SET version=3; COMMIT;');
+      schemaVersion = 3;
     } catch (error) {
       db.exec('ROLLBACK');
       throw error;

@@ -15,7 +15,7 @@ RehearsalHQ provides a centralized, self-hosted environment for band collaborati
 - **Audio Management** - Upload, organize, and access recordings through an authenticated API.
 - **Lyrics & Rehearsals** - Collaborate on lyrics and manage rehearsal activities.
 - **Member Management** - Manage accounts, permissions, and invitations.
-- **Role-Based Access** - Admin, Editor, Member, and Guest permissions.
+- **Role-Based Access** - Admin, Member, and Guest permissions.
 - **Personalized Appearance** - Individual theme preferences.
 - **Email Notifications** - SMTP invitations, delivery tracking, and resend capabilities.
 - **Docker Deployment** - Prebuilt production image with persistent bind mounts, health checks, and resource limits.

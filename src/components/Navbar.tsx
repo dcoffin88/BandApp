@@ -61,10 +61,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     switch (role) {
       case 'admin':
         return { label: 'Admin', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
-      case 'editor':
-        return { label: 'Editor', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
       case 'member':
-        return { label: 'Band Member', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' };
+        return { label: 'Band Member', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
       case 'guest':
       default:
         return { label: 'Session / Guest', color: 'bg-zinc-700/50 text-zinc-300 border-zinc-600' };

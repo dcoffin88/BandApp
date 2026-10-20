@@ -37,10 +37,10 @@ import {
   X,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
-import { AppSettings, AuthSettings, BandMember, Role, UserStatus, MemberInvitationResult } from '../types/band.ts';
+import { AppSettings, AuthSettings, BandMember, Role, UserStatus, MemberInvitationResult, UserRolePermissions } from '../types/band.ts';
 import { ImageCropModal } from './ImageCropModal.tsx';
 import { SmtpSettingsView } from './SmtpSettingsView.tsx';
-import { DEFAULT_AVATAR } from '../shared/defaults.ts';
+import { DEFAULT_AVATAR, ROLE_PERMISSIONS } from '../shared/defaults.ts';
 import { useAppVersion } from '../hooks/useAppVersion.ts';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionModal } from './VersionModal.tsx';
@@ -48,6 +48,24 @@ import { VersionModal } from './VersionModal.tsx';
 interface AdminSettingsViewProps {
   initialTab?: 'users' | 'auth' | 'app' | 'smtp';
 }
+
+const ROLE_OPTIONS: Array<{ value: Role; label: string; matrixLabel: string }> = [
+  { value: 'admin', label: 'Admin', matrixLabel: 'Admin' },
+  { value: 'member', label: 'Member', matrixLabel: 'Member' },
+  { value: 'guest', label: 'Guest', matrixLabel: 'Guest' },
+];
+
+const PERMISSION_ROWS: Array<{
+  label: string;
+  permission: keyof UserRolePermissions;
+}> = [
+  { label: 'Upload Audio Demo Tracks', permission: 'canUploadDemo' },
+  { label: 'Upload Multi-Take Versions (v1, v2...)', permission: 'canUploadVersion' },
+  { label: 'Edit Lyrics Drafts & Chords', permission: 'canEditLyrics' },
+  { label: 'Schedule Practices & Rehearsals', permission: 'canSchedulePractice' },
+  { label: 'Delete Song Ideas from Vault', permission: 'canDeleteTracks' },
+  { label: 'Manage Member Roles & Security Settings', permission: 'canManageMembers' },
+];
 
 export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   initialTab = 'app',
@@ -675,10 +693,9 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                               onChange={e => updateUserRole(member.id, e.target.value as Role)}
                               className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                             >
-                              <option value="admin">Admin</option>
-                              <option value="editor">Editor</option>
-                              <option value="member">Member</option>
-                              <option value="guest">Guest</option>
+                              {ROLE_OPTIONS.map(role => (
+                                <option key={role.value} value={role.value}>{role.label}</option>
+                              ))}
                             </select>
                           ) : (
                             <span className="font-semibold uppercase tracking-wider text-[11px] px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
@@ -778,55 +795,29 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-400 font-mono uppercase tracking-wider">
                     <th className="py-2.5 px-3">Capability</th>
-                    <th className="py-2.5 px-3 text-center">Admin</th>
-                    <th className="py-2.5 px-3 text-center">Editor</th>
-                    <th className="py-2.5 px-3 text-center">Member</th>
-                    <th className="py-2.5 px-3 text-center">Guest / Session</th>
+                    {ROLE_OPTIONS.map(role => (
+                      <th key={role.value} className="py-2.5 px-3 text-center">{role.matrixLabel}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Upload Audio Demo Tracks</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Upload Multi-Take Versions (v1, v2...)</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Edit Lyrics Drafts &amp; Chords</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3 text-zinc-500 font-mono text-[10px]">Read-only</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Schedule Practices &amp; Rehearsals</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Delete Song Ideas from Vault</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Manage Member Roles &amp; Security Settings</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
+                  {PERMISSION_ROWS.map(row => (
+                    <tr key={row.permission}>
+                      <td className="py-2.5 px-3 font-medium">{row.label}</td>
+                      {ROLE_OPTIONS.map(role => {
+                        const allowed = ROLE_PERMISSIONS[role.value][row.permission];
+                        return (
+                          <td key={role.value} className="text-center py-2.5 px-3">
+                            {allowed ? (
+                              <Check className="w-4 h-4 text-emerald-400 mx-auto" />
+                            ) : (
+                              <X className="w-4 h-4 text-zinc-600 mx-auto" />
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1090,10 +1081,9 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   onChange={e => setNewUserRole(e.target.value as Role)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-medium"
                 >
-                  <option value="admin">Admin</option>
-                  <option value="editor">Editor</option>
-                  <option value="member">Member</option>
-                  <option value="guest">Guest</option>
+                  {ROLE_OPTIONS.map(role => (
+                    <option key={role.value} value={role.value}>{role.label}</option>
+                  ))}
                 </select>
               </div>
 

@@ -40,20 +40,12 @@ export const ROLE_PERMISSIONS: Record<Role, UserRolePermissions> = {
     canSchedulePractice: true,
     canManageMembers: true,
   },
-  editor: {
-    canUploadDemo: true,
-    canUploadVersion: true,
-    canEditLyrics: true,
-    canDeleteTracks: false,
-    canSchedulePractice: true,
-    canManageMembers: false,
-  },
   member: {
     canUploadDemo: true,
     canUploadVersion: true,
     canEditLyrics: true,
     canDeleteTracks: false,
-    canSchedulePractice: false,
+    canSchedulePractice: true,
     canManageMembers: false,
   },
   guest: {

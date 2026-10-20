@@ -284,7 +284,7 @@ test('appearance is personal, validated, persisted and cannot modify the band he
   try {
     const admin = await f.login();
     const originalHeader = f.store.read().appSettings.headerLogoUrl;
-    for (const role of ['member', 'editor', 'guest']) {
+    for (const role of ['member', 'guest']) {
       assert.equal(
         (
           await f.action(admin.cookie, 'member.add', {
@@ -374,7 +374,7 @@ test('appearance is personal, validated, persisted and cannot modify the band he
     );
     await f.restart();
     const member = await f.login('member@example.com');
-    const editor = await f.login('editor@example.com');
+    const guest = await f.login('guest@example.com');
     assert.equal(member.state.appSettings.customColor, '#3366cc');
     assert.equal(member.state.currentUser.appearanceSettings.radius, 'full');
     assert.equal(
@@ -385,17 +385,17 @@ test('appearance is personal, validated, persisted and cannot modify the band he
       ).status,
       200,
     );
-    const editorState = await (
-      await f.request('/api/state', undefined, editor.cookie)
+    const guestState = await (
+      await f.request('/api/state', undefined, guest.cookie)
     ).json();
     const adminState = await (
       await f.request('/api/state', undefined, admin.cookie)
     ).json();
-    assert.equal(editorState.appSettings.primaryColor, 'custom');
+    assert.equal(guestState.appSettings.primaryColor, 'custom');
     assert.equal(adminState.appSettings.primaryColor, 'purple');
     assert.equal(adminState.appSettings.appearance, 'system');
     assert.equal(
-      editorState.band.members.find(
+      guestState.band.members.find(
         (m: any) => m.id === member.state.currentUser.id,
       ).appearanceSettings,
       undefined,
@@ -448,6 +448,45 @@ test('existing accounts inherit the old shared appearance once when upgraded', a
     );
     await f.restart();
     assert.equal(f.store.members()[0].appearanceSettings!.primaryColor, 'teal');
+  } finally {
+    await f.close();
+  }
+});
+
+test('legacy Editor accounts migrate to Member with merged permissions', async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.login();
+    const created = await f.action(admin.cookie, 'member.add', {
+      name: 'Legacy Editor',
+      email: 'legacy-editor@example.com',
+      password,
+      role: 'member',
+      instrument: 'Guitar',
+    });
+    assert.equal(created.status, 200, await created.clone().text());
+    const { result } = await created.json();
+    const row = f.store.db
+      .prepare('SELECT profile FROM users WHERE id=?')
+      .get(result.memberId) as { profile: string };
+    const profile = JSON.parse(row.profile);
+    profile.role = 'editor';
+    f.store.db
+      .prepare('UPDATE users SET profile=? WHERE id=?')
+      .run(JSON.stringify(profile), result.memberId);
+    f.store.db.prepare('UPDATE schema_version SET version=2').run();
+
+    await f.restart();
+
+    const migrated = await f.login('legacy-editor@example.com');
+    assert.equal(migrated.state.currentUser.role, 'member');
+    assert.equal(migrated.state.permissions.canSchedulePractice, true);
+    assert.equal(
+      (f.store.db.prepare('SELECT version FROM schema_version').get() as {
+        version: number;
+      }).version,
+      3,
+    );
   } finally {
     await f.close();
   }
@@ -556,7 +595,7 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
   const f = await fixture();
   try {
     const admin = await f.login();
-    for (const role of ['member', 'guest', 'editor']) {
+    for (const role of ['member', 'guest']) {
       const response = await f.action(admin.cookie, 'member.add', {
         name: role,
         email: `${role}@example.com`,
@@ -566,6 +605,18 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       });
       assert.equal(response.status, 200, await response.clone().text());
     }
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.add', {
+          name: 'Removed Editor Role',
+          email: 'editor@example.com',
+          password,
+          role: 'editor',
+          instrument: 'Guitar',
+        })
+      ).status,
+      400,
+    );
     const member = await f.login('member@example.com'),
       guest = await f.login('guest@example.com');
     const branding = {
@@ -582,7 +633,7 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
         .status,
       200,
     );
-    for (const role of ['member', 'guest', 'editor']) {
+    for (const role of ['member', 'guest']) {
       const account = await f.login(`${role}@example.com`);
       assert.equal(
         (

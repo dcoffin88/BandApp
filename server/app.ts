@@ -38,7 +38,7 @@ const text = z.string().max(1e4);
 const short = z.string().trim().max(200);
 const required = short.min(1);
 const email = z.string().trim().toLowerCase().email().max(254);
-const roleSchema = z.enum(['admin', 'editor', 'member', 'guest']);
+const roleSchema = z.enum(['admin', 'member', 'guest']);
 const avatar = z
   .string()
   .max(5e5)
