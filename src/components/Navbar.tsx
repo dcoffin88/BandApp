@@ -136,11 +136,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Right Header Area: Version Badge & User Profile */}
           {/* <div className="flex items-center gap-2 sm:gap-3"> */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <VersionBadge
-              versionInfo={versionInfo}
-              isLoading={isCheckingVersion}
-              onClick={() => setIsVersionModalOpen(true)}
-            />
+            {currentUser.role === 'admin' && (
+              <VersionBadge
+                versionInfo={versionInfo}
+                isLoading={isCheckingVersion}
+                onClick={() => setIsVersionModalOpen(true)}
+              />
+            )}
 
             {/* User Profile, Settings, & Logout Dropdown */}
             <div className="relative">
@@ -293,13 +295,15 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Version & Release Details Modal */}
-      <VersionModal
-        isOpen={isVersionModalOpen}
-        onClose={() => setIsVersionModalOpen(false)}
-        versionInfo={versionInfo}
-        isLoading={isCheckingVersion}
-        onCheckUpdates={checkUpdates}
-      />
+      {currentUser.role === 'admin' && (
+        <VersionModal
+          isOpen={isVersionModalOpen}
+          onClose={() => setIsVersionModalOpen(false)}
+          versionInfo={versionInfo}
+          isLoading={isCheckingVersion}
+          onCheckUpdates={checkUpdates}
+        />
+      )}
     </header>
   );
 };
