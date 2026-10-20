@@ -22,6 +22,7 @@ import {
 } from './database.ts';
 import {
   DEFAULT_APPEARANCE,
+  appearanceFrom,
   ROLE_PERMISSIONS,
   DEFAULT_AVATAR,
   type SharedState,
@@ -109,7 +110,6 @@ const appearanceSchema = z
     customColor: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color, such as #3b82f6.'),
-    accentGlow: z.boolean(),
   })
   .partial()
   .strict();
@@ -119,6 +119,7 @@ const appSchema = z
     headerLogoUrl: avatar,
     headerLogoShape: z.enum(['circle', 'rounded', 'square']),
     headerSubtitle: short,
+    accentGlow: z.boolean(),
   })
   .partial()
   .strict();
@@ -534,6 +535,7 @@ export function createApplication(options: ApplicationOptions) {
         ...state.appSettings,
         ...DEFAULT_APPEARANCE,
         ...user.appearanceSettings,
+        accentGlow: state.appSettings.accentGlow,
       },
       smtpSettings: isAdmin
         ? { ...state.smtpSettings, password: '' }
@@ -885,11 +887,11 @@ export function createApplication(options: ApplicationOptions) {
             state.appSettings = { ...state.appSettings, ...appSchema.parse(p) };
             break;
           case 'appearance.update': {
-            const appearanceSettings = {
+            const appearanceSettings = appearanceFrom({
               ...DEFAULT_APPEARANCE,
               ...user.appearanceSettings,
               ...appearanceSchema.parse(p),
-            };
+            });
             if (
               appearanceSettings.primaryColor === 'custom' &&
               !appearanceSettings.customColor

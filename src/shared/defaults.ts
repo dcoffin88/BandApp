@@ -18,7 +18,6 @@ export const DEFAULT_APPEARANCE: UserAppearance = {
   radius: 'medium',
   primaryColor: 'amber',
   customColor: '#f59e0b',
-  accentGlow: true,
 };
 
 export function appearanceFrom(settings: UserAppearance): UserAppearance {
@@ -27,7 +26,6 @@ export function appearanceFrom(settings: UserAppearance): UserAppearance {
     radius: settings.radius ?? DEFAULT_APPEARANCE.radius,
     primaryColor: settings.primaryColor,
     customColor: settings.customColor ?? DEFAULT_APPEARANCE.customColor,
-    accentGlow: settings.accentGlow,
   };
 }
 

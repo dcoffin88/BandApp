@@ -148,8 +148,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const handleSaveAppSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
-    const { headerLogoUrl, headerLogoShape, headerSubtitle } = localAppSettings;
-    if (!await updateAppSettings({ headerLogoUrl, headerLogoShape, headerSubtitle })) return;
+    const { headerLogoUrl, headerLogoShape, headerSubtitle, accentGlow } = localAppSettings;
+    if (!await updateAppSettings({ headerLogoUrl, headerLogoShape, headerSubtitle, accentGlow })) return;
     setAppSettingsSaveSuccess(true);
     setTimeout(() => setAppSettingsSaveSuccess(false), 2500);
   };
@@ -410,10 +410,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                         : localAppSettings.headerLogoShape === 'square'
                         ? 'rounded-lg'
                         : 'rounded-2xl'
-                    }`}
+                    } ${localAppSettings.accentGlow ? 'theme-glow-accent' : ''}`}
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center shadow-lg shadow-amber-500/20 text-zinc-950 font-black">
+                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center shadow-lg shadow-amber-500/20 text-zinc-950 font-black ${localAppSettings.accentGlow ? 'theme-glow-accent' : ''}`}>
                     <RehearsalHQLogo className="w-6 h-6 text-zinc-950" />
                   </div>
                 )}
@@ -505,6 +505,29 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   />
                 </div>
               </div>
+            </div>
+            <div className="pt-3 border-t border-zinc-800">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localAppSettings.accentGlow}
+                  onChange={(e) =>
+                    setLocalAppSettings({
+                      ...localAppSettings,
+                      accentGlow: e.target.checked,
+                    })
+                  }
+                  className="rounded accent-amber-500 w-4 h-4"
+                />
+                <div>
+                  <p className="font-semibold text-zinc-200 text-xs">
+                    Enable Ambient Lighting &amp; Glow
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    Adds a glow around the band logo in the navigation header.
+                  </p>
+                </div>
+              </label>
             </div>
             {/* Save Button */}
             <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3 text-xs">

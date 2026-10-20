@@ -316,7 +316,6 @@ test('appearance is personal, validated, persisted and cannot modify the band he
         customColor: '#3366cc',
         appearance: 'light',
         radius: 'full',
-        accentGlow: false,
       };
       const saved = await f.action(
         account.cookie,
@@ -329,6 +328,14 @@ test('appearance is personal, validated, persisted and cannot modify the band he
       assert.equal(
         result.state.appSettings.customColor,
         appearance.customColor,
+      );
+      assert.equal(
+        (
+          await f.action(account.cookie, 'appearance.update', {
+            accentGlow: false,
+          })
+        ).status,
+        400,
       );
       assert.equal(
         (
@@ -385,6 +392,10 @@ test('appearance is personal, validated, persisted and cannot modify the band he
         .status,
       400,
     );
+    assert.equal(
+      (await f.action(admin.cookie, 'app.update', { accentGlow: false })).status,
+      200,
+    );
     await f.restart();
     const member = await f.login('member@example.com');
     const guest = await f.login('guest@example.com');
@@ -407,6 +418,7 @@ test('appearance is personal, validated, persisted and cannot modify the band he
     assert.equal(guestState.appSettings.primaryColor, 'custom');
     assert.equal(adminState.appSettings.primaryColor, 'purple');
     assert.equal(adminState.appSettings.appearance, 'system');
+    assert.equal(guestState.appSettings.accentGlow, false);
     assert.equal(
       guestState.band.members.find(
         (m: any) => m.id === member.state.currentUser.id,
@@ -450,7 +462,7 @@ test('existing accounts inherit the old shared appearance once when upgraded', a
       '#123456',
     );
     assert.equal(upgraded.currentUser.appearanceSettings.appearance, 'light');
-    assert.equal(upgraded.currentUser.appearanceSettings.accentGlow, false);
+    assert.equal(upgraded.appSettings.accentGlow, false);
     assert.equal(
       (
         await f.action(admin.cookie, 'appearance.update', {

@@ -465,32 +465,6 @@ export const ProfileSettingsView: React.FC = () => {
             onInvalidColorChange={setCustomColorInvalid}
           />
 
-          {/* Ambient Glow Toggle */}
-          <div className="pt-3 border-t border-zinc-800">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={localAppearance.accentGlow}
-                onChange={(e) =>
-                  setLocalAppearance({
-                    ...localAppearance,
-                    accentGlow: e.target.checked,
-                  })
-                }
-                className="rounded accent-amber-500 w-4 h-4"
-              />
-              <div>
-                <p className="font-semibold text-zinc-200 text-xs">
-                  Enable Ambient Lighting &amp; Glow
-                </p>
-                <p className="text-[11px] text-zinc-500">
-                  Adds glowing accents to active playback, waveforms, and
-                  navigation badges.
-                </p>
-              </div>
-            </label>
-          </div>
-
           {/* Save Button */}
           <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3 text-xs">
             {appearanceSaveSuccess && (

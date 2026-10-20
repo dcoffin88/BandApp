@@ -178,7 +178,9 @@ export function openDatabase(filename: string) {
   function saveUser(user: BandMember, passwordHash?: string): void {
     const { password: _password, ...profile } = {
       ...user,
-      appearanceSettings: user.appearanceSettings ?? { ...DEFAULT_APPEARANCE },
+      appearanceSettings: appearanceFrom(
+        user.appearanceSettings ?? DEFAULT_APPEARANCE,
+      ),
     };
     if (passwordHash) {
       db.prepare(

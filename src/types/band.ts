@@ -158,13 +158,13 @@ export interface UserAppearance {
   radius?: 'none' | 'small' | 'medium' | 'full';
   primaryColor: ThemeColor;
   customColor?: string;
-  accentGlow: boolean;
 }
 
 export interface AppSettings extends UserAppearance {
   headerLogoUrl: string;
   headerLogoShape: 'circle' | 'rounded' | 'square';
   headerSubtitle: string;
+  accentGlow: boolean;
 }
 
 export interface SmtpNotificationTriggers {
