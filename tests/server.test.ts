@@ -910,6 +910,23 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       ).status,
       200,
     );
+    const practiceId = f.store.read().practices[0].id;
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'practice.update', {
+          practiceId,
+          title: 'Full Band Practice',
+          date: '2026-12-02',
+          startTime: '18:30',
+          endTime: '20:30',
+          location: 'Studio B',
+          setlistSongIds: [song.id],
+          goals: ['Run the full arrangement'],
+          notes: 'Bring ear protection',
+        })
+      ).status,
+      200,
+    );
     assert.equal(
       (
         await f.action(admin.cookie, 'member.profile', {
@@ -949,6 +966,9 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     assert.equal(state.songs[0].versions[0].uploadedBy.name, 'Maestro');
     assert.equal(state.songs[0].comments[0].userName, 'Maestro');
     assert.equal(state.practices.length, 1);
+    assert.equal(state.practices[0].title, 'Full Band Practice');
+    assert.equal(state.practices[0].location, 'Studio B');
+    assert.deepEqual(state.practices[0].goals, ['Run the full arrangement']);
     assert.equal(state.practices[0].createdBy, 'The Conductor');
     assert.equal(state.practices[0].rsvps[0].userName, 'Maestro');
     assert.equal(state.smtpSettings.password, '');

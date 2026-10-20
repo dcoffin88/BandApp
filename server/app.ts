@@ -1174,6 +1174,22 @@ export function createApplication(options: ApplicationOptions) {
             };
             break;
           }
+          case 'practice.update': {
+            if (!permissions.canSchedulePractice) {
+              fail(403, 'Scheduling permission required.');
+            }
+            const target = practice();
+            const data = practiceSchema.parse(p);
+            if (data.endTime <= data.startTime) {
+              fail(400, 'Practice must end after it starts.');
+            }
+            Object.assign(target, data);
+            event = {
+              type: 'practice_schedule',
+              text: `${memberDisplayName(user)} updated ${data.title} on ${data.date}.`,
+            };
+            break;
+          }
           case 'practice.rsvp': {
             const target = practice();
             const status = z

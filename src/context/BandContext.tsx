@@ -115,6 +115,10 @@ interface BandContextType {
   addPracticeSession: (
     session: Omit<PracticeSession, 'id' | 'createdAt' | 'createdBy' | 'rsvps'>,
   ) => Promise<boolean>;
+  updatePracticeSession: (
+    practiceId: string,
+    session: Omit<PracticeSession, 'id' | 'createdAt' | 'createdBy' | 'rsvps'>,
+  ) => Promise<boolean>;
   updateRsvp: (
     practiceId: string,
     status: 'attending' | 'tentative' | 'declined',
@@ -471,6 +475,8 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     setActiveVersion: (songId, versionId) =>
       save('song.active', { songId, versionId }),
     addPracticeSession: (session) => save('practice.add', session),
+    updatePracticeSession: (practiceId, session) =>
+      save('practice.update', { practiceId, ...session }),
     updateRsvp: (practiceId, status) =>
       save('practice.rsvp', { practiceId, status }),
     deletePracticeSession: (practiceId) =>
