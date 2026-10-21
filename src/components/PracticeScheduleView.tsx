@@ -18,6 +18,7 @@ import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { PracticeSession, SongIdea } from '../types/band.ts';
 import { formatClockTime } from '../shared/time.ts';
+import { AddToCalendarMenu } from './AddToCalendarMenu.tsx';
 
 export const PracticeScheduleView: React.FC = () => {
   const { practices, songs, currentUser, permissions, appSettings, addPracticeSession, updatePracticeSession, updateRsvp, deletePracticeSession } = useBand();
@@ -201,6 +202,7 @@ export const PracticeScheduleView: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-1 self-end sm:self-auto">
+                    <AddToCalendarMenu practice={practice} />
                     {canSchedule && (
                       <button
                         type="button"

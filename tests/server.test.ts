@@ -13,6 +13,12 @@ import {
 import { verifyPassword } from '../server/database.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
 import { formatClockTime } from '../src/shared/time.ts';
+import {
+  googleCalendarUrl,
+  outlookCalendarUrl,
+  practiceCalendarIcs,
+  yahooCalendarUrl,
+} from '../src/shared/calendar.ts';
 
 const password = 'Correct-Horse-123!';
 
@@ -32,6 +38,41 @@ test('clock times support 12-hour and 24-hour display', () => {
   assert.equal(formatClockTime('00:05', '12'), '12:05 AM');
   assert.equal(formatClockTime('15:30', '12'), '3:30 PM');
   assert.equal(formatClockTime('15:30', '24'), '15:30');
+});
+
+test('practice calendar links preserve local event times and details', () => {
+  const practice = {
+    id: 'practice-1',
+    title: 'Full Band Practice',
+    date: '2026-12-02',
+    startTime: '18:30',
+    endTime: '20:30',
+    location: 'Studio B',
+    notes: 'Bring ear protection',
+    goals: ['Run intro, chorus', 'Tighten ending'],
+  };
+  const google = new URL(googleCalendarUrl(practice));
+  assert.equal(google.searchParams.get('text'), practice.title);
+  assert.equal(
+    google.searchParams.get('dates'),
+    '20261202T183000/20261202T203000',
+  );
+  assert.equal(google.searchParams.get('location'), practice.location);
+  const outlook = new URL(outlookCalendarUrl(practice));
+  assert.equal(outlook.searchParams.get('subject'), practice.title);
+  assert.equal(outlook.searchParams.get('startdt'), '2026-12-02T18:30:00');
+  const yahoo = new URL(yahooCalendarUrl(practice));
+  assert.equal(yahoo.searchParams.get('title'), practice.title);
+  assert.equal(yahoo.searchParams.get('st'), '20261202T183000');
+
+  const ics = practiceCalendarIcs(
+    practice,
+    new Date('2026-10-21T12:00:00.000Z'),
+  );
+  assert.match(ics, /DTSTART:20261202T183000\r\n/);
+  assert.match(ics, /DTEND:20261202T203000\r\n/);
+  assert.match(ics, /LOCATION:Studio B\r\n/);
+  assert.match(ics, /Run intro\\, chorus/);
 });
 
 async function localSmtp() {
