@@ -12,6 +12,7 @@ import {
 import { useBand } from '../context/BandContext.tsx';
 import { SongIdea } from '../types/band.ts';
 import { SongCard } from './SongCard.tsx';
+import { formatClockTime } from '../shared/time.ts';
 
 interface SongListMainViewProps {
   onOpenUploadModal: () => void;
@@ -24,7 +25,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
   onOpenLyricsModal,
   onOpenNewVersionModal,
 }) => {
-  const { songs, permissions, practices } = useBand();
+  const { songs, permissions, practices, appSettings } = useBand();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -75,7 +76,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
             <div className="min-w-0">
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Next Rehearsal</p>
               <p className="text-sm font-bold text-white truncate">
-                {new Date(nextPractice.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {nextPractice.startTime}
+                {new Date(nextPractice.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {formatClockTime(nextPractice.startTime, appSettings.timeFormat)}
               </p>
             </div>
           </div>
@@ -179,7 +180,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
             </button>
           ) : (
             <div className="p-3 text-xs text-zinc-500 italic">
-              Guest role: Uploading demos is reserved for Editors and Band Admins.
+              Guest role: Uploading demos is reserved for Admins and Members.
             </div>
           )}
         </div>

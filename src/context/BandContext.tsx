@@ -19,6 +19,7 @@ import type {
   Role,
   SmtpSettings,
   SongIdea,
+  SongMetadataUpdate,
   UserRolePermissions,
   UserStatus,
   AddMemberResult,
@@ -105,6 +106,10 @@ interface BandContextType {
     draft: string,
     chordsSheet?: string,
   ) => Promise<boolean>;
+  updateSongMetadata: (
+    songId: string,
+    updates: SongMetadataUpdate,
+  ) => Promise<boolean>;
   addComment: (
     songId: string,
     text: string,
@@ -113,7 +118,27 @@ interface BandContextType {
   deleteSong: (songId: string) => Promise<boolean>;
   setActiveVersion: (songId: string, versionId: string) => Promise<boolean>;
   addPracticeSession: (
-    session: Omit<PracticeSession, 'id' | 'createdAt' | 'createdBy' | 'rsvps'>,
+    session: Omit<
+      PracticeSession,
+      | 'id'
+      | 'createdAt'
+      | 'createdBy'
+      | 'rsvps'
+      | 'reminderScheduleKey'
+      | 'reminderDeliveryKeys'
+    >,
+  ) => Promise<boolean>;
+  updatePracticeSession: (
+    practiceId: string,
+    session: Omit<
+      PracticeSession,
+      | 'id'
+      | 'createdAt'
+      | 'createdBy'
+      | 'rsvps'
+      | 'reminderScheduleKey'
+      | 'reminderDeliveryKeys'
+    >,
   ) => Promise<boolean>;
   updateRsvp: (
     practiceId: string,
@@ -465,12 +490,16 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     addSongVersion,
     updateLyrics: (songId, draft, chordsSheet) =>
       save('song.lyrics', { songId, draft, chordsSheet }),
+    updateSongMetadata: (songId, updates) =>
+      save('song.update', { songId, ...updates }),
     addComment: (songId, text, timestampSeconds) =>
       save('song.comment', { songId, text, timestampSeconds }),
     deleteSong: (songId) => save('song.delete', { songId }),
     setActiveVersion: (songId, versionId) =>
       save('song.active', { songId, versionId }),
     addPracticeSession: (session) => save('practice.add', session),
+    updatePracticeSession: (practiceId, session) =>
+      save('practice.update', { practiceId, ...session }),
     updateRsvp: (practiceId, status) =>
       save('practice.rsvp', { practiceId, status }),
     deletePracticeSession: (practiceId) =>

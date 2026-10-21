@@ -4,6 +4,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Check,
+  Clock3,
   Crop,
   Crown,
   Database,
@@ -37,17 +38,37 @@ import {
   X,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
-import { AppSettings, AuthSettings, BandMember, Role, UserStatus, MemberInvitationResult } from '../types/band.ts';
+import { AppSettings, AuthSettings, BandMember, Role, UserStatus, MemberInvitationResult, UserRolePermissions } from '../types/band.ts';
 import { ImageCropModal } from './ImageCropModal.tsx';
 import { SmtpSettingsView } from './SmtpSettingsView.tsx';
-import { DEFAULT_AVATAR } from '../shared/defaults.ts';
+import { DEFAULT_AVATAR, ROLE_PERMISSIONS } from '../shared/defaults.ts';
 import { useAppVersion } from '../hooks/useAppVersion.ts';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionModal } from './VersionModal.tsx';
+import { memberDisplayName } from '../shared/member.ts';
+import { timeFormatOptions } from '../shared/time.ts';
 
 interface AdminSettingsViewProps {
   initialTab?: 'users' | 'auth' | 'app' | 'smtp';
 }
+
+const ROLE_OPTIONS: Array<{ value: Role; label: string; matrixLabel: string }> = [
+  { value: 'admin', label: 'Admin', matrixLabel: 'Admin' },
+  { value: 'member', label: 'Member', matrixLabel: 'Member' },
+  { value: 'guest', label: 'Guest', matrixLabel: 'Guest' },
+];
+
+const PERMISSION_ROWS: Array<{
+  label: string;
+  permission: keyof UserRolePermissions;
+}> = [
+  { label: 'Upload Audio Demo Tracks', permission: 'canUploadDemo' },
+  { label: 'Upload Multi-Take Versions (v1, v2...)', permission: 'canUploadVersion' },
+  { label: 'Edit Lyrics Drafts & Chords', permission: 'canEditLyrics' },
+  { label: 'Schedule Practices & Rehearsals', permission: 'canSchedulePractice' },
+  { label: 'Delete Song Ideas from Vault', permission: 'canDeleteTracks' },
+  { label: 'Manage Member Roles & Security Settings', permission: 'canManageMembers' },
+];
 
 export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   initialTab = 'app',
@@ -93,6 +114,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [localAppSettings, setLocalAppSettings] = useState<AppSettings>(appSettings);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [appSettingsSaveSuccess, setAppSettingsSaveSuccess] = useState(false);
+  const [timeSettingsSaveSuccess, setTimeSettingsSaveSuccess] = useState(false);
 
   // User Management State
   const [userSearch, setUserSearch] = useState('');
@@ -129,10 +151,17 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const handleSaveAppSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
-    const { headerLogoUrl, headerLogoShape, headerSubtitle } = localAppSettings;
-    if (!await updateAppSettings({ headerLogoUrl, headerLogoShape, headerSubtitle })) return;
+    const { headerLogoUrl, headerLogoShape, headerSubtitle, accentGlow } = localAppSettings;
+    if (!await updateAppSettings({ headerLogoUrl, headerLogoShape, headerSubtitle, accentGlow })) return;
     setAppSettingsSaveSuccess(true);
     setTimeout(() => setAppSettingsSaveSuccess(false), 2500);
+  };
+
+  const handleSaveTimeSettings = async () => {
+    if (!isAdmin) return;
+    if (!(await updateAppSettings({ timeFormat: localAppSettings.timeFormat }))) return;
+    setTimeSettingsSaveSuccess(true);
+    setTimeout(() => setTimeSettingsSaveSuccess(false), 2500);
   };
 
   const handleSaveAuthSettings = async (e: React.FormEvent) => {
@@ -188,6 +217,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
   const filteredMembers = band.members.filter(m =>
     m.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+    memberDisplayName(m).toLowerCase().includes(userSearch.toLowerCase()) ||
     m.email.toLowerCase().includes(userSearch.toLowerCase()) ||
     m.instrument.toLowerCase().includes(userSearch.toLowerCase()) ||
     m.role.toLowerCase().includes(userSearch.toLowerCase())
@@ -390,10 +420,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                         : localAppSettings.headerLogoShape === 'square'
                         ? 'rounded-lg'
                         : 'rounded-2xl'
-                    }`}
+                    } ${localAppSettings.accentGlow ? 'theme-glow-accent' : ''}`}
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center shadow-lg shadow-amber-500/20 text-zinc-950 font-black">
+                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center shadow-lg shadow-amber-500/20 text-zinc-950 font-black ${localAppSettings.accentGlow ? 'theme-glow-accent' : ''}`}>
                     <RehearsalHQLogo className="w-6 h-6 text-zinc-950" />
                   </div>
                 )}
@@ -486,6 +516,29 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </div>
               </div>
             </div>
+            <div className="pt-3 border-t border-zinc-800">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localAppSettings.accentGlow}
+                  onChange={(e) =>
+                    setLocalAppSettings({
+                      ...localAppSettings,
+                      accentGlow: e.target.checked,
+                    })
+                  }
+                  className="rounded accent-amber-500 w-4 h-4"
+                />
+                <div>
+                  <p className="font-semibold text-zinc-200 text-xs">
+                    Enable Ambient Lighting &amp; Glow
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    Adds a glow around the band logo in the navigation header.
+                  </p>
+                </div>
+              </label>
+            </div>
             {/* Save Button */}
             <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3 text-xs">
               {appSettingsSaveSuccess && (
@@ -507,6 +560,57 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           </div>
 
           )}
+
+          <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-zinc-800">
+              <Clock3 className="w-5 h-5 text-amber-400" />
+              <h3 className="font-bold text-white text-base">Time Display</h3>
+            </div>
+            <div>
+              <p className="text-xs text-zinc-400 mb-3">
+                Choose how clock times appear throughout RehearsalHQ.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { id: '12' as const, label: '12 hour', example: '3:30 PM' },
+                  { id: '24' as const, label: '24 hour', example: '15:30' },
+                ].map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setLocalAppSettings({
+                      ...localAppSettings,
+                      timeFormat: option.id,
+                    })}
+                    className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition ${
+                      localAppSettings.timeFormat === option.id
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span className="text-xs font-semibold">{option.label}</span>
+                    <span className="font-mono text-xs opacity-80">{option.example}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3 text-xs">
+              {timeSettingsSaveSuccess && (
+                <span className="text-emerald-400 font-medium flex items-center gap-1">
+                  <Check className="w-4 h-4" />
+                  <span>Time display saved!</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleSaveTimeSettings}
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save Time Display</span>
+              </button>
+            </div>
+          </div>
 
           {/* Application Version & GitHub Release Tracking */}
           <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-4">
@@ -640,6 +744,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
                   {filteredMembers.map(member => {
                     const isSelf = member.id === currentUser.id;
+                    const displayName = memberDisplayName(member);
 
                     return (
                       <tr key={member.id} className="hover:bg-zinc-800/40 transition">
@@ -647,12 +752,12 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                           <div className="flex items-center gap-3">
                             <img
                               src={member.avatar}
-                              alt={member.name}
+                              alt={displayName}
                               className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-700"
                             />
                             <div>
                               <div className="flex items-center gap-1.5">
-                                <span className="font-bold text-white">{member.name}</span>
+                                <span className="font-bold text-white">{displayName}</span>
                                 {isSelf && (
                                   <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
                                     YOU
@@ -675,10 +780,9 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                               onChange={e => updateUserRole(member.id, e.target.value as Role)}
                               className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                             >
-                              <option value="admin">Admin</option>
-                              <option value="editor">Editor</option>
-                              <option value="member">Member</option>
-                              <option value="guest">Guest</option>
+                              {ROLE_OPTIONS.map(role => (
+                                <option key={role.value} value={role.value}>{role.label}</option>
+                              ))}
                             </select>
                           ) : (
                             <span className="font-semibold uppercase tracking-wider text-[11px] px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
@@ -726,7 +830,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                                 type="button"
                                 onClick={() => handleResendInvite(member)}
                                 disabled={invitingUserId !== null}
-                                aria-label={`Resend invitation to ${member.name}`}
+                                aria-label={`Resend invitation to ${displayName}`}
                                 title="Send / resend invitation email"
                                 className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition disabled:opacity-50"
                               >
@@ -746,7 +850,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                             {isAdmin && !isSelf && (
                               <button
                                 onClick={() => {
-                                  if (confirm(`Are you sure you want to delete user account "${member.name}"?`)) {
+                                  if (confirm(`Are you sure you want to delete user account "${displayName}"?`)) {
                                     deleteUserAccount(member.id);
                                   }
                                 }}
@@ -778,55 +882,29 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-400 font-mono uppercase tracking-wider">
                     <th className="py-2.5 px-3">Capability</th>
-                    <th className="py-2.5 px-3 text-center">Admin</th>
-                    <th className="py-2.5 px-3 text-center">Editor</th>
-                    <th className="py-2.5 px-3 text-center">Member</th>
-                    <th className="py-2.5 px-3 text-center">Guest / Session</th>
+                    {ROLE_OPTIONS.map(role => (
+                      <th key={role.value} className="py-2.5 px-3 text-center">{role.matrixLabel}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Upload Audio Demo Tracks</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Upload Multi-Take Versions (v1, v2...)</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Edit Lyrics Drafts &amp; Chords</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3 text-zinc-500 font-mono text-[10px]">Read-only</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Schedule Practices &amp; Rehearsals</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Delete Song Ideas from Vault</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 px-3 font-medium">Manage Member Roles &amp; Security Settings</td>
-                    <td className="text-center py-2.5 px-3"><Check className="w-4 h-4 text-emerald-400 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                    <td className="text-center py-2.5 px-3"><X className="w-4 h-4 text-zinc-600 mx-auto" /></td>
-                  </tr>
+                  {PERMISSION_ROWS.map(row => (
+                    <tr key={row.permission}>
+                      <td className="py-2.5 px-3 font-medium">{row.label}</td>
+                      {ROLE_OPTIONS.map(role => {
+                        const allowed = ROLE_PERMISSIONS[role.value][row.permission];
+                        return (
+                          <td key={role.value} className="text-center py-2.5 px-3">
+                            {allowed ? (
+                              <Check className="w-4 h-4 text-emerald-400 mx-auto" />
+                            ) : (
+                              <X className="w-4 h-4 text-zinc-600 mx-auto" />
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -998,7 +1076,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-500 self-end sm:self-auto">
                     <span>IP: {log.ipAddress}</span>
                     <span>•</span>
-                    <span>{new Date(log.timestamp).toLocaleString()}</span>
+                    <span>{new Date(log.timestamp).toLocaleString(undefined, timeFormatOptions(appSettings.timeFormat))}</span>
                   </div>
                 </div>
               ))}
@@ -1090,10 +1168,9 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   onChange={e => setNewUserRole(e.target.value as Role)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-medium"
                 >
-                  <option value="admin">Admin</option>
-                  <option value="editor">Editor</option>
-                  <option value="member">Member</option>
-                  <option value="guest">Guest</option>
+                  {ROLE_OPTIONS.map(role => (
+                    <option key={role.value} value={role.value}>{role.label}</option>
+                  ))}
                 </select>
               </div>
 

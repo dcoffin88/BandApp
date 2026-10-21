@@ -38,7 +38,7 @@ if (
   uploadLimitMb > 500
 )
   throw new Error('MAX_UPLOAD_MB must be between 1 and 500.');
-const { app, store, errorHandler } = createApplication({
+const { app, store, errorHandler, sendPracticeReminders } = createApplication({
   development: !production,
   mediaDirectory: process.env.MEDIA_DIR || './media',
   databasePath: path.resolve(
@@ -89,12 +89,23 @@ async function start() {
   const server = app.listen(port, '0.0.0.0', () =>
     console.log('RehearsalHQ listening on port ' + port),
   );
+  const runPracticeReminders = () =>
+    void sendPracticeReminders().catch((error) =>
+      console.error('Practice reminder check failed:', error),
+    );
+  runPracticeReminders();
+  const practiceReminderTimer = setInterval(
+    runPracticeReminders,
+    15 * 60 * 1000,
+  );
+  practiceReminderTimer.unref();
   server.requestTimeout = 120_000;
   server.headersTimeout = 30_000;
   let stopping = false;
   const stop = () => {
     if (stopping) return;
     stopping = true;
+    clearInterval(practiceReminderTimer);
     console.log('Stopping RehearsalHQ...');
     const deadline = setTimeout(() => process.exit(1), 15_000);
     deadline.unref();

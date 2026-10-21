@@ -7,6 +7,7 @@ import {
   HelpCircle,
   ListMusic,
   MapPin,
+  Pencil,
   Play,
   Plus,
   Trash2,
@@ -16,12 +17,15 @@ import {
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { PracticeSession, SongIdea } from '../types/band.ts';
+import { formatClockTime } from '../shared/time.ts';
+import { AddToCalendarMenu } from './AddToCalendarMenu.tsx';
 
 export const PracticeScheduleView: React.FC = () => {
-  const { practices, songs, currentUser, permissions, addPracticeSession, updateRsvp, deletePracticeSession } = useBand();
+  const { practices, songs, currentUser, permissions, appSettings, addPracticeSession, updatePracticeSession, updateRsvp, deletePracticeSession } = useBand();
   const { playSong } = useAudioPlayer();
 
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isPracticeModalOpen, setIsPracticeModalOpen] = useState(false);
+  const [editingPracticeId, setEditingPracticeId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('19:00');
@@ -31,8 +35,51 @@ export const PracticeScheduleView: React.FC = () => {
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
   const [goalInput, setGoalInput] = useState('');
   const [goals, setGoals] = useState<string[]>([]);
+  const [eventReminderOneDay, setEventReminderOneDay] = useState(true);
+  const [eventReminderFourHours, setEventReminderFourHours] = useState(true);
 
   const canSchedule = permissions.canSchedulePractice;
+
+  const resetPracticeForm = () => {
+    setEditingPracticeId(null);
+    setTitle('');
+    setDate('');
+    setStartTime('19:00');
+    setEndTime('22:00');
+    setLocation('');
+    setNotes('');
+    setSelectedSongIds([]);
+    setGoalInput('');
+    setGoals([]);
+    setEventReminderOneDay(true);
+    setEventReminderFourHours(true);
+  };
+
+  const openCreatePractice = () => {
+    resetPracticeForm();
+    setIsPracticeModalOpen(true);
+  };
+
+  const openEditPractice = (practice: PracticeSession) => {
+    setEditingPracticeId(practice.id);
+    setTitle(practice.title);
+    setDate(practice.date);
+    setStartTime(practice.startTime);
+    setEndTime(practice.endTime);
+    setLocation(practice.location);
+    setNotes(practice.notes);
+    setSelectedSongIds([...practice.setlistSongIds]);
+    setGoalInput('');
+    setGoals([...practice.goals]);
+    setEventReminderOneDay(practice.eventReminderOneDay ?? true);
+    setEventReminderFourHours(practice.eventReminderFourHours ?? true);
+    setIsPracticeModalOpen(true);
+  };
+
+  const closePracticeModal = () => {
+    setIsPracticeModalOpen(false);
+    resetPracticeForm();
+  };
 
   const handleToggleSongInSetlist = (songId: string) => {
     setSelectedSongIds(prev =>
@@ -51,11 +98,11 @@ export const PracticeScheduleView: React.FC = () => {
     setGoals(goals.filter((_, i) => i !== index));
   };
 
-  const handleCreatePractice = async (e: React.FormEvent) => {
+  const handleSavePractice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !date) return;
 
-    const saved = await addPracticeSession({
+    const session = {
       title: title.trim(),
       date,
       startTime,
@@ -64,16 +111,15 @@ export const PracticeScheduleView: React.FC = () => {
       setlistSongIds: selectedSongIds,
       goals,
       notes: notes.trim(),
-    });
+      eventReminderOneDay,
+      eventReminderFourHours,
+    };
+    const saved = editingPracticeId
+      ? await updatePracticeSession(editingPracticeId, session)
+      : await addPracticeSession(session);
 
     if (!saved) return;
-    setIsAddModalOpen(false);
-    setTitle('');
-    setDate('');
-    setLocation('');
-    setNotes('');
-    setSelectedSongIds([]);
-    setGoals([]);
+    closePracticeModal();
   };
 
   return (
@@ -94,7 +140,7 @@ export const PracticeScheduleView: React.FC = () => {
 
         {canSchedule && (
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={openCreatePractice}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs sm:text-sm shadow-md transition self-start sm:self-auto"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
@@ -145,7 +191,7 @@ export const PracticeScheduleView: React.FC = () => {
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-zinc-500" />
                         <span>
-                          {practice.startTime} - {practice.endTime}
+                          {formatClockTime(practice.startTime, appSettings.timeFormat)} - {formatClockTime(practice.endTime, appSettings.timeFormat)}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -155,20 +201,33 @@ export const PracticeScheduleView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Admin action: delete session */}
-                  {permissions.canManageMembers && (
-                    <button
-                      onClick={() => {
-                        if (confirm(`Remove practice session "${practice.title}"?`)) {
-                          deletePracticeSession(practice.id);
-                        }
-                      }}
-                      className="text-zinc-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition self-end sm:self-auto"
-                      title="Delete practice session"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1 self-end sm:self-auto">
+                    <AddToCalendarMenu practice={practice} />
+                    {canSchedule && (
+                      <button
+                        type="button"
+                        onClick={() => openEditPractice(practice)}
+                        className="text-zinc-400 hover:text-amber-300 p-1.5 rounded-lg hover:bg-amber-500/10 transition"
+                        title="Edit practice session"
+                        aria-label={`Edit ${practice.title}`}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                    {permissions.canManageMembers && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Remove practice session "${practice.title}"?`)) {
+                            deletePracticeSession(practice.id);
+                          }
+                        }}
+                        className="text-zinc-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition"
+                        title="Delete practice session"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Goals & Notes */}
@@ -294,23 +353,25 @@ export const PracticeScheduleView: React.FC = () => {
       </div>
 
       {/* Schedule Practice Modal */}
-      {isAddModalOpen && (
+      {isPracticeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
               <div className="flex items-center gap-2.5">
                 <Calendar className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-white text-lg">Schedule Rehearsal</h3>
+                <h3 className="font-bold text-white text-lg">
+                  {editingPracticeId ? 'Edit Rehearsal' : 'Schedule Rehearsal'}
+                </h3>
               </div>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={closePracticeModal}
                 className="p-1 text-zinc-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreatePractice} className="p-6 overflow-y-auto space-y-4 text-xs">
+            <form onSubmit={handleSavePractice} className="p-6 overflow-y-auto space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
                   Rehearsal Title *
@@ -374,6 +435,35 @@ export const PracticeScheduleView: React.FC = () => {
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white"
                 />
               </div>
+
+              <fieldset className="space-y-2">
+                <legend className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
+                  Event Reminders
+                </legend>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label className="flex items-center gap-2.5 rounded-lg border border-zinc-800 bg-zinc-950 p-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={eventReminderOneDay}
+                      onChange={(event) => setEventReminderOneDay(event.target.checked)}
+                      className="w-4 h-4 rounded accent-amber-500"
+                    />
+                    <span className="font-semibold text-zinc-300">1 day before</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 rounded-lg border border-zinc-800 bg-zinc-950 p-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={eventReminderFourHours}
+                      onChange={(event) => setEventReminderFourHours(event.target.checked)}
+                      className="w-4 h-4 rounded accent-amber-500"
+                    />
+                    <span className="font-semibold text-zinc-300">4 hours before</span>
+                  </label>
+                </div>
+                <p className="text-[11px] text-zinc-500">
+                  Sent only to active members who RSVP Going.
+                </p>
+              </fieldset>
 
               {/* Setlist selection */}
               <div>
@@ -446,7 +536,7 @@ export const PracticeScheduleView: React.FC = () => {
               <div className="pt-3 border-t border-zinc-800 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={closePracticeModal}
                   className="px-4 py-2 text-zinc-400 hover:text-white"
                 >
                   Cancel
@@ -456,7 +546,7 @@ export const PracticeScheduleView: React.FC = () => {
                   disabled={!title.trim() || !date}
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold"
                 >
-                  Save Practice
+                  {editingPracticeId ? 'Update Practice' : 'Save Practice'}
                 </button>
               </div>
             </form>

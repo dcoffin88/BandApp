@@ -1,43 +1,38 @@
 name: rehearsalhq
+
 services:
   app:
-    build: .
-    image: rehearsalhq:local
+    image: ghcr.io/dcoffin88/rehearsalhq:latest
+    container_name: rehearsalhq
     restart: unless-stopped
     init: true
+    user: "${PUID:-1000}:${PGID:-1000}"
+    env_file:
+      - .env
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-3000}:3000"
+      - "${APP_PORT:-3000}:3000"
     environment:
-      NODE_ENV: production
-      PORT: "3000"
-      DATA_DIR: /app/data
-      MEDIA_DIR: /media
       APP_URL: ${APP_URL:?Set APP_URL in .env}
       APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env}
-      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
-      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:?Set INITIAL_ADMIN_EMAIL in .env}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:?Set INITIAL_ADMIN_PASSWORD in .env}
       INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-Band Admin}
       INITIAL_BAND_NAME: ${INITIAL_BAND_NAME:-RehearsalHQ}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      TZ: ${TZ:-UTC}
     volumes:
-      - rehearsalhq_data:/app/data
-      - ${MEDIA_MOUNT:-rehearsalhq_media}:/media
+      - ./tmp:/tmp
+      - ./data:/app/data
+      - ./media:/media
     read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
-    pids_limit: 128
-    mem_limit: 768m
     stop_grace_period: 20s
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-volumes:
-  rehearsalhq_data:
-  rehearsalhq_media:

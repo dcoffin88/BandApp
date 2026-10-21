@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { SongIdea } from '../types/band.ts';
+import { memberDisplayName } from '../shared/member.ts';
 
 interface LyricsModalProps {
   song: SongIdea | null;
@@ -66,7 +67,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
   };
 
   const handleDownloadText = () => {
-    const textToSave = `=== ${song.title} - Lyrics & Chords ===\nCategory: ${song.category.toUpperCase()}\nKey: ${song.musicalKey || 'N/A'}\nBPM: ${song.bpm || 'N/A'}\nLast Edited By: ${song.lyrics.lastEditedBy || currentUser.name}\n\n${draft}\n\n=== Chords Chart ===\n${chordsSheet || '(None specified)'}`;
+    const textToSave = `=== ${song.title} - Lyrics & Chords ===\nCategory: ${song.category.toUpperCase()}\nKey: ${song.musicalKey || 'N/A'}\nBPM: ${song.bpm || 'N/A'}\nLast Edited By: ${song.lyrics.lastEditedBy || memberDisplayName(currentUser)}\n\n${draft}\n\n=== Chords Chart ===\n${chordsSheet || '(None specified)'}`;
     const blob = new Blob([textToSave], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -159,7 +160,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
             <div className="p-3 rounded-xl bg-zinc-800/60 border border-zinc-700 text-zinc-300 text-xs flex items-center gap-2">
               <Lock className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
-                <strong>Read-Only Mode:</strong> Your current role (<em>{currentUser.role}</em>) does not have edit permissions. Switch to Admin or Editor to edit.
+                <strong>Read-Only Mode:</strong> Your current role (<em>{currentUser.role}</em>) does not have edit permissions. Switch to Admin or Member to edit.
               </span>
             </div>
           )}

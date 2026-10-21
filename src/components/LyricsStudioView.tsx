@@ -190,7 +190,7 @@ export const LyricsStudioView: React.FC = () => {
                 {!canEdit && (
                   <div className="p-2.5 rounded-xl bg-zinc-800/60 border border-zinc-700 text-zinc-300 text-xs flex items-center gap-2 mb-3">
                     <Lock className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Read-Only mode. Switch to Editor or Admin to edit.</span>
+                    <span>Read-Only mode.</span>
                   </div>
                 )}
 

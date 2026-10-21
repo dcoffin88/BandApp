@@ -18,7 +18,6 @@ export const DEFAULT_APPEARANCE: UserAppearance = {
   radius: 'medium',
   primaryColor: 'amber',
   customColor: '#f59e0b',
-  accentGlow: true,
 };
 
 export function appearanceFrom(settings: UserAppearance): UserAppearance {
@@ -27,7 +26,6 @@ export function appearanceFrom(settings: UserAppearance): UserAppearance {
     radius: settings.radius ?? DEFAULT_APPEARANCE.radius,
     primaryColor: settings.primaryColor,
     customColor: settings.customColor ?? DEFAULT_APPEARANCE.customColor,
-    accentGlow: settings.accentGlow,
   };
 }
 
@@ -40,20 +38,12 @@ export const ROLE_PERMISSIONS: Record<Role, UserRolePermissions> = {
     canSchedulePractice: true,
     canManageMembers: true,
   },
-  editor: {
-    canUploadDemo: true,
-    canUploadVersion: true,
-    canEditLyrics: true,
-    canDeleteTracks: false,
-    canSchedulePractice: true,
-    canManageMembers: false,
-  },
   member: {
     canUploadDemo: true,
     canUploadVersion: true,
     canEditLyrics: true,
     canDeleteTracks: false,
-    canSchedulePractice: false,
+    canSchedulePractice: true,
     canManageMembers: false,
   },
   guest: {
@@ -123,6 +113,7 @@ export function emptyState(): SharedState {
       headerLogoShape: 'rounded',
       accentGlow: true,
       headerSubtitle: 'Your band\'s home base.',
+      timeFormat: '12',
     },
     smtpSettings: {
       isEnabled: false,
@@ -140,7 +131,8 @@ export function emptyState(): SharedState {
         newVersions: true,
         lyricEdits: true,
         practiceSchedule: true,
-        practiceReminder: false,
+        practiceReminder: true,
+        practiceEventReminder: true,
         comments: true,
       },
     },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Clock,
   Download,
@@ -9,6 +9,7 @@ import {
   MoreVertical,
   Music2,
   Pause,
+  Pencil,
   Play,
   Plus,
   Send,
@@ -18,12 +19,29 @@ import {
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { AudioVersion, SongIdea } from '../types/band.ts';
+import { EditSongMetadataModal } from './EditSongMetadataModal.tsx';
 
 interface SongCardProps {
   song: SongIdea;
   onOpenLyrics: (song: SongIdea) => void;
   onOpenNewVersion: (song: SongIdea) => void;
 }
+
+const createFallbackWaveform = (versionId: string): number[] => {
+  let seed = 2166136261;
+  for (const character of versionId) {
+    seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
+  }
+
+  return Array.from({ length: 48 }, () => {
+    seed += 0x6d2b79f5;
+    let value = seed;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    const normalized = ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    return normalized * 0.7 + 0.2;
+  });
+};
 
 export const SongCard: React.FC<SongCardProps> = ({
   song,
@@ -47,6 +65,7 @@ export const SongCard: React.FC<SongCardProps> = ({
   const { currentUser, permissions, deleteSong, setActiveVersion, addComment } = useBand();
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showEditMetadata, setShowEditMetadata] = useState(false);
   const [newCommentText, setNewCommentText] = useState('');
 
   const isCurrentPlaying = currentSong?.id === song.id;
@@ -106,9 +125,16 @@ export const SongCard: React.FC<SongCardProps> = ({
     }
   };
 
-  const waveformSamples = activeVersion?.waveformSamples || Array.from({ length: 48 }, () => Math.random() * 0.7 + 0.2);
+  const waveformSamples = useMemo(
+    () =>
+      activeVersion?.waveformSamples?.length
+        ? activeVersion.waveformSamples
+        : createFallbackWaveform(activeVersion?.id ?? song.id),
+    [activeVersion?.id, activeVersion?.waveformSamples, song.id],
+  );
 
   return (
+    <>
     <div className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
       isCurrentPlaying && isPlaying
         ? 'bg-zinc-900/90 border-amber-500/50 shadow-xl shadow-amber-500/5 ring-1 ring-amber-500/20'
@@ -171,6 +197,18 @@ export const SongCard: React.FC<SongCardProps> = ({
 
           {/* Right Action Menu: Version button & delete */}
           <div className="flex items-center gap-1.5">
+            {permissions.canUploadDemo && (
+              <button
+                type="button"
+                onClick={() => setShowEditMetadata(true)}
+                className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-amber-500/10 hover:text-amber-300"
+                title="Edit demo details"
+                aria-label={`Edit details for ${song.title}`}
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+
             {permissions.canUploadVersion && (
               <button
                 onClick={() => onOpenNewVersion(song)}
@@ -244,7 +282,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                 {/* Waveform bars */}
                 {waveformSamples.map((height, idx) => {
                   const barProgress = idx / waveformSamples.length;
-                  const isPassed = barProgress <= progressRatio;
+                  const isPassed = isCurrentPlaying && barProgress <= progressRatio;
                   const isHoverHead = Math.abs(barProgress - progressRatio) < 0.03;
 
                   return (
@@ -507,5 +545,12 @@ export const SongCard: React.FC<SongCardProps> = ({
         )}
       </div>
     </div>
+    {showEditMetadata && (
+      <EditSongMetadataModal
+        song={song}
+        onClose={() => setShowEditMetadata(false)}
+      />
+    )}
+    </>
   );
 };

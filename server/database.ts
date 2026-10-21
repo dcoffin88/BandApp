@@ -13,7 +13,54 @@ import {
   emptyState,
   type SharedState,
 } from '../src/shared/defaults.ts';
+import { memberDisplayName } from '../src/shared/member.ts';
 import type { BandMember } from '../src/types/band.ts';
+
+function refreshMemberIdentities(state: SharedState): void {
+  const membersById = new Map(
+    state.band.members.map((member) => [member.id, member]),
+  );
+  const currentIdentity = (userId: string) => {
+    const member = membersById.get(userId);
+    return member
+      ? { name: memberDisplayName(member), avatar: member.avatar }
+      : undefined;
+  };
+
+  for (const song of state.songs) {
+    const creator = currentIdentity(song.createdBy.id);
+    if (creator) Object.assign(song.createdBy, creator);
+
+    for (const version of song.versions) {
+      const uploader = currentIdentity(version.uploadedBy.id);
+      if (uploader) Object.assign(version.uploadedBy, uploader);
+    }
+
+    for (const comment of song.comments) {
+      const commenter = currentIdentity(comment.userId);
+      if (commenter) {
+        comment.userName = commenter.name;
+        comment.userAvatar = commenter.avatar;
+      }
+    }
+  }
+
+  for (const practice of state.practices) {
+    for (const rsvp of practice.rsvps) {
+      const member = currentIdentity(rsvp.userId);
+      if (member) {
+        rsvp.userName = member.name;
+        rsvp.userAvatar = member.avatar;
+      }
+    }
+  }
+
+  for (const entry of state.auditLogs) {
+    if (!entry.userId) continue;
+    const member = currentIdentity(entry.userId);
+    if (member) entry.userName = member.name;
+  }
+}
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex');
@@ -55,20 +102,44 @@ export function openDatabase(filename: string) {
     CREATE TABLE IF NOT EXISTS uploads (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, mime TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL);
   `);
 
-  const version = db.prepare('SELECT version FROM schema_version').get() as {
+  const versionRow = db.prepare('SELECT version FROM schema_version').get() as {
     version: number;
   };
-  if (version.version !== 1 && version.version !== 2) {
+  let schemaVersion = versionRow.version;
+  if (![1, 2, 3].includes(schemaVersion)) {
     throw new Error(
       'Unsupported database version; restore the matching application release.'
     );
   }
-  if (version.version === 1) {
+  if (schemaVersion === 1) {
     db.exec('BEGIN IMMEDIATE');
     try {
       db.exec(
         "ALTER TABLE uploads ADD COLUMN relative_path TEXT; UPDATE schema_version SET version=2; COMMIT;"
       );
+      schemaVersion = 2;
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  if (schemaVersion === 2) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const rows = db.prepare('SELECT id,profile FROM users').all() as Array<{
+        id: string;
+        profile: string;
+      }>;
+      const updateProfile = db.prepare('UPDATE users SET profile=? WHERE id=?');
+      for (const row of rows) {
+        const profile = JSON.parse(String(row.profile)) as Record<string, unknown>;
+        if (profile.role === 'editor') {
+          profile.role = 'member';
+          updateProfile.run(JSON.stringify(profile), row.id);
+        }
+      }
+      db.exec('UPDATE schema_version SET version=3; COMMIT;');
+      schemaVersion = 3;
     } catch (error) {
       db.exec('ROLLBACK');
       throw error;
@@ -93,6 +164,9 @@ export function openDatabase(filename: string) {
     };
     const state = JSON.parse(String(row.value)) as SharedState;
     state.band.members = members();
+    state.appSettings.timeFormat ??= '12';
+    state.smtpSettings.notificationTriggers.practiceEventReminder ??= true;
+    refreshMemberIdentities(state);
     return state;
   }
 
@@ -106,7 +180,9 @@ export function openDatabase(filename: string) {
   function saveUser(user: BandMember, passwordHash?: string): void {
     const { password: _password, ...profile } = {
       ...user,
-      appearanceSettings: user.appearanceSettings ?? { ...DEFAULT_APPEARANCE },
+      appearanceSettings: appearanceFrom(
+        user.appearanceSettings ?? DEFAULT_APPEARANCE,
+      ),
     };
     if (passwordHash) {
       db.prepare(

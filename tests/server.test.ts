@@ -11,8 +11,136 @@ import {
   type ApplicationOptions,
 } from '../server/app.ts';
 import { verifyPassword } from '../server/database.ts';
+import { memberDisplayName } from '../src/shared/member.ts';
+import { formatClockTime } from '../src/shared/time.ts';
+import {
+  prepareEmailForDelivery,
+  renderBrandedEmail,
+} from '../server/emailTemplates.ts';
+import {
+  googleCalendarUrl,
+  outlookCalendarUrl,
+  practiceCalendarIcs,
+  yahooCalendarUrl,
+} from '../src/shared/calendar.ts';
 
 const password = 'Correct-Horse-123!';
+
+test('member display names prefer a trimmed stage name with full-name fallback', () => {
+  assert.equal(memberDisplayName({ name: 'Alex Smith' }), 'Alex Smith');
+  assert.equal(
+    memberDisplayName({ name: 'Alex Smith', stageName: '   ' }),
+    'Alex Smith',
+  );
+  assert.equal(
+    memberDisplayName({ name: 'Alex Smith', stageName: '  Ace  ' }),
+    'Ace',
+  );
+});
+
+test('clock times support 12-hour and 24-hour display', () => {
+  assert.equal(formatClockTime('00:05', '12'), '12:05 AM');
+  assert.equal(formatClockTime('15:30', '12'), '3:30 PM');
+  assert.equal(formatClockTime('15:30', '24'), '15:30');
+});
+
+test('notification emails use branded, escaped HTML with a useful text alternative', () => {
+  const email = renderBrandedEmail(
+    {
+      bandName: 'Test & Band',
+      subtitle: "The band's home base.",
+      appUrl: 'https://rehearsal.example.com',
+      appSettings: { primaryColor: 'custom', customColor: '#22c55e' },
+    },
+    {
+      preheader: 'A new demo is ready.',
+      eyebrow: 'New demo uploaded',
+      title: '<Final Demo>',
+      greeting: 'Dougie',
+      intro: 'A new recording was added.',
+      details: [
+        { label: 'Tempo', value: '128 BPM' },
+        { label: 'Key', value: 'E minor' },
+      ],
+      callout: { label: 'Notes', text: '<script>unsafe</script>' },
+      ctaLabel: 'Listen now',
+    },
+  );
+  assert.match(email.html, /background:#22c55e/);
+  assert.match(email.html, /Test &amp; Band/);
+  assert.match(email.html, /&lt;Final Demo&gt;/);
+  assert.ok(!email.html.includes('<script>unsafe</script>'));
+  assert.match(email.html, /Manage notification preferences/);
+  assert.match(email.html, /alt="RehearsalHQ"/);
+  assert.match(email.text, /Tempo: 128 BPM/);
+  assert.match(email.text, /Key: E minor/);
+  assert.match(email.text, /Listen now: https:\/\/rehearsal\.example\.com/);
+  const preparedFallback = prepareEmailForDelivery(email.html);
+  assert.match(preparedFallback.html, /src="cid:rehearsalhq-logo-1"/);
+  assert.equal(preparedFallback.attachments[0].contentType, 'image/svg+xml');
+
+  const customLogo = renderBrandedEmail(
+    {
+      bandName: 'Logo Band',
+      subtitle: 'Custom identity',
+      appUrl: 'https://rehearsal.example.com',
+      appSettings: {
+        primaryColor: 'amber',
+        headerLogoUrl: 'data:image/png;base64,aGVhZGVy',
+        headerLogoShape: 'circle',
+        accentGlow: true,
+      },
+    },
+    {
+      preheader: 'Logo test',
+      eyebrow: 'Branding',
+      title: 'Custom logo',
+      intro: 'Testing the configured logo.',
+      ctaLabel: 'Open app',
+    },
+  );
+  assert.match(customLogo.html, /src="data:image\/png;base64,aGVhZGVy"/);
+  assert.match(customLogo.html, /border-radius:999px/);
+  assert.match(customLogo.html, /box-shadow:0 0 18px/);
+  const preparedCustom = prepareEmailForDelivery(customLogo.html);
+  assert.match(preparedCustom.html, /src="cid:rehearsalhq-logo-1"/);
+  assert.equal(preparedCustom.attachments[0].contentType, 'image/png');
+});
+
+test('practice calendar links preserve local event times and details', () => {
+  const practice = {
+    id: 'practice-1',
+    title: 'Full Band Practice',
+    date: '2026-12-02',
+    startTime: '18:30',
+    endTime: '20:30',
+    location: 'Studio B',
+    notes: 'Bring ear protection',
+    goals: ['Run intro, chorus', 'Tighten ending'],
+  };
+  const google = new URL(googleCalendarUrl(practice));
+  assert.equal(google.searchParams.get('text'), practice.title);
+  assert.equal(
+    google.searchParams.get('dates'),
+    '20261202T183000/20261202T203000',
+  );
+  assert.equal(google.searchParams.get('location'), practice.location);
+  const outlook = new URL(outlookCalendarUrl(practice));
+  assert.equal(outlook.searchParams.get('subject'), practice.title);
+  assert.equal(outlook.searchParams.get('startdt'), '2026-12-02T18:30:00');
+  const yahoo = new URL(yahooCalendarUrl(practice));
+  assert.equal(yahoo.searchParams.get('title'), practice.title);
+  assert.equal(yahoo.searchParams.get('st'), '20261202T183000');
+
+  const ics = practiceCalendarIcs(
+    practice,
+    new Date('2026-10-21T12:00:00.000Z'),
+  );
+  assert.match(ics, /DTSTART:20261202T183000\r\n/);
+  assert.match(ics, /DTEND:20261202T203000\r\n/);
+  assert.match(ics, /LOCATION:Studio B\r\n/);
+  assert.match(ics, /Run intro\\, chorus/);
+});
 
 async function localSmtp() {
   const messages: string[] = [];
@@ -62,6 +190,21 @@ async function localSmtp() {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };
+}
+
+const decodeEmail = (message: string) =>
+  message
+    .replace(/=\r\n/g, '')
+    .replace(/=([0-9A-F]{2})/g, (_, hex) =>
+      String.fromCharCode(parseInt(hex, 16)),
+    );
+
+async function waitForMessages(messages: string[], count: number) {
+  const deadline = Date.now() + 3000;
+  while (messages.length < count && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(messages.length, count, `Expected ${count} email messages.`);
 }
 
 test('member invitations send through SMTP, report failures and can be resent without duplicate accounts', async () => {
@@ -114,13 +257,13 @@ test('member invitations send through SMTP, report failures and can be resent wi
     assert.equal(sent.result.invitation.status, 'sent');
     assert.equal(sent.state.band.members.length, 2);
     assert.equal(smtp.messages.length, 1);
-    const message = smtp.messages[0]
-      .replace(/=\r\n/g, '')
-      .replace(/=([0-9A-F]{2})/g, (_, hex) =>
-        String.fromCharCode(parseInt(hex, 16)),
-      );
+    const message = decodeEmail(smtp.messages[0]);
     assert.match(message, /To: Invited Member <invite@example.com>/);
     assert.match(message, /http:\/\/localhost:3000/);
+    assert.match(message, /Band invitation/);
+    assert.match(message, /Test Band/);
+    assert.match(message, /Content-Type: text\/plain/);
+    assert.match(message, /Content-Type: text\/html/);
     assert.match(message, /share your initial password separately/);
     assert.ok(!message.includes(password));
     const member = await f.login(memberData.email);
@@ -157,6 +300,165 @@ test('member invitations send through SMTP, report failures and can be resent wi
     assert.ok(
       !JSON.stringify(recoveredData.state.emailLogs).includes(password),
     );
+  } finally {
+    await smtp.close();
+    await f.close();
+  }
+});
+
+test('action notifications include branded song, feedback, and rehearsal details', async () => {
+  const f = await fixture();
+  const smtp = await localSmtp();
+  try {
+    const admin = await f.login();
+    const member = {
+      name: 'Band Listener',
+      email: 'listener@example.com',
+      password,
+      role: 'member',
+      instrument: 'Bass',
+    };
+    assert.equal(
+      (await f.action(admin.cookie, 'member.add', member)).status,
+      200,
+    );
+    const smtpSettings = {
+      ...f.store.read().smtpSettings,
+      isEnabled: true,
+      host: '127.0.0.1',
+      port: smtp.port,
+      encryption: 'none' as const,
+      authRequired: false,
+      username: '',
+      password: '',
+      fromEmail: 'band@example.com',
+    };
+    assert.equal(
+      (await f.action(admin.cookie, 'smtp.update', smtpSettings)).status,
+      200,
+    );
+
+    const uploadAudio = async (contents: string, category = 'riff') => {
+      const upload = await f.request(
+        `/api/uploads?category=${category}`,
+        undefined,
+        admin.cookie,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'audio/wav' },
+          body: Buffer.from(contents),
+        },
+      );
+      assert.equal(upload.status, 201, await upload.clone().text());
+      return (await upload.json()).audioUrl as string;
+    };
+
+    const initialAudioUrl = await uploadAudio('RIFF-initial');
+    const added = await f.action(admin.cookie, 'song.add', {
+      title: 'Midnight Drive',
+      category: 'riff',
+      bpm: 128,
+      musicalKey: 'E minor',
+      description: 'Focus on the transition into the second chorus.',
+      tags: [],
+      version: {
+        label: 'v1 - Phone Demo',
+        audioUrl: initialAudioUrl,
+        duration: 95,
+      },
+    });
+    assert.equal(added.status, 200, await added.clone().text());
+    const song = (await added.json()).result;
+    await waitForMessages(smtp.messages, 1);
+    const demoEmail = decodeEmail(smtp.messages[0]);
+    assert.match(demoEmail, /New demo uploaded/);
+    assert.match(demoEmail, /Midnight Drive/);
+    assert.match(demoEmail, /128 BPM/);
+    assert.match(demoEmail, /E minor/);
+    assert.match(demoEmail, /second chorus/);
+    assert.match(demoEmail, /Listen in RehearsalHQ/);
+    assert.match(demoEmail, /Content-ID: <rehearsalhq-logo-1>/);
+
+    const nextAudioUrl = await uploadAudio('RIFF-second');
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.version', {
+          songId: song.id,
+          version: {
+            label: 'v2 - Full Band',
+            audioUrl: nextAudioUrl,
+            duration: 124,
+            fileSize: '4.2 MB',
+            notes: 'New drum ending and a tighter count-in.',
+          },
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 2);
+    const versionEmail = decodeEmail(smtp.messages[1]);
+    assert.match(versionEmail, /New recording take/);
+    assert.match(versionEmail, /v2 - Full Band/);
+    assert.match(versionEmail, /2:04/);
+    assert.match(versionEmail, /New drum ending/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.lyrics', {
+          songId: song.id,
+          draft: 'Updated words',
+          chordsSheet: 'Em C G D',
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 3);
+    const lyricsEmail = decodeEmail(smtp.messages[2]);
+    assert.match(lyricsEmail, /Lyrics updated/);
+    assert.match(lyricsEmail, /Chord chart/);
+    assert.match(lyricsEmail, /Included/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.comment', {
+          songId: song.id,
+          text: 'The harmony lands perfectly here.',
+          timestampSeconds: 62,
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 4);
+    const commentEmail = decodeEmail(smtp.messages[3]);
+    assert.match(commentEmail, /New band feedback/);
+    assert.match(commentEmail, /1:02/);
+    assert.match(commentEmail, /harmony lands perfectly/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'practice.add', {
+          title: 'Album Run-through',
+          date: '2026-12-05',
+          startTime: '18:30',
+          endTime: '21:00',
+          location: 'Studio B',
+          room: 'Live Room',
+          setlistSongIds: [song.id],
+          goals: ['Run the complete set', 'Fix the ending'],
+          notes: 'Bring in-ear monitors.',
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 5);
+    const practiceEmail = decodeEmail(smtp.messages[4]);
+    assert.match(practiceEmail, /New rehearsal/);
+    assert.match(practiceEmail, /Album Run-through/);
+    assert.match(practiceEmail, /Studio B/);
+    assert.match(practiceEmail, /Live Room/);
+    assert.match(practiceEmail, /Midnight Drive/);
+    assert.match(practiceEmail, /Bring in-ear monitors/);
+    assert.match(practiceEmail, /View practice and RSVP/);
   } finally {
     await smtp.close();
     await f.close();
@@ -230,6 +532,8 @@ async function fixture() {
     request,
     login,
     action,
+    sendPracticeReminders: (referenceTime?: Date) =>
+      application.sendPracticeReminders(referenceTime),
     get store() {
       return application.store;
     },
@@ -248,6 +552,86 @@ async function fixture() {
     },
   };
 }
+
+test('RSVP reminders target unconfirmed members and event reminders target attendees', async () => {
+  const f = await fixture();
+  const smtp = await localSmtp();
+  try {
+    const admin = await f.login();
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.add', {
+          name: 'Unconfirmed Member',
+          email: 'unconfirmed@example.com',
+          password,
+          role: 'member',
+          instrument: 'Bass',
+        })
+      ).status,
+      200,
+    );
+    const smtpSettings = {
+      ...f.store.read().smtpSettings,
+      isEnabled: true,
+      host: '127.0.0.1',
+      port: smtp.port,
+      encryption: 'none' as const,
+      authRequired: false,
+      username: '',
+      password: '',
+      fromEmail: 'band@example.com',
+      notificationTriggers: {
+        ...f.store.read().smtpSettings.notificationTriggers,
+        practiceSchedule: false,
+        practiceReminder: true,
+      },
+    };
+    assert.equal(
+      (await f.action(admin.cookie, 'smtp.update', smtpSettings)).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'practice.add', {
+          title: 'Tomorrow Practice',
+          date: '2026-12-02',
+          startTime: '18:00',
+          endTime: '20:00',
+          location: 'Studio A',
+          setlistSongIds: [],
+          goals: [],
+          notes: '',
+        })
+      ).status,
+      200,
+    );
+
+    const startsAt = new Date(2026, 11, 2, 18, 0, 0);
+    const withinWindow = new Date(
+      startsAt.getTime() - 23 * 60 * 60 * 1000,
+    );
+    assert.equal(await f.sendPracticeReminders(withinWindow), 2);
+    assert.equal(smtp.messages.length, 2);
+    assert.match(smtp.messages[0], /unconfirmed@example\.com/);
+    assert.match(smtp.messages[0], /Tomorrow Practice/);
+    assert.equal(await f.sendPracticeReminders(withinWindow), 0);
+    assert.equal(smtp.messages.length, 2);
+    const finalWindow = new Date(
+      startsAt.getTime() - 3 * 60 * 60 * 1000,
+    );
+    assert.equal(await f.sendPracticeReminders(finalWindow), 1);
+    assert.equal(smtp.messages.length, 3);
+    assert.match(smtp.messages[2], /4 hours/);
+    assert.equal(await f.sendPracticeReminders(finalWindow), 0);
+    assert.equal(
+      f.store.read().emailLogs[0].eventType,
+      'practice_event_reminder',
+    );
+  } finally {
+    await smtp.close();
+    await f.close();
+  }
+});
 
 test('signed-out sessions expose saved branding without private workspace data', async () => {
   const f = await fixture();
@@ -273,6 +657,7 @@ test('signed-out sessions expose saved branding without private workspace data',
     assert.equal(anonymous.appSettings.headerLogoShape, 'circle');
     assert.equal(anonymous.appSettings.primaryColor, 'amber');
     assert.equal(anonymous.appSettings.appearance, 'dark');
+    assert.equal(anonymous.appSettings.timeFormat, '12');
     assert.equal((await f.request('/api/state')).status, 401);
   } finally {
     await f.close();
@@ -284,7 +669,7 @@ test('appearance is personal, validated, persisted and cannot modify the band he
   try {
     const admin = await f.login();
     const originalHeader = f.store.read().appSettings.headerLogoUrl;
-    for (const role of ['member', 'editor', 'guest']) {
+    for (const role of ['member', 'guest']) {
       assert.equal(
         (
           await f.action(admin.cookie, 'member.add', {
@@ -303,7 +688,6 @@ test('appearance is personal, validated, persisted and cannot modify the band he
         customColor: '#3366cc',
         appearance: 'light',
         radius: 'full',
-        accentGlow: false,
       };
       const saved = await f.action(
         account.cookie,
@@ -316,6 +700,14 @@ test('appearance is personal, validated, persisted and cannot modify the band he
       assert.equal(
         result.state.appSettings.customColor,
         appearance.customColor,
+      );
+      assert.equal(
+        (
+          await f.action(account.cookie, 'appearance.update', {
+            accentGlow: false,
+          })
+        ).status,
+        400,
       );
       assert.equal(
         (
@@ -372,9 +764,13 @@ test('appearance is personal, validated, persisted and cannot modify the band he
         .status,
       400,
     );
+    assert.equal(
+      (await f.action(admin.cookie, 'app.update', { accentGlow: false })).status,
+      200,
+    );
     await f.restart();
     const member = await f.login('member@example.com');
-    const editor = await f.login('editor@example.com');
+    const guest = await f.login('guest@example.com');
     assert.equal(member.state.appSettings.customColor, '#3366cc');
     assert.equal(member.state.currentUser.appearanceSettings.radius, 'full');
     assert.equal(
@@ -385,17 +781,18 @@ test('appearance is personal, validated, persisted and cannot modify the band he
       ).status,
       200,
     );
-    const editorState = await (
-      await f.request('/api/state', undefined, editor.cookie)
+    const guestState = await (
+      await f.request('/api/state', undefined, guest.cookie)
     ).json();
     const adminState = await (
       await f.request('/api/state', undefined, admin.cookie)
     ).json();
-    assert.equal(editorState.appSettings.primaryColor, 'custom');
+    assert.equal(guestState.appSettings.primaryColor, 'custom');
     assert.equal(adminState.appSettings.primaryColor, 'purple');
     assert.equal(adminState.appSettings.appearance, 'system');
+    assert.equal(guestState.appSettings.accentGlow, false);
     assert.equal(
-      editorState.band.members.find(
+      guestState.band.members.find(
         (m: any) => m.id === member.state.currentUser.id,
       ).appearanceSettings,
       undefined,
@@ -437,7 +834,7 @@ test('existing accounts inherit the old shared appearance once when upgraded', a
       '#123456',
     );
     assert.equal(upgraded.currentUser.appearanceSettings.appearance, 'light');
-    assert.equal(upgraded.currentUser.appearanceSettings.accentGlow, false);
+    assert.equal(upgraded.appSettings.accentGlow, false);
     assert.equal(
       (
         await f.action(admin.cookie, 'appearance.update', {
@@ -448,6 +845,45 @@ test('existing accounts inherit the old shared appearance once when upgraded', a
     );
     await f.restart();
     assert.equal(f.store.members()[0].appearanceSettings!.primaryColor, 'teal');
+  } finally {
+    await f.close();
+  }
+});
+
+test('legacy Editor accounts migrate to Member with merged permissions', async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.login();
+    const created = await f.action(admin.cookie, 'member.add', {
+      name: 'Legacy Editor',
+      email: 'legacy-editor@example.com',
+      password,
+      role: 'member',
+      instrument: 'Guitar',
+    });
+    assert.equal(created.status, 200, await created.clone().text());
+    const { result } = await created.json();
+    const row = f.store.db
+      .prepare('SELECT profile FROM users WHERE id=?')
+      .get(result.memberId) as { profile: string };
+    const profile = JSON.parse(row.profile);
+    profile.role = 'editor';
+    f.store.db
+      .prepare('UPDATE users SET profile=? WHERE id=?')
+      .run(JSON.stringify(profile), result.memberId);
+    f.store.db.prepare('UPDATE schema_version SET version=2').run();
+
+    await f.restart();
+
+    const migrated = await f.login('legacy-editor@example.com');
+    assert.equal(migrated.state.currentUser.role, 'member');
+    assert.equal(migrated.state.permissions.canSchedulePractice, true);
+    assert.equal(
+      (f.store.db.prepare('SELECT version FROM schema_version').get() as {
+        version: number;
+      }).version,
+      3,
+    );
   } finally {
     await f.close();
   }
@@ -556,7 +992,7 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
   const f = await fixture();
   try {
     const admin = await f.login();
-    for (const role of ['member', 'guest', 'editor']) {
+    for (const role of ['member', 'guest']) {
       const response = await f.action(admin.cookie, 'member.add', {
         name: role,
         email: `${role}@example.com`,
@@ -566,12 +1002,35 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       });
       assert.equal(response.status, 200, await response.clone().text());
     }
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.add', {
+          name: 'Removed Editor Role',
+          email: 'editor@example.com',
+          password,
+          role: 'editor',
+          instrument: 'Guitar',
+        })
+      ).status,
+      400,
+    );
     const member = await f.login('member@example.com'),
       guest = await f.login('guest@example.com');
+    assert.equal(
+      (
+        await f.action(guest.cookie, 'song.update', {
+          songId: 'missing-song',
+          title: 'Unauthorized edit',
+          category: 'idea',
+        })
+      ).status,
+      403,
+    );
     const branding = {
       headerLogoUrl: 'data:image/png;base64,aGVhZGVy',
       headerLogoShape: 'circle',
       headerSubtitle: 'Admin header',
+      timeFormat: '24',
     };
     assert.equal(
       (await f.action(admin.cookie, 'app.update', branding)).status,
@@ -582,7 +1041,7 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
         .status,
       200,
     );
-    for (const role of ['member', 'guest', 'editor']) {
+    for (const role of ['member', 'guest']) {
       const account = await f.login(`${role}@example.com`);
       assert.equal(
         (
@@ -609,6 +1068,12 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
     assert.equal(
       f.store.read().appSettings.headerLogoUrl,
       branding.headerLogoUrl,
+    );
+    assert.equal(f.store.read().appSettings.timeFormat, '24');
+    assert.equal(
+      (await f.action(admin.cookie, 'app.update', { timeFormat: 'military' }))
+        .status,
+      400,
     );
     assert.equal(
       f.store.read().appSettings.headerLogoShape,
@@ -755,6 +1220,15 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
   const f = await fixture();
   try {
     const admin = await f.login();
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.profile', {
+          userId: admin.state.currentUser.id,
+          updates: { stageName: '  The Conductor  ' },
+        })
+      ).status,
+      200,
+    );
     const upload = await f.request(
       '/api/uploads?category=riff',
       undefined,
@@ -789,6 +1263,32 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     });
     assert.equal(add.status, 200, await add.clone().text());
     const { result: song } = await add.json();
+    assert.equal(song.createdBy.name, 'The Conductor');
+    assert.equal(song.versions[0].uploadedBy.name, 'The Conductor');
+    const metadataUpdate = await f.action(admin.cookie, 'song.update', {
+      songId: song.id,
+      title: 'Finished Demo',
+      category: 'full',
+      bpm: 132,
+      musicalKey: 'D minor',
+      description: 'Use the quieter intro.',
+    });
+    assert.equal(metadataUpdate.status, 200, await metadataUpdate.clone().text());
+    const updatedSong = (await metadataUpdate.json()).state.songs[0];
+    assert.equal(updatedSong.title, 'Finished Demo');
+    assert.equal(updatedSong.category, 'full');
+    assert.equal(updatedSong.bpm, 132);
+    assert.equal(updatedSong.musicalKey, 'D minor');
+    assert.equal(updatedSong.description, 'Use the quieter intro.');
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.comment', {
+          songId: song.id,
+          text: 'Keep this take',
+        })
+      ).status,
+      200,
+    );
     assert.equal(
       (
         await f.action(admin.cookie, 'song.lyrics', {
@@ -810,6 +1310,32 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
           setlistSongIds: [song.id],
           goals: [],
           notes: '',
+        })
+      ).status,
+      200,
+    );
+    const practiceId = f.store.read().practices[0].id;
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'practice.update', {
+          practiceId,
+          title: 'Full Band Practice',
+          date: '2026-12-02',
+          startTime: '18:30',
+          endTime: '20:30',
+          location: 'Studio B',
+          setlistSongIds: [song.id],
+          goals: ['Run the full arrangement'],
+          notes: 'Bring ear protection',
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.profile', {
+          userId: admin.state.currentUser.id,
+          updates: { stageName: 'Maestro' },
         })
       ).status,
       200,
@@ -839,7 +1365,21 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       await f.request('/api/state', undefined, admin.cookie)
     ).json();
     assert.equal(state.songs[0].lyrics.draft, 'Shared words');
+    assert.equal(state.songs[0].title, 'Finished Demo');
+    assert.equal(state.songs[0].category, 'full');
+    assert.equal(state.songs[0].bpm, 132);
+    assert.equal(state.songs[0].musicalKey, 'D minor');
+    assert.equal(state.songs[0].description, 'Use the quieter intro.');
+    assert.equal(state.songs[0].lyrics.lastEditedBy, 'The Conductor');
+    assert.equal(state.songs[0].createdBy.name, 'Maestro');
+    assert.equal(state.songs[0].versions[0].uploadedBy.name, 'Maestro');
+    assert.equal(state.songs[0].comments[0].userName, 'Maestro');
     assert.equal(state.practices.length, 1);
+    assert.equal(state.practices[0].title, 'Full Band Practice');
+    assert.equal(state.practices[0].location, 'Studio B');
+    assert.deepEqual(state.practices[0].goals, ['Run the full arrangement']);
+    assert.equal(state.practices[0].createdBy, 'The Conductor');
+    assert.equal(state.practices[0].rsvps[0].userName, 'Maestro');
     assert.equal(state.smtpSettings.password, '');
     assert.ok(!JSON.stringify(state).includes('Private-SMTP-secret'));
     const audio = await f.request(audioUrl, undefined, admin.cookie, {

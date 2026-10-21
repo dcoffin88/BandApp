@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'editor' | 'member' | 'guest';
+export type Role = 'admin' | 'member' | 'guest';
 
 export type UserStatus = 'active' | 'suspended' | 'invited';
 
@@ -96,6 +96,11 @@ export interface SongIdea {
   };
 }
 
+export type SongMetadataUpdate = Pick<
+  SongIdea,
+  'title' | 'category' | 'bpm' | 'musicalKey' | 'description'
+>;
+
 export interface PracticeRsvp {
   userId: string;
   userName: string;
@@ -115,9 +120,13 @@ export interface PracticeSession {
   setlistSongIds: string[];
   goals: string[];
   notes: string;
+  eventReminderOneDay: boolean;
+  eventReminderFourHours: boolean;
   rsvps: PracticeRsvp[];
   createdBy: string;
   createdAt: string;
+  reminderScheduleKey?: string;
+  reminderDeliveryKeys?: string[];
 }
 
 export interface BandProfile {
@@ -158,13 +167,14 @@ export interface UserAppearance {
   radius?: 'none' | 'small' | 'medium' | 'full';
   primaryColor: ThemeColor;
   customColor?: string;
-  accentGlow: boolean;
 }
 
 export interface AppSettings extends UserAppearance {
   headerLogoUrl: string;
   headerLogoShape: 'circle' | 'rounded' | 'square';
   headerSubtitle: string;
+  accentGlow: boolean;
+  timeFormat: '12' | '24';
 }
 
 export interface SmtpNotificationTriggers {
@@ -173,6 +183,7 @@ export interface SmtpNotificationTriggers {
   lyricEdits: boolean;
   practiceSchedule: boolean;
   practiceReminder: boolean;
+  practiceEventReminder: boolean;
   comments: boolean;
 }
 
@@ -197,6 +208,7 @@ export type EmailEventType =
   | 'lyric_edit'
   | 'practice_schedule'
   | 'practice_reminder'
+  | 'practice_event_reminder'
   | 'comment'
   | 'test_probe';
 
@@ -221,6 +233,7 @@ export interface EmailNotificationLog {
   status: 'sent' | 'failed' | 'simulated';
   sentAt: string;
   htmlContent: string;
+  textContent?: string;
   errorMessage?: string;
   smtpHostUsed: string;
 }
