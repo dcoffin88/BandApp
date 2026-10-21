@@ -115,9 +115,13 @@ export interface PracticeSession {
   setlistSongIds: string[];
   goals: string[];
   notes: string;
+  eventReminderOneDay: boolean;
+  eventReminderFourHours: boolean;
   rsvps: PracticeRsvp[];
   createdBy: string;
   createdAt: string;
+  reminderScheduleKey?: string;
+  reminderDeliveryKeys?: string[];
 }
 
 export interface BandProfile {
@@ -173,6 +177,7 @@ export interface SmtpNotificationTriggers {
   lyricEdits: boolean;
   practiceSchedule: boolean;
   practiceReminder: boolean;
+  practiceEventReminder: boolean;
   comments: boolean;
 }
 
@@ -197,6 +202,7 @@ export type EmailEventType =
   | 'lyric_edit'
   | 'practice_schedule'
   | 'practice_reminder'
+  | 'practice_event_reminder'
   | 'comment'
   | 'test_probe';
 

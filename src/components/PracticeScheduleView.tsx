@@ -33,6 +33,8 @@ export const PracticeScheduleView: React.FC = () => {
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
   const [goalInput, setGoalInput] = useState('');
   const [goals, setGoals] = useState<string[]>([]);
+  const [eventReminderOneDay, setEventReminderOneDay] = useState(true);
+  const [eventReminderFourHours, setEventReminderFourHours] = useState(true);
 
   const canSchedule = permissions.canSchedulePractice;
 
@@ -47,6 +49,8 @@ export const PracticeScheduleView: React.FC = () => {
     setSelectedSongIds([]);
     setGoalInput('');
     setGoals([]);
+    setEventReminderOneDay(true);
+    setEventReminderFourHours(true);
   };
 
   const openCreatePractice = () => {
@@ -65,6 +69,8 @@ export const PracticeScheduleView: React.FC = () => {
     setSelectedSongIds([...practice.setlistSongIds]);
     setGoalInput('');
     setGoals([...practice.goals]);
+    setEventReminderOneDay(practice.eventReminderOneDay ?? true);
+    setEventReminderFourHours(practice.eventReminderFourHours ?? true);
     setIsPracticeModalOpen(true);
   };
 
@@ -103,6 +109,8 @@ export const PracticeScheduleView: React.FC = () => {
       setlistSongIds: selectedSongIds,
       goals,
       notes: notes.trim(),
+      eventReminderOneDay,
+      eventReminderFourHours,
     };
     const saved = editingPracticeId
       ? await updatePracticeSession(editingPracticeId, session)
@@ -424,6 +432,35 @@ export const PracticeScheduleView: React.FC = () => {
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white"
                 />
               </div>
+
+              <fieldset className="space-y-2">
+                <legend className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
+                  Event Reminders
+                </legend>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label className="flex items-center gap-2.5 rounded-lg border border-zinc-800 bg-zinc-950 p-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={eventReminderOneDay}
+                      onChange={(event) => setEventReminderOneDay(event.target.checked)}
+                      className="w-4 h-4 rounded accent-amber-500"
+                    />
+                    <span className="font-semibold text-zinc-300">1 day before</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 rounded-lg border border-zinc-800 bg-zinc-950 p-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={eventReminderFourHours}
+                      onChange={(event) => setEventReminderFourHours(event.target.checked)}
+                      className="w-4 h-4 rounded accent-amber-500"
+                    />
+                    <span className="font-semibold text-zinc-300">4 hours before</span>
+                  </label>
+                </div>
+                <p className="text-[11px] text-zinc-500">
+                  Sent only to active members who RSVP Going.
+                </p>
+              </fieldset>
 
               {/* Setlist selection */}
               <div>

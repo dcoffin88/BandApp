@@ -243,6 +243,8 @@ async function fixture() {
     request,
     login,
     action,
+    sendPracticeReminders: (referenceTime?: Date) =>
+      application.sendPracticeReminders(referenceTime),
     get store() {
       return application.store;
     },
@@ -261,6 +263,86 @@ async function fixture() {
     },
   };
 }
+
+test('RSVP reminders target unconfirmed members and event reminders target attendees', async () => {
+  const f = await fixture();
+  const smtp = await localSmtp();
+  try {
+    const admin = await f.login();
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.add', {
+          name: 'Unconfirmed Member',
+          email: 'unconfirmed@example.com',
+          password,
+          role: 'member',
+          instrument: 'Bass',
+        })
+      ).status,
+      200,
+    );
+    const smtpSettings = {
+      ...f.store.read().smtpSettings,
+      isEnabled: true,
+      host: '127.0.0.1',
+      port: smtp.port,
+      encryption: 'none' as const,
+      authRequired: false,
+      username: '',
+      password: '',
+      fromEmail: 'band@example.com',
+      notificationTriggers: {
+        ...f.store.read().smtpSettings.notificationTriggers,
+        practiceSchedule: false,
+        practiceReminder: true,
+      },
+    };
+    assert.equal(
+      (await f.action(admin.cookie, 'smtp.update', smtpSettings)).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'practice.add', {
+          title: 'Tomorrow Practice',
+          date: '2026-12-02',
+          startTime: '18:00',
+          endTime: '20:00',
+          location: 'Studio A',
+          setlistSongIds: [],
+          goals: [],
+          notes: '',
+        })
+      ).status,
+      200,
+    );
+
+    const startsAt = new Date(2026, 11, 2, 18, 0, 0);
+    const withinWindow = new Date(
+      startsAt.getTime() - 23 * 60 * 60 * 1000,
+    );
+    assert.equal(await f.sendPracticeReminders(withinWindow), 2);
+    assert.equal(smtp.messages.length, 2);
+    assert.match(smtp.messages[0], /unconfirmed@example\.com/);
+    assert.match(smtp.messages[0], /Tomorrow Practice/);
+    assert.equal(await f.sendPracticeReminders(withinWindow), 0);
+    assert.equal(smtp.messages.length, 2);
+    const finalWindow = new Date(
+      startsAt.getTime() - 3 * 60 * 60 * 1000,
+    );
+    assert.equal(await f.sendPracticeReminders(finalWindow), 1);
+    assert.equal(smtp.messages.length, 3);
+    assert.match(smtp.messages[2], /4 hours/);
+    assert.equal(await f.sendPracticeReminders(finalWindow), 0);
+    assert.equal(
+      f.store.read().emailLogs[0].eventType,
+      'practice_event_reminder',
+    );
+  } finally {
+    await smtp.close();
+    await f.close();
+  }
+});
 
 test('signed-out sessions expose saved branding without private workspace data', async () => {
   const f = await fixture();

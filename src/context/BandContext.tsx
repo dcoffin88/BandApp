@@ -113,11 +113,27 @@ interface BandContextType {
   deleteSong: (songId: string) => Promise<boolean>;
   setActiveVersion: (songId: string, versionId: string) => Promise<boolean>;
   addPracticeSession: (
-    session: Omit<PracticeSession, 'id' | 'createdAt' | 'createdBy' | 'rsvps'>,
+    session: Omit<
+      PracticeSession,
+      | 'id'
+      | 'createdAt'
+      | 'createdBy'
+      | 'rsvps'
+      | 'reminderScheduleKey'
+      | 'reminderDeliveryKeys'
+    >,
   ) => Promise<boolean>;
   updatePracticeSession: (
     practiceId: string,
-    session: Omit<PracticeSession, 'id' | 'createdAt' | 'createdBy' | 'rsvps'>,
+    session: Omit<
+      PracticeSession,
+      | 'id'
+      | 'createdAt'
+      | 'createdBy'
+      | 'rsvps'
+      | 'reminderScheduleKey'
+      | 'reminderDeliveryKeys'
+    >,
   ) => Promise<boolean>;
   updateRsvp: (
     practiceId: string,

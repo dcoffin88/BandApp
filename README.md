@@ -54,6 +54,7 @@ Edit `.env` with your own settings. The supplied `.env.example` documents the av
 - `APP_SECRET` - a unique random secret. Keep it unchanged across upgrades and backups because saved SMTP credentials depend on it.
 - `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` - the initial administrator's credentials; choose a unique password of at least 12 characters.
 - `INITIAL_ADMIN_NAME` and `INITIAL_BAND_NAME` - initial display names.
+- `TZ` - the IANA time zone used for rehearsal times and RSVP reminders, such as `America/Halifax`.
 - `TRUST_PROXY_HOPS` - `0` for direct access or `1` behind exactly one trusted reverse proxy.
 - `MAX_UPLOAD_MB` - maximum audio upload size (from `1` to `500` MB).
 - `APP_PORT` - host-side published port for **Compose** (default `3000`); it does not change the internal container port.

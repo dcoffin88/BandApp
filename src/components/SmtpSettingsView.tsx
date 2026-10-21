@@ -69,7 +69,7 @@ export const SmtpSettingsView: React.FC = () => {
 
   // Email Outbox Filter State
   const [logSearch, setLogSearch] = useState('');
-  const [logFilter, setLogFilter] = useState<'all' | 'new_demo' | 'new_version' | 'lyric_edit' | 'practice_schedule' | 'comment' | 'test_probe'>('all');
+  const [logFilter, setLogFilter] = useState<'all' | 'new_demo' | 'new_version' | 'lyric_edit' | 'practice_schedule' | 'practice_reminder' | 'practice_event_reminder' | 'comment' | 'test_probe'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'simulated' | 'failed'>('all');
 
   // Preview Modal State
@@ -237,7 +237,9 @@ export const SmtpSettingsView: React.FC = () => {
       case 'practice_schedule':
         return { label: 'Rehearsal', bg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
       case 'practice_reminder':
-        return { label: 'Reminder', bg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' };
+        return { label: 'RSVP Reminder', bg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' };
+      case 'practice_event_reminder':
+        return { label: 'Event Reminder', bg: 'bg-blue-500/20 text-blue-300 border-blue-500/40' };
       case 'comment':
         return { label: 'Feedback', bg: 'bg-orange-500/20 text-orange-300 border-orange-500/40' };
       case 'test_probe':
@@ -571,7 +573,13 @@ export const SmtpSettingsView: React.FC = () => {
               {
                 id: 'practiceReminder' as const,
                 title: 'Practice RSVP Reminders',
-                desc: 'Automated nudge to tentative or unconfirmed members before rehearsals.',
+                desc: 'Send one RSVP nudge during the 24 hours before rehearsal to tentative or unconfirmed members.',
+                icon: Bell,
+              },
+              {
+                id: 'practiceEventReminder' as const,
+                title: 'Practice Event Reminders',
+                desc: 'Send each rehearsal’s enabled 1-day and 4-hour reminders to members who RSVP Going.',
                 icon: Bell,
               },
               {
@@ -758,6 +766,8 @@ export const SmtpSettingsView: React.FC = () => {
               <option value="new_version">New Takes</option>
               <option value="lyric_edit">Lyrics Edits</option>
               <option value="practice_schedule">Practices</option>
+              <option value="practice_reminder">RSVP Reminders</option>
+              <option value="practice_event_reminder">Event Reminders</option>
               <option value="comment">Comments</option>
               <option value="test_probe">Diagnostic Tests</option>
             </select>

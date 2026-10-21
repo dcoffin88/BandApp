@@ -142,6 +142,7 @@ const smtpSchema = z
       lyricEdits: z.boolean(),
       practiceSchedule: z.boolean(),
       practiceReminder: z.boolean(),
+      practiceEventReminder: z.boolean(),
       comments: z.boolean(),
     }),
   })
@@ -186,7 +187,12 @@ const practiceSchema = z.object({
   setlistSongIds: z.array(short).max(500),
   goals: z.array(short).max(100),
   notes: text,
+  eventReminderOneDay: z.boolean().default(true),
+  eventReminderFourHours: z.boolean().default(true),
 });
+
+export const PRACTICE_REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const PRACTICE_FINAL_REMINDER_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 export class HttpError extends Error {
   status: number;
@@ -1352,6 +1358,7 @@ export function createApplication(options: ApplicationOptions) {
       lyric_edit: 'lyricEdits',
       practice_schedule: 'practiceSchedule',
       practice_reminder: 'practiceReminder',
+      practice_event_reminder: 'practiceEventReminder',
       comment: 'comments',
       test_probe: 'newDemos',
       member_invite: 'newDemos',
@@ -1362,6 +1369,7 @@ export function createApplication(options: ApplicationOptions) {
       lyric_edit: 'lyricEdits',
       practice_schedule: 'practiceReminders',
       practice_reminder: 'practiceReminders',
+      practice_event_reminder: 'practiceReminders',
       comment: 'comments',
       test_probe: 'newDemos',
       member_invite: 'newDemos',
@@ -1382,6 +1390,145 @@ export function createApplication(options: ApplicationOptions) {
         type
       );
     }
+  }
+
+  async function sendPracticeReminders(
+    referenceTime = new Date()
+  ): Promise<number> {
+    const state = store.read();
+    if (
+      !state.smtpSettings.isEnabled ||
+      (!state.smtpSettings.notificationTriggers.practiceReminder &&
+        !state.smtpSettings.notificationTriggers.practiceEventReminder)
+    ) {
+      return 0;
+    }
+
+    const pending: Array<{
+      recipient: BandMember;
+      practice: (typeof state.practices)[number];
+      type: 'practice_reminder' | 'practice_event_reminder';
+      timing?: '1 day' | '4 hours';
+    }> = [];
+    let reminderStateChanged = false;
+
+    for (const practice of state.practices) {
+      const startsAt = new Date(`${practice.date}T${practice.startTime}:00`);
+      const millisecondsUntilPractice =
+        startsAt.getTime() - referenceTime.getTime();
+      if (
+        !Number.isFinite(startsAt.getTime()) ||
+        millisecondsUntilPractice <= 0 ||
+        millisecondsUntilPractice > PRACTICE_REMINDER_WINDOW_MS
+      ) {
+        continue;
+      }
+
+      const scheduleKey = `${practice.date}T${practice.startTime}`;
+      if (practice.reminderScheduleKey !== scheduleKey) {
+        practice.reminderScheduleKey = scheduleKey;
+        practice.reminderDeliveryKeys = [];
+        reminderStateChanged = true;
+      }
+      const delivered = new Set(practice.reminderDeliveryKeys ?? []);
+      const deliveredBefore = delivered.size;
+
+      if (state.smtpSettings.notificationTriggers.practiceReminder) {
+        for (const recipient of state.band.members) {
+          const deliveryKey = `rsvp:${recipient.id}`;
+          const rsvp = practice.rsvps.find(
+            (entry) => entry.userId === recipient.id
+          );
+          if (
+            recipient.status !== 'active' ||
+            recipient.notifications?.practiceReminders === false ||
+            delivered.has(deliveryKey) ||
+            (rsvp && rsvp.status !== 'tentative')
+          ) {
+            continue;
+          }
+          delivered.add(deliveryKey);
+          pending.push({ recipient, practice, type: 'practice_reminder' });
+        }
+      }
+
+      const dueWindows = [
+        {
+          enabled: practice.eventReminderOneDay ?? true,
+          id: 'event-one-day',
+          timing: '1 day' as const,
+          maximum: PRACTICE_REMINDER_WINDOW_MS,
+          minimum: PRACTICE_FINAL_REMINDER_WINDOW_MS,
+        },
+        {
+          enabled: practice.eventReminderFourHours ?? true,
+          id: 'event-four-hours',
+          timing: '4 hours' as const,
+          maximum: PRACTICE_FINAL_REMINDER_WINDOW_MS,
+          minimum: 0,
+        },
+      ].filter(
+        (window) =>
+          state.smtpSettings.notificationTriggers.practiceEventReminder &&
+          window.enabled &&
+          millisecondsUntilPractice <= window.maximum &&
+          millisecondsUntilPractice > window.minimum
+      );
+
+      for (const window of dueWindows) {
+        for (const recipient of state.band.members) {
+          const deliveryKey = `${window.id}:${recipient.id}`;
+          const rsvp = practice.rsvps.find(
+            (entry) => entry.userId === recipient.id
+          );
+          if (
+            recipient.status !== 'active' ||
+            recipient.notifications?.practiceReminders === false ||
+            delivered.has(deliveryKey) ||
+            rsvp?.status !== 'attending'
+          ) {
+            continue;
+          }
+          delivered.add(deliveryKey);
+          pending.push({
+            recipient,
+            practice,
+            type: 'practice_event_reminder',
+            timing: window.timing,
+          });
+        }
+      }
+
+      practice.reminderDeliveryKeys = [...delivered];
+      if (delivered.size !== deliveredBefore) reminderStateChanged = true;
+    }
+
+    if (reminderStateChanged) store.write(state);
+
+    for (const { recipient, practice, type, timing } of pending) {
+      const displayDate = new Date(
+        `${practice.date}T${practice.startTime}:00`
+      ).toLocaleString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+      await deliver(
+        recipient.email,
+        memberDisplayName(recipient),
+        type === 'practice_reminder'
+          ? `[${state.band.name}] RSVP needed: ${practice.title}`
+          : `[${state.band.name}] Practice reminder (${timing}): ${practice.title}`,
+        type === 'practice_reminder'
+          ? `<h2>${escapeHtml(practice.title)}</h2><p>Hi ${escapeHtml(memberDisplayName(recipient))},</p><p>Please update your RSVP for this rehearsal in the next 24 hours.</p><p><strong>${escapeHtml(displayDate)}</strong><br>${escapeHtml(practice.location)}</p><p><a href="${escapeHtml(origin)}">Open RehearsalHQ to respond</a></p>`
+          : `<h2>${escapeHtml(practice.title)}</h2><p>Hi ${escapeHtml(memberDisplayName(recipient))},</p><p>You RSVP'd Going. This rehearsal starts in about ${escapeHtml(timing || '')}.</p><p><strong>${escapeHtml(displayDate)}</strong><br>${escapeHtml(practice.location)}</p><p><a href="${escapeHtml(origin)}">Open RehearsalHQ</a></p>`,
+        type
+      );
+    }
+
+    return pending.length;
   }
 
   app.post(
@@ -1497,5 +1644,5 @@ export function createApplication(options: ApplicationOptions) {
       .json({ message: 'The server could not complete this request.' });
   };
 
-  return { app, store, errorHandler };
+  return { app, store, errorHandler, sendPracticeReminders };
 }
