@@ -64,10 +64,10 @@ export const Navbar: React.FC<NavbarProps> = ({
       case 'admin':
         return { label: 'Admin', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
       case 'member':
-        return { label: 'Band Member', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
+        return { label: 'Member', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
       case 'guest':
       default:
-        return { label: 'Session / Guest', color: 'bg-zinc-700/50 text-zinc-300 border-zinc-600' };
+        return { label: 'Guest', color: 'bg-zinc-700/50 text-zinc-300 border-zinc-600' };
     }
   };
 

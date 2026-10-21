@@ -14,6 +14,10 @@ import { verifyPassword } from '../server/database.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
 import { formatClockTime } from '../src/shared/time.ts';
 import {
+  prepareEmailForDelivery,
+  renderBrandedEmail,
+} from '../server/emailTemplates.ts';
+import {
   googleCalendarUrl,
   outlookCalendarUrl,
   practiceCalendarIcs,
@@ -38,6 +42,69 @@ test('clock times support 12-hour and 24-hour display', () => {
   assert.equal(formatClockTime('00:05', '12'), '12:05 AM');
   assert.equal(formatClockTime('15:30', '12'), '3:30 PM');
   assert.equal(formatClockTime('15:30', '24'), '15:30');
+});
+
+test('notification emails use branded, escaped HTML with a useful text alternative', () => {
+  const email = renderBrandedEmail(
+    {
+      bandName: 'Test & Band',
+      subtitle: "The band's home base.",
+      appUrl: 'https://rehearsal.example.com',
+      appSettings: { primaryColor: 'custom', customColor: '#22c55e' },
+    },
+    {
+      preheader: 'A new demo is ready.',
+      eyebrow: 'New demo uploaded',
+      title: '<Final Demo>',
+      greeting: 'Dougie',
+      intro: 'A new recording was added.',
+      details: [
+        { label: 'Tempo', value: '128 BPM' },
+        { label: 'Key', value: 'E minor' },
+      ],
+      callout: { label: 'Notes', text: '<script>unsafe</script>' },
+      ctaLabel: 'Listen now',
+    },
+  );
+  assert.match(email.html, /background:#22c55e/);
+  assert.match(email.html, /Test &amp; Band/);
+  assert.match(email.html, /&lt;Final Demo&gt;/);
+  assert.ok(!email.html.includes('<script>unsafe</script>'));
+  assert.match(email.html, /Manage notification preferences/);
+  assert.match(email.html, /alt="RehearsalHQ"/);
+  assert.match(email.text, /Tempo: 128 BPM/);
+  assert.match(email.text, /Key: E minor/);
+  assert.match(email.text, /Listen now: https:\/\/rehearsal\.example\.com/);
+  const preparedFallback = prepareEmailForDelivery(email.html);
+  assert.match(preparedFallback.html, /src="cid:rehearsalhq-logo-1"/);
+  assert.equal(preparedFallback.attachments[0].contentType, 'image/svg+xml');
+
+  const customLogo = renderBrandedEmail(
+    {
+      bandName: 'Logo Band',
+      subtitle: 'Custom identity',
+      appUrl: 'https://rehearsal.example.com',
+      appSettings: {
+        primaryColor: 'amber',
+        headerLogoUrl: 'data:image/png;base64,aGVhZGVy',
+        headerLogoShape: 'circle',
+        accentGlow: true,
+      },
+    },
+    {
+      preheader: 'Logo test',
+      eyebrow: 'Branding',
+      title: 'Custom logo',
+      intro: 'Testing the configured logo.',
+      ctaLabel: 'Open app',
+    },
+  );
+  assert.match(customLogo.html, /src="data:image\/png;base64,aGVhZGVy"/);
+  assert.match(customLogo.html, /border-radius:999px/);
+  assert.match(customLogo.html, /box-shadow:0 0 18px/);
+  const preparedCustom = prepareEmailForDelivery(customLogo.html);
+  assert.match(preparedCustom.html, /src="cid:rehearsalhq-logo-1"/);
+  assert.equal(preparedCustom.attachments[0].contentType, 'image/png');
 });
 
 test('practice calendar links preserve local event times and details', () => {
@@ -125,6 +192,21 @@ async function localSmtp() {
   };
 }
 
+const decodeEmail = (message: string) =>
+  message
+    .replace(/=\r\n/g, '')
+    .replace(/=([0-9A-F]{2})/g, (_, hex) =>
+      String.fromCharCode(parseInt(hex, 16)),
+    );
+
+async function waitForMessages(messages: string[], count: number) {
+  const deadline = Date.now() + 3000;
+  while (messages.length < count && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(messages.length, count, `Expected ${count} email messages.`);
+}
+
 test('member invitations send through SMTP, report failures and can be resent without duplicate accounts', async () => {
   const f = await fixture();
   const smtp = await localSmtp();
@@ -175,13 +257,13 @@ test('member invitations send through SMTP, report failures and can be resent wi
     assert.equal(sent.result.invitation.status, 'sent');
     assert.equal(sent.state.band.members.length, 2);
     assert.equal(smtp.messages.length, 1);
-    const message = smtp.messages[0]
-      .replace(/=\r\n/g, '')
-      .replace(/=([0-9A-F]{2})/g, (_, hex) =>
-        String.fromCharCode(parseInt(hex, 16)),
-      );
+    const message = decodeEmail(smtp.messages[0]);
     assert.match(message, /To: Invited Member <invite@example.com>/);
     assert.match(message, /http:\/\/localhost:3000/);
+    assert.match(message, /Band invitation/);
+    assert.match(message, /Test Band/);
+    assert.match(message, /Content-Type: text\/plain/);
+    assert.match(message, /Content-Type: text\/html/);
     assert.match(message, /share your initial password separately/);
     assert.ok(!message.includes(password));
     const member = await f.login(memberData.email);
@@ -218,6 +300,165 @@ test('member invitations send through SMTP, report failures and can be resent wi
     assert.ok(
       !JSON.stringify(recoveredData.state.emailLogs).includes(password),
     );
+  } finally {
+    await smtp.close();
+    await f.close();
+  }
+});
+
+test('action notifications include branded song, feedback, and rehearsal details', async () => {
+  const f = await fixture();
+  const smtp = await localSmtp();
+  try {
+    const admin = await f.login();
+    const member = {
+      name: 'Band Listener',
+      email: 'listener@example.com',
+      password,
+      role: 'member',
+      instrument: 'Bass',
+    };
+    assert.equal(
+      (await f.action(admin.cookie, 'member.add', member)).status,
+      200,
+    );
+    const smtpSettings = {
+      ...f.store.read().smtpSettings,
+      isEnabled: true,
+      host: '127.0.0.1',
+      port: smtp.port,
+      encryption: 'none' as const,
+      authRequired: false,
+      username: '',
+      password: '',
+      fromEmail: 'band@example.com',
+    };
+    assert.equal(
+      (await f.action(admin.cookie, 'smtp.update', smtpSettings)).status,
+      200,
+    );
+
+    const uploadAudio = async (contents: string, category = 'riff') => {
+      const upload = await f.request(
+        `/api/uploads?category=${category}`,
+        undefined,
+        admin.cookie,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'audio/wav' },
+          body: Buffer.from(contents),
+        },
+      );
+      assert.equal(upload.status, 201, await upload.clone().text());
+      return (await upload.json()).audioUrl as string;
+    };
+
+    const initialAudioUrl = await uploadAudio('RIFF-initial');
+    const added = await f.action(admin.cookie, 'song.add', {
+      title: 'Midnight Drive',
+      category: 'riff',
+      bpm: 128,
+      musicalKey: 'E minor',
+      description: 'Focus on the transition into the second chorus.',
+      tags: [],
+      version: {
+        label: 'v1 - Phone Demo',
+        audioUrl: initialAudioUrl,
+        duration: 95,
+      },
+    });
+    assert.equal(added.status, 200, await added.clone().text());
+    const song = (await added.json()).result;
+    await waitForMessages(smtp.messages, 1);
+    const demoEmail = decodeEmail(smtp.messages[0]);
+    assert.match(demoEmail, /New demo uploaded/);
+    assert.match(demoEmail, /Midnight Drive/);
+    assert.match(demoEmail, /128 BPM/);
+    assert.match(demoEmail, /E minor/);
+    assert.match(demoEmail, /second chorus/);
+    assert.match(demoEmail, /Listen in RehearsalHQ/);
+    assert.match(demoEmail, /Content-ID: <rehearsalhq-logo-1>/);
+
+    const nextAudioUrl = await uploadAudio('RIFF-second');
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.version', {
+          songId: song.id,
+          version: {
+            label: 'v2 - Full Band',
+            audioUrl: nextAudioUrl,
+            duration: 124,
+            fileSize: '4.2 MB',
+            notes: 'New drum ending and a tighter count-in.',
+          },
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 2);
+    const versionEmail = decodeEmail(smtp.messages[1]);
+    assert.match(versionEmail, /New recording take/);
+    assert.match(versionEmail, /v2 - Full Band/);
+    assert.match(versionEmail, /2:04/);
+    assert.match(versionEmail, /New drum ending/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.lyrics', {
+          songId: song.id,
+          draft: 'Updated words',
+          chordsSheet: 'Em C G D',
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 3);
+    const lyricsEmail = decodeEmail(smtp.messages[2]);
+    assert.match(lyricsEmail, /Lyrics updated/);
+    assert.match(lyricsEmail, /Chord chart/);
+    assert.match(lyricsEmail, /Included/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.comment', {
+          songId: song.id,
+          text: 'The harmony lands perfectly here.',
+          timestampSeconds: 62,
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 4);
+    const commentEmail = decodeEmail(smtp.messages[3]);
+    assert.match(commentEmail, /New band feedback/);
+    assert.match(commentEmail, /1:02/);
+    assert.match(commentEmail, /harmony lands perfectly/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'practice.add', {
+          title: 'Album Run-through',
+          date: '2026-12-05',
+          startTime: '18:30',
+          endTime: '21:00',
+          location: 'Studio B',
+          room: 'Live Room',
+          setlistSongIds: [song.id],
+          goals: ['Run the complete set', 'Fix the ending'],
+          notes: 'Bring in-ear monitors.',
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 5);
+    const practiceEmail = decodeEmail(smtp.messages[4]);
+    assert.match(practiceEmail, /New rehearsal/);
+    assert.match(practiceEmail, /Album Run-through/);
+    assert.match(practiceEmail, /Studio B/);
+    assert.match(practiceEmail, /Live Room/);
+    assert.match(practiceEmail, /Midnight Drive/);
+    assert.match(practiceEmail, /Bring in-ear monitors/);
+    assert.match(practiceEmail, /View practice and RSVP/);
   } finally {
     await smtp.close();
     await f.close();

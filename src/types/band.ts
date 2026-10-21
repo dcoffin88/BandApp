@@ -233,6 +233,7 @@ export interface EmailNotificationLog {
   status: 'sent' | 'failed' | 'simulated';
   sentAt: string;
   htmlContent: string;
+  textContent?: string;
   errorMessage?: string;
   smtpHostUsed: string;
 }

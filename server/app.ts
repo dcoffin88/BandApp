@@ -35,7 +35,14 @@ import type {
   SmtpSettings,
 } from '../src/types/band.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
-import { timeFormatOptions } from '../src/shared/time.ts';
+import { formatClockTime } from '../src/shared/time.ts';
+import {
+  prepareEmailForDelivery,
+  renderBrandedEmail,
+  type EmailContent,
+  type EmailDetail,
+  type RenderedEmail,
+} from './emailTemplates.ts';
 
 const text = z.string().max(1e4);
 const short = z.string().trim().max(200);
@@ -239,18 +246,15 @@ const identity = (u: BandMember) => ({
   avatar: u.avatar,
 });
 
-const escapeHtml = (s: string) =>
-  s.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
-      })[c] || c
-  );
+type AppNotification = Omit<EmailContent, 'greeting'> & {
+  type: EmailEventType;
+  subject: string;
+};
+
+const durationLabel = (duration: number) => {
+  const totalSeconds = Math.max(0, Math.round(duration));
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
+};
 
 export interface ApplicationOptions {
   development: boolean;
@@ -277,6 +281,45 @@ export function createApplication(options: ApplicationOptions) {
   const app = express();
   const origin = new URL(options.appUrl).origin;
   const key = createHash('sha256').update(options.secret).digest();
+
+  const brandedEmail = (content: EmailContent, state = store.read()) =>
+    renderBrandedEmail(
+      {
+        bandName: state.band.name,
+        subtitle:
+          state.appSettings.headerSubtitle ||
+          state.band.motto ||
+          "Your band's home base.",
+        appUrl: origin,
+        appSettings: state.appSettings,
+      },
+      content,
+    );
+
+  const practiceEmailDetails = (
+    practice: SharedState['practices'][number],
+    state: SharedState,
+  ): EmailDetail[] => {
+    const date = new Date(`${practice.date}T12:00:00`).toLocaleDateString(
+      undefined,
+      { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' },
+    );
+    const setlist = practice.setlistSongIds
+      .map((songId) => state.songs.find((song) => song.id === songId)?.title)
+      .filter((title): title is string => Boolean(title));
+    return [
+      { label: 'Date', value: date },
+      {
+        label: 'Time',
+        value: `${formatClockTime(practice.startTime, state.appSettings.timeFormat)} – ${formatClockTime(practice.endTime, state.appSettings.timeFormat)}`,
+      },
+      { label: 'Location', value: practice.location },
+      { label: 'Room', value: practice.room || '' },
+      { label: 'Setlist', value: setlist.join('\n') },
+      { label: 'Goals', value: practice.goals.join('\n') },
+      { label: 'Notes', value: practice.notes },
+    ];
+  };
 
   const route =
     (handler: (req: Request, res: Response) => Promise<any> | any) =>
@@ -880,7 +923,7 @@ export function createApplication(options: ApplicationOptions) {
       let result: any;
       let invitationRecipient: BandMember | undefined;
       const deletedMedia: string[] = [];
-      let event: { type: EmailEventType; text: string } | undefined;
+      let event: AppNotification | undefined;
 
       store.transaction(() => {
         const state = store.read();
@@ -1072,7 +1115,22 @@ export function createApplication(options: ApplicationOptions) {
             state.songs.unshift(result);
             event = {
               type: 'new_demo',
-              text: `${memberDisplayName(user)} uploaded ${data.title}.`,
+              subject: `New demo: ${data.title}`,
+              preheader: `${memberDisplayName(user)} uploaded a new demo for the band.`,
+              eyebrow: 'New demo uploaded',
+              title: data.title,
+              intro: `${memberDisplayName(user)} added a new recording to the demo vault.`,
+              details: [
+                { label: 'Category', value: data.category },
+                { label: 'Tempo', value: data.bpm ? `${data.bpm} BPM` : '' },
+                { label: 'Key', value: data.musicalKey || '' },
+                { label: 'Initial take', value: version.label },
+                { label: 'Uploaded by', value: memberDisplayName(user) },
+              ],
+              callout: data.description
+                ? { label: 'Notes for the band', text: data.description }
+                : undefined,
+              ctaLabel: 'Listen in RehearsalHQ',
             };
             break;
           }
@@ -1094,7 +1152,25 @@ export function createApplication(options: ApplicationOptions) {
             target.activeVersionId = version.id;
             event = {
               type: 'new_version',
-              text: `${memberDisplayName(user)} uploaded a new take for ${target.title}.`,
+              subject: `New take: ${target.title}`,
+              preheader: `${memberDisplayName(user)} uploaded ${version.label}.`,
+              eyebrow: 'New recording take',
+              title: target.title,
+              intro: `${memberDisplayName(user)} uploaded a new take and made it the active version.`,
+              details: [
+                { label: 'Take', value: version.label },
+                { label: 'Version', value: `v${version.versionNumber}` },
+                {
+                  label: 'Duration',
+                  value: durationLabel(version.duration),
+                },
+                { label: 'File size', value: version.fileSize || '' },
+                { label: 'Uploaded by', value: memberDisplayName(user) },
+              ],
+              callout: version.notes
+                ? { label: 'Take notes', text: version.notes }
+                : undefined,
+              ctaLabel: 'Listen to the new take',
             };
             break;
           }
@@ -1128,13 +1204,28 @@ export function createApplication(options: ApplicationOptions) {
             };
             event = {
               type: 'lyric_edit',
-              text: `${memberDisplayName(user)} updated lyrics for ${target.title}.`,
+              subject: `Lyrics updated: ${target.title}`,
+              preheader: `${memberDisplayName(user)} updated the lyrics and chords.`,
+              eyebrow: 'Lyrics updated',
+              title: target.title,
+              intro: `${memberDisplayName(user)} saved a new lyrics and chords revision.`,
+              details: [
+                { label: 'Revision', value: `Version ${target.lyrics.versionNumber}` },
+                { label: 'Edited by', value: memberDisplayName(user) },
+                {
+                  label: 'Chord chart',
+                  value: target.lyrics.chordsSheet?.trim()
+                    ? 'Included'
+                    : 'Not included',
+                },
+              ],
+              ctaLabel: 'Review lyrics and chords',
             };
             break;
           }
           case 'song.comment': {
             const target = song();
-            target.comments.push({
+            const comment = {
               id: randomUUID(),
               userId: user.id,
               userName: memberDisplayName(user),
@@ -1145,10 +1236,27 @@ export function createApplication(options: ApplicationOptions) {
                   ? undefined
                   : z.number().min(0).parse(p.timestampSeconds),
               createdAt: now(),
-            });
+            };
+            target.comments.push(comment);
             event = {
               type: 'comment',
-              text: `${memberDisplayName(user)} commented on ${target.title}.`,
+              subject: `New comment: ${target.title}`,
+              preheader: `${memberDisplayName(user)} left feedback on ${target.title}.`,
+              eyebrow: 'New band feedback',
+              title: target.title,
+              intro: `${memberDisplayName(user)} added a comment to this recording.`,
+              details: [
+                { label: 'Commented by', value: memberDisplayName(user) },
+                {
+                  label: 'At recording time',
+                  value:
+                    comment.timestampSeconds === undefined
+                      ? ''
+                      : `${Math.floor(comment.timestampSeconds / 60)}:${String(comment.timestampSeconds % 60).padStart(2, '0')}`,
+                },
+              ],
+              callout: { label: 'Comment', text: comment.text },
+              ctaLabel: 'Open the discussion',
             };
             break;
           }
@@ -1211,7 +1319,13 @@ export function createApplication(options: ApplicationOptions) {
             });
             event = {
               type: 'practice_schedule',
-              text: `${memberDisplayName(user)} scheduled ${data.title} on ${data.date}.`,
+              subject: `Practice scheduled: ${data.title}`,
+              preheader: `${memberDisplayName(user)} scheduled a new rehearsal.`,
+              eyebrow: 'New rehearsal',
+              title: data.title,
+              intro: `${memberDisplayName(user)} scheduled a band practice. Check the details and submit your RSVP.`,
+              details: practiceEmailDetails(state.practices[0], state),
+              ctaLabel: 'View practice and RSVP',
             };
             break;
           }
@@ -1227,7 +1341,13 @@ export function createApplication(options: ApplicationOptions) {
             Object.assign(target, data);
             event = {
               type: 'practice_schedule',
-              text: `${memberDisplayName(user)} updated ${data.title} on ${data.date}.`,
+              subject: `Practice updated: ${data.title}`,
+              preheader: `${memberDisplayName(user)} changed the rehearsal details.`,
+              eyebrow: 'Rehearsal updated',
+              title: data.title,
+              intro: `${memberDisplayName(user)} updated this practice. Review the latest schedule and confirm your RSVP.`,
+              details: practiceEmailDetails(target, state),
+              ctaLabel: 'Review updated practice',
             };
             break;
           }
@@ -1271,12 +1391,32 @@ export function createApplication(options: ApplicationOptions) {
 
       if (invitationRecipient) {
         const recipient = invitationRecipient;
-        const bandName = store.read().band.name;
+        const invitationState = store.read();
+        const bandName = invitationState.band.name;
+        const invitationEmail = brandedEmail(
+          {
+            preheader: `${memberDisplayName(user)} invited you to join ${bandName}.`,
+            eyebrow: 'Band invitation',
+            title: `Join ${bandName}`,
+            greeting: memberDisplayName(recipient),
+            intro: `${memberDisplayName(user)} invited you to the band's private workspace for demos, lyrics, feedback, and rehearsal planning.`,
+            details: [
+              { label: 'Workspace', value: bandName },
+              { label: 'Sign-in email', value: recipient.email },
+              { label: 'Role', value: recipient.role },
+              { label: 'Instrument', value: recipient.instrument },
+            ],
+            ctaLabel: `Sign in to ${bandName}`,
+            afterCta:
+              'Your Band Admin will share your initial password separately. After signing in, change it under Profile Management.',
+          },
+          invitationState,
+        );
         const log = await deliver(
           recipient.email,
           memberDisplayName(recipient),
           `[${bandName}] You're invited to the band workspace`,
-          `<h2>Join ${escapeHtml(bandName)}</h2><p>Hi ${escapeHtml(memberDisplayName(recipient))},</p><p>${escapeHtml(memberDisplayName(user))} invited you to the band's workspace, where you can share demos, lyrics and rehearsal plans.</p><p><a href="${escapeHtml(origin)}">Sign in to ${escapeHtml(bandName)}</a></p><p>Your sign-in email is <strong>${escapeHtml(recipient.email)}</strong>.</p><p>Your Band Admin will share your initial password separately. After signing in, you can change it under Profile Management.</p>`,
+          invitationEmail,
           'member_invite',
           true
         );
@@ -1301,7 +1441,7 @@ export function createApplication(options: ApplicationOptions) {
       });
 
       if (event) {
-        void notify(user, event.type, event.text).catch((error) =>
+        void notify(user, event).catch((error) =>
           console.error('Notification failed:', error.message)
         );
       }
@@ -1335,7 +1475,7 @@ export function createApplication(options: ApplicationOptions) {
     to: string,
     toName: string,
     subject: string,
-    html: string,
+    emailContent: RenderedEmail,
     type: EmailEventType,
     requireDelivery = false
   ): Promise<EmailNotificationLog> {
@@ -1348,7 +1488,8 @@ export function createApplication(options: ApplicationOptions) {
       eventType: type,
       status: 'simulated',
       sentAt: now(),
-      htmlContent: html,
+      htmlContent: emailContent.html,
+      textContent: emailContent.text,
       smtpHostUsed: settings.host,
     };
     if (!settings.isEnabled && requireDelivery) {
@@ -1358,6 +1499,7 @@ export function createApplication(options: ApplicationOptions) {
     }
     if (settings.isEnabled) {
       try {
+        const preparedEmail = prepareEmailForDelivery(emailContent.html);
         await transport(settings).sendMail({
           from: {
             name: settings.fromName,
@@ -1366,7 +1508,9 @@ export function createApplication(options: ApplicationOptions) {
           to: { name: toName, address: to },
           replyTo: settings.replyTo || undefined,
           subject,
-          html,
+          html: preparedEmail.html,
+          text: emailContent.text,
+          attachments: preparedEmail.attachments,
           disableFileAccess: true,
           disableUrlAccess: true,
         });
@@ -1384,7 +1528,7 @@ export function createApplication(options: ApplicationOptions) {
     return log;
   }
 
-  async function notify(user: BandMember, type: EmailEventType, message: string) {
+  async function notify(user: BandMember, event: AppNotification) {
     const state = store.read();
     if (!state.smtpSettings.isEnabled) return;
     const trigger: Record<string, keyof SmtpSettings['notificationTriggers']> = {
@@ -1409,20 +1553,27 @@ export function createApplication(options: ApplicationOptions) {
       test_probe: 'newDemos',
       member_invite: 'newDemos',
     };
-    const triggerKey = trigger[type];
+    const triggerKey = trigger[event.type];
     if (!triggerKey || !state.smtpSettings.notificationTriggers[triggerKey]) return;
     for (const recipient of state.band.members.filter(
       (m) =>
         m.status === 'active' &&
         m.id !== user.id &&
-        (m.notifications as any)?.[preference[type]] !== false
+        (m.notifications as any)?.[preference[event.type]] !== false
     )) {
+      const email = brandedEmail(
+        {
+          ...event,
+          greeting: memberDisplayName(recipient),
+        },
+        state,
+      );
       await deliver(
         recipient.email,
         memberDisplayName(recipient),
-        `[${state.band.name}] ${message}`,
-        `<p>${escapeHtml(message)}</p><p><a href="${escapeHtml(origin)}">Open RehearsalHQ</a></p>`,
-        type
+        `[${state.band.name}] ${event.subject}`,
+        email,
+        event.type
       );
     }
   }
@@ -1541,25 +1692,38 @@ export function createApplication(options: ApplicationOptions) {
     if (reminderStateChanged) store.write(state);
 
     for (const { recipient, practice, type, timing } of pending) {
-      const displayDate = new Date(
-        `${practice.date}T${practice.startTime}:00`
-      ).toLocaleString(undefined, {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        ...timeFormatOptions(state.appSettings.timeFormat),
-      });
+      const needsRsvp = type === 'practice_reminder';
+      const email = brandedEmail(
+        {
+          preheader: needsRsvp
+            ? `Please RSVP for ${practice.title}.`
+            : `${practice.title} starts in about ${timing}.`,
+          eyebrow: needsRsvp ? 'RSVP needed' : 'Upcoming rehearsal',
+          title: practice.title,
+          greeting: memberDisplayName(recipient),
+          intro: needsRsvp
+            ? 'The band is finalizing this rehearsal. Let everyone know whether you are going, tentative, or unable to attend.'
+            : `You RSVP'd Going. This rehearsal starts in about ${timing}. Here are the latest details.`,
+          details: [
+            ...practiceEmailDetails(practice, state),
+            {
+              label: 'Your RSVP',
+              value: needsRsvp ? 'Response needed' : 'Going',
+            },
+          ],
+          ctaLabel: needsRsvp
+            ? 'Update your RSVP'
+            : 'Open rehearsal details',
+        },
+        state,
+      );
       await deliver(
         recipient.email,
         memberDisplayName(recipient),
-        type === 'practice_reminder'
+        needsRsvp
           ? `[${state.band.name}] RSVP needed: ${practice.title}`
           : `[${state.band.name}] Practice reminder (${timing}): ${practice.title}`,
-        type === 'practice_reminder'
-          ? `<h2>${escapeHtml(practice.title)}</h2><p>Hi ${escapeHtml(memberDisplayName(recipient))},</p><p>Please update your RSVP for this rehearsal in the next 24 hours.</p><p><strong>${escapeHtml(displayDate)}</strong><br>${escapeHtml(practice.location)}</p><p><a href="${escapeHtml(origin)}">Open RehearsalHQ to respond</a></p>`
-          : `<h2>${escapeHtml(practice.title)}</h2><p>Hi ${escapeHtml(memberDisplayName(recipient))},</p><p>You RSVP'd Going. This rehearsal starts in about ${escapeHtml(timing || '')}.</p><p><strong>${escapeHtml(displayDate)}</strong><br>${escapeHtml(practice.location)}</p><p><a href="${escapeHtml(origin)}">Open RehearsalHQ</a></p>`,
+        email,
         type
       );
     }
@@ -1600,11 +1764,31 @@ export function createApplication(options: ApplicationOptions) {
       const user = res.locals.user as BandMember;
       requireAdmin(user);
       const to = email.parse(req.body.to);
+      const state = store.read();
       const log = await deliver(
         to,
         memberDisplayName(user),
         'RehearsalHQ SMTP test',
-        '<p>Your RehearsalHQ email connection is working.</p>',
+        brandedEmail(
+          {
+            preheader: 'Your RehearsalHQ email connection is working.',
+            eyebrow: 'Email settings',
+            title: 'SMTP connection successful',
+            greeting: memberDisplayName(user),
+            intro:
+              'RehearsalHQ successfully generated and delivered this test message using your current email settings.',
+            details: [
+              {
+                label: 'Sender',
+                value: state.smtpSettings.fromName || state.band.name,
+              },
+              { label: 'Recipient', value: to },
+              { label: 'SMTP host', value: state.smtpSettings.host },
+            ],
+            ctaLabel: 'Open Email Settings',
+          },
+          state,
+        ),
         'test_probe'
       );
       res.json({
@@ -1632,7 +1816,12 @@ export function createApplication(options: ApplicationOptions) {
         old.recipientEmail,
         old.recipientName,
         old.subject,
-        old.htmlContent,
+        {
+          html: old.htmlContent,
+          text:
+            old.textContent ||
+            'Open RehearsalHQ to view this notification: ' + origin,
+        },
         old.eventType,
         old.eventType === 'member_invite'
       );
