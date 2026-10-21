@@ -4,6 +4,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Check,
+  Clock3,
   Crop,
   Crown,
   Database,
@@ -45,6 +46,7 @@ import { useAppVersion } from '../hooks/useAppVersion.ts';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionModal } from './VersionModal.tsx';
 import { memberDisplayName } from '../shared/member.ts';
+import { timeFormatOptions } from '../shared/time.ts';
 
 interface AdminSettingsViewProps {
   initialTab?: 'users' | 'auth' | 'app' | 'smtp';
@@ -112,6 +114,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [localAppSettings, setLocalAppSettings] = useState<AppSettings>(appSettings);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [appSettingsSaveSuccess, setAppSettingsSaveSuccess] = useState(false);
+  const [timeSettingsSaveSuccess, setTimeSettingsSaveSuccess] = useState(false);
 
   // User Management State
   const [userSearch, setUserSearch] = useState('');
@@ -152,6 +155,13 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     if (!await updateAppSettings({ headerLogoUrl, headerLogoShape, headerSubtitle, accentGlow })) return;
     setAppSettingsSaveSuccess(true);
     setTimeout(() => setAppSettingsSaveSuccess(false), 2500);
+  };
+
+  const handleSaveTimeSettings = async () => {
+    if (!isAdmin) return;
+    if (!(await updateAppSettings({ timeFormat: localAppSettings.timeFormat }))) return;
+    setTimeSettingsSaveSuccess(true);
+    setTimeout(() => setTimeSettingsSaveSuccess(false), 2500);
   };
 
   const handleSaveAuthSettings = async (e: React.FormEvent) => {
@@ -550,6 +560,57 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           </div>
 
           )}
+
+          <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-zinc-800">
+              <Clock3 className="w-5 h-5 text-amber-400" />
+              <h3 className="font-bold text-white text-base">Time Display</h3>
+            </div>
+            <div>
+              <p className="text-xs text-zinc-400 mb-3">
+                Choose how clock times appear throughout RehearsalHQ.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { id: '12' as const, label: '12 hour', example: '3:30 PM' },
+                  { id: '24' as const, label: '24 hour', example: '15:30' },
+                ].map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setLocalAppSettings({
+                      ...localAppSettings,
+                      timeFormat: option.id,
+                    })}
+                    className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition ${
+                      localAppSettings.timeFormat === option.id
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span className="text-xs font-semibold">{option.label}</span>
+                    <span className="font-mono text-xs opacity-80">{option.example}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3 text-xs">
+              {timeSettingsSaveSuccess && (
+                <span className="text-emerald-400 font-medium flex items-center gap-1">
+                  <Check className="w-4 h-4" />
+                  <span>Time display saved!</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleSaveTimeSettings}
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save Time Display</span>
+              </button>
+            </div>
+          </div>
 
           {/* Application Version & GitHub Release Tracking */}
           <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-4">
@@ -1015,7 +1076,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-500 self-end sm:self-auto">
                     <span>IP: {log.ipAddress}</span>
                     <span>•</span>
-                    <span>{new Date(log.timestamp).toLocaleString()}</span>
+                    <span>{new Date(log.timestamp).toLocaleString(undefined, timeFormatOptions(appSettings.timeFormat))}</span>
                   </div>
                 </div>
               ))}

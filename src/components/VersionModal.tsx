@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { AppVersionInfo } from '../utils/versionService.ts';
+import { useBand } from '../context/BandContext.tsx';
+import { timeFormatOptions } from '../shared/time.ts';
 
 interface VersionModalProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ export const VersionModal: React.FC<VersionModalProps> = ({
   isLoading,
   onCheckUpdates,
 }) => {
+  const { appSettings } = useBand();
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -48,6 +51,7 @@ export const VersionModal: React.FC<VersionModalProps> = ({
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+        ...timeFormatOptions(appSettings.timeFormat),
       })
     : null;
 
@@ -55,6 +59,7 @@ export const VersionModal: React.FC<VersionModalProps> = ({
     ? new Date(versionInfo.checkedAt).toLocaleTimeString(undefined, {
         hour: '2-digit',
         minute: '2-digit',
+        ...timeFormatOptions(appSettings.timeFormat),
       })
     : null;
 

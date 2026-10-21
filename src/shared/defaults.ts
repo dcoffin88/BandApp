@@ -113,6 +113,7 @@ export function emptyState(): SharedState {
       headerLogoShape: 'rounded',
       accentGlow: true,
       headerSubtitle: 'Your band\'s home base.',
+      timeFormat: '12',
     },
     smtpSettings: {
       isEnabled: false,

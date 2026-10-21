@@ -40,12 +40,14 @@ import {
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { EmailEventType, EmailNotificationLog, SmtpSettings } from '../types/band.ts';
+import { timeFormatOptions } from '../shared/time.ts';
 
 export const SmtpSettingsView: React.FC = () => {
   const {
     band,
     currentUser,
     permissions,
+    appSettings,
     smtpSettings,
     emailLogs,
     updateSmtpSettings,
@@ -836,7 +838,7 @@ export const SmtpSettingsView: React.FC = () => {
                         </td>
 
                         <td className="py-2.5 px-3 text-zinc-400 font-mono text-[11px] whitespace-nowrap">
-                          {new Date(log.sentAt).toLocaleDateString()} {new Date(log.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(log.sentAt).toLocaleDateString()} {new Date(log.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...timeFormatOptions(appSettings.timeFormat) })}
                         </td>
 
                         <td className="py-2.5 px-3 text-right whitespace-nowrap">
@@ -927,7 +929,7 @@ export const SmtpSettingsView: React.FC = () => {
                   <span className="text-zinc-500">From:</span> "{localSettings.fromName || band.name}" &lt;{localSettings.fromEmail || 'notifications@RehearsalHQ.app'}&gt;
                 </div>
                 <span className="text-[10px] text-zinc-500">
-                  {new Date(previewLog.sentAt).toLocaleString()}
+                  {new Date(previewLog.sentAt).toLocaleString(undefined, timeFormatOptions(appSettings.timeFormat))}
                 </span>
               </div>
               <div>

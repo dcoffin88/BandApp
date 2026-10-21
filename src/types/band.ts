@@ -169,6 +169,7 @@ export interface AppSettings extends UserAppearance {
   headerLogoShape: 'circle' | 'rounded' | 'square';
   headerSubtitle: string;
   accentGlow: boolean;
+  timeFormat: '12' | '24';
 }
 
 export interface SmtpNotificationTriggers {

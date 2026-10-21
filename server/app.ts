@@ -35,6 +35,7 @@ import type {
   SmtpSettings,
 } from '../src/types/band.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
+import { timeFormatOptions } from '../src/shared/time.ts';
 
 const text = z.string().max(1e4);
 const short = z.string().trim().max(200);
@@ -120,6 +121,7 @@ const appSchema = z
     headerLogoShape: z.enum(['circle', 'rounded', 'square']),
     headerSubtitle: short,
     accentGlow: z.boolean(),
+    timeFormat: z.enum(['12', '24']),
   })
   .partial()
   .strict();
@@ -589,6 +591,7 @@ export function createApplication(options: ApplicationOptions) {
             headerLogoUrl: appSettings.headerLogoUrl,
             headerLogoShape: appSettings.headerLogoShape,
             headerSubtitle: appSettings.headerSubtitle,
+            timeFormat: appSettings.timeFormat,
             ...DEFAULT_APPEARANCE,
           },
         });
@@ -1514,6 +1517,7 @@ export function createApplication(options: ApplicationOptions) {
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
+        ...timeFormatOptions(state.appSettings.timeFormat),
       });
       await deliver(
         recipient.email,

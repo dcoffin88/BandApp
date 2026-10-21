@@ -17,9 +17,10 @@ import {
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { PracticeSession, SongIdea } from '../types/band.ts';
+import { formatClockTime } from '../shared/time.ts';
 
 export const PracticeScheduleView: React.FC = () => {
-  const { practices, songs, currentUser, permissions, addPracticeSession, updatePracticeSession, updateRsvp, deletePracticeSession } = useBand();
+  const { practices, songs, currentUser, permissions, appSettings, addPracticeSession, updatePracticeSession, updateRsvp, deletePracticeSession } = useBand();
   const { playSong } = useAudioPlayer();
 
   const [isPracticeModalOpen, setIsPracticeModalOpen] = useState(false);
@@ -189,7 +190,7 @@ export const PracticeScheduleView: React.FC = () => {
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-zinc-500" />
                         <span>
-                          {practice.startTime} - {practice.endTime}
+                          {formatClockTime(practice.startTime, appSettings.timeFormat)} - {formatClockTime(practice.endTime, appSettings.timeFormat)}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">

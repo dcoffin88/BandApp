@@ -12,6 +12,7 @@ import {
 } from '../server/app.ts';
 import { verifyPassword } from '../server/database.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
+import { formatClockTime } from '../src/shared/time.ts';
 
 const password = 'Correct-Horse-123!';
 
@@ -25,6 +26,12 @@ test('member display names prefer a trimmed stage name with full-name fallback',
     memberDisplayName({ name: 'Alex Smith', stageName: '  Ace  ' }),
     'Ace',
   );
+});
+
+test('clock times support 12-hour and 24-hour display', () => {
+  assert.equal(formatClockTime('00:05', '12'), '12:05 AM');
+  assert.equal(formatClockTime('15:30', '12'), '3:30 PM');
+  assert.equal(formatClockTime('15:30', '24'), '15:30');
 });
 
 async function localSmtp() {
@@ -368,6 +375,7 @@ test('signed-out sessions expose saved branding without private workspace data',
     assert.equal(anonymous.appSettings.headerLogoShape, 'circle');
     assert.equal(anonymous.appSettings.primaryColor, 'amber');
     assert.equal(anonymous.appSettings.appearance, 'dark');
+    assert.equal(anonymous.appSettings.timeFormat, '12');
     assert.equal((await f.request('/api/state')).status, 401);
   } finally {
     await f.close();
@@ -730,6 +738,7 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       headerLogoUrl: 'data:image/png;base64,aGVhZGVy',
       headerLogoShape: 'circle',
       headerSubtitle: 'Admin header',
+      timeFormat: '24',
     };
     assert.equal(
       (await f.action(admin.cookie, 'app.update', branding)).status,
@@ -767,6 +776,12 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
     assert.equal(
       f.store.read().appSettings.headerLogoUrl,
       branding.headerLogoUrl,
+    );
+    assert.equal(f.store.read().appSettings.timeFormat, '24');
+    assert.equal(
+      (await f.action(admin.cookie, 'app.update', { timeFormat: 'military' }))
+        .status,
+      400,
     );
     assert.equal(
       f.store.read().appSettings.headerLogoShape,
