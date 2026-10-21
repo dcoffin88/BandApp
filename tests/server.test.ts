@@ -775,6 +775,16 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
     );
     const member = await f.login('member@example.com'),
       guest = await f.login('guest@example.com');
+    assert.equal(
+      (
+        await f.action(guest.cookie, 'song.update', {
+          songId: 'missing-song',
+          title: 'Unauthorized edit',
+          category: 'idea',
+        })
+      ).status,
+      403,
+    );
     const branding = {
       headerLogoUrl: 'data:image/png;base64,aGVhZGVy',
       headerLogoShape: 'circle',
@@ -1014,6 +1024,21 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     const { result: song } = await add.json();
     assert.equal(song.createdBy.name, 'The Conductor');
     assert.equal(song.versions[0].uploadedBy.name, 'The Conductor');
+    const metadataUpdate = await f.action(admin.cookie, 'song.update', {
+      songId: song.id,
+      title: 'Finished Demo',
+      category: 'full',
+      bpm: 132,
+      musicalKey: 'D minor',
+      description: 'Use the quieter intro.',
+    });
+    assert.equal(metadataUpdate.status, 200, await metadataUpdate.clone().text());
+    const updatedSong = (await metadataUpdate.json()).state.songs[0];
+    assert.equal(updatedSong.title, 'Finished Demo');
+    assert.equal(updatedSong.category, 'full');
+    assert.equal(updatedSong.bpm, 132);
+    assert.equal(updatedSong.musicalKey, 'D minor');
+    assert.equal(updatedSong.description, 'Use the quieter intro.');
     assert.equal(
       (
         await f.action(admin.cookie, 'song.comment', {
@@ -1099,6 +1124,11 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       await f.request('/api/state', undefined, admin.cookie)
     ).json();
     assert.equal(state.songs[0].lyrics.draft, 'Shared words');
+    assert.equal(state.songs[0].title, 'Finished Demo');
+    assert.equal(state.songs[0].category, 'full');
+    assert.equal(state.songs[0].bpm, 132);
+    assert.equal(state.songs[0].musicalKey, 'D minor');
+    assert.equal(state.songs[0].description, 'Use the quieter intro.');
     assert.equal(state.songs[0].lyrics.lastEditedBy, 'The Conductor');
     assert.equal(state.songs[0].createdBy.name, 'Maestro');
     assert.equal(state.songs[0].versions[0].uploadedBy.name, 'Maestro');

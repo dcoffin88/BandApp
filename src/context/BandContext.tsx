@@ -19,6 +19,7 @@ import type {
   Role,
   SmtpSettings,
   SongIdea,
+  SongMetadataUpdate,
   UserRolePermissions,
   UserStatus,
   AddMemberResult,
@@ -104,6 +105,10 @@ interface BandContextType {
     songId: string,
     draft: string,
     chordsSheet?: string,
+  ) => Promise<boolean>;
+  updateSongMetadata: (
+    songId: string,
+    updates: SongMetadataUpdate,
   ) => Promise<boolean>;
   addComment: (
     songId: string,
@@ -485,6 +490,8 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     addSongVersion,
     updateLyrics: (songId, draft, chordsSheet) =>
       save('song.lyrics', { songId, draft, chordsSheet }),
+    updateSongMetadata: (songId, updates) =>
+      save('song.update', { songId, ...updates }),
     addComment: (songId, text, timestampSeconds) =>
       save('song.comment', { songId, text, timestampSeconds }),
     deleteSong: (songId) => save('song.delete', { songId }),

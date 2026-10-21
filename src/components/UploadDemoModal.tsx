@@ -13,8 +13,7 @@ import { SongIdea } from '../types/band.ts';
 import { useMicrophoneRecorder } from '../hooks/useMicrophoneRecorder.ts';
 import { MicrophoneSelector } from './MicrophoneSelector.tsx';
 import { memberDisplayName } from '../shared/member.ts';
-
-const KEY_ROOTS = ['C', 'C♯ / D♭', 'D', 'D♯ / E♭', 'E', 'F', 'F♯ / G♭', 'G', 'G♯ / A♭', 'A', 'A♯ / B♭', 'B'];
+import { KEY_ROOTS, SONG_CATEGORY_OPTIONS } from '../shared/songMetadata.ts';
 
 interface UploadDemoModalProps {
   isOpen: boolean;
@@ -330,12 +329,9 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
                 onChange={e => setCategory(e.target.value as any)}
                 className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
               >
-                <option value="idea">Song Idea (Acoustic / Full)</option>
-                <option value="chorus">Chorus Idea (Anthem / Hook)</option>
-                <option value="riff">Riff (Guitar / Heavy)</option>
-                <option value="bass">Bass Idea (Groove / Pocket)</option>
-                <option value="verse">Verse Idea</option>
-                <option value="full">Full Arrangement</option>
+                {SONG_CATEGORY_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </select>
             </div>
 

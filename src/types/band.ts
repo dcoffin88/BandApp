@@ -96,6 +96,11 @@ export interface SongIdea {
   };
 }
 
+export type SongMetadataUpdate = Pick<
+  SongIdea,
+  'title' | 'category' | 'bpm' | 'musicalKey' | 'description'
+>;
+
 export interface PracticeRsvp {
   userId: string;
   userName: string;

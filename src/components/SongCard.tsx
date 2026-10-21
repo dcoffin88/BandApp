@@ -9,6 +9,7 @@ import {
   MoreVertical,
   Music2,
   Pause,
+  Pencil,
   Play,
   Plus,
   Send,
@@ -18,6 +19,7 @@ import {
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { AudioVersion, SongIdea } from '../types/band.ts';
+import { EditSongMetadataModal } from './EditSongMetadataModal.tsx';
 
 interface SongCardProps {
   song: SongIdea;
@@ -63,6 +65,7 @@ export const SongCard: React.FC<SongCardProps> = ({
   const { currentUser, permissions, deleteSong, setActiveVersion, addComment } = useBand();
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showEditMetadata, setShowEditMetadata] = useState(false);
   const [newCommentText, setNewCommentText] = useState('');
 
   const isCurrentPlaying = currentSong?.id === song.id;
@@ -131,6 +134,7 @@ export const SongCard: React.FC<SongCardProps> = ({
   );
 
   return (
+    <>
     <div className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
       isCurrentPlaying && isPlaying
         ? 'bg-zinc-900/90 border-amber-500/50 shadow-xl shadow-amber-500/5 ring-1 ring-amber-500/20'
@@ -193,6 +197,18 @@ export const SongCard: React.FC<SongCardProps> = ({
 
           {/* Right Action Menu: Version button & delete */}
           <div className="flex items-center gap-1.5">
+            {permissions.canUploadDemo && (
+              <button
+                type="button"
+                onClick={() => setShowEditMetadata(true)}
+                className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-amber-500/10 hover:text-amber-300"
+                title="Edit demo details"
+                aria-label={`Edit details for ${song.title}`}
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+
             {permissions.canUploadVersion && (
               <button
                 onClick={() => onOpenNewVersion(song)}
@@ -529,5 +545,12 @@ export const SongCard: React.FC<SongCardProps> = ({
         )}
       </div>
     </div>
+    {showEditMetadata && (
+      <EditSongMetadataModal
+        song={song}
+        onClose={() => setShowEditMetadata(false)}
+      />
+    )}
+    </>
   );
 };

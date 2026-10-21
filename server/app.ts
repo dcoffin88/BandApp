@@ -179,6 +179,25 @@ const songSchema = z.object({
   version: versionSchema,
 });
 
+const songMetadataSchema = z
+  .object({
+    songId: short,
+    title: required,
+    category: z.enum([
+      'idea',
+      'chorus',
+      'riff',
+      'bass',
+      'full',
+      'verse',
+      'bridge',
+    ]),
+    bpm: z.number().int().min(40).max(260).optional(),
+    musicalKey: short.optional(),
+    description: text.optional(),
+  })
+  .strict();
+
 const practiceSchema = z.object({
   title: required,
   date: (z as any).iso?.date ? (z as any).iso.date() : z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -1077,6 +1096,19 @@ export function createApplication(options: ApplicationOptions) {
               type: 'new_version',
               text: `${memberDisplayName(user)} uploaded a new take for ${target.title}.`,
             };
+            break;
+          }
+          case 'song.update': {
+            if (!permissions.canUploadDemo) {
+              fail(403, 'Editing permission required.');
+            }
+            const data = songMetadataSchema.parse(p);
+            const target = song();
+            target.title = data.title;
+            target.category = data.category;
+            target.bpm = data.bpm;
+            target.musicalKey = data.musicalKey;
+            target.description = data.description;
             break;
           }
           case 'song.lyrics': {
