@@ -32,6 +32,7 @@ import type {
   BandMember,
   EmailEventType,
   EmailNotificationLog,
+  PracticeSession,
   Role,
   SmtpSettings,
 } from '../src/types/band.ts';
@@ -288,6 +289,18 @@ const requireAdmin = (user: BandMember) => {
 };
 
 const now = () => new Date().toISOString();
+
+const practiceEndTimestamp = (
+  practice: Pick<PracticeSession, 'date' | 'endTime'>,
+) => Date.parse(`${practice.date}T${practice.endTime}:00`);
+
+const practiceHasEnded = (
+  practice: Pick<PracticeSession, 'date' | 'endTime'>,
+  referenceTime = new Date(),
+) => {
+  const endTime = practiceEndTimestamp(practice);
+  return Number.isFinite(endTime) && endTime <= referenceTime.getTime();
+};
 
 const identity = (u: BandMember) => ({
   id: u.id,
@@ -1605,6 +1618,9 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Scheduling permission required.');
             }
             const target = practice();
+            if (practiceHasEnded(target)) {
+              fail(400, 'Past practice sessions cannot be edited.');
+            }
             const data = practiceSchema.parse(p);
             if (data.endTime <= data.startTime) {
               fail(400, 'Practice must end after it starts.');
@@ -1624,6 +1640,9 @@ export function createApplication(options: ApplicationOptions) {
           }
           case 'practice.rsvp': {
             const target = practice();
+            if (practiceHasEnded(target)) {
+              fail(400, 'RSVPs cannot be changed for past practice sessions.');
+            }
             const status = z
               .enum(['attending', 'tentative', 'declined'])
               .parse(p.status);
@@ -1858,6 +1877,25 @@ export function createApplication(options: ApplicationOptions) {
       if (changed) store.write(state);
     });
     removeMediaFiles(deletedMedia);
+    return deletedCount;
+  }
+
+  function cleanupPastPractices(referenceTime = new Date()): number {
+    let deletedCount = 0;
+    store.transaction(() => {
+      const state = store.read();
+      const cutoff = referenceTime.getTime() - 30 * 24 * 60 * 60 * 1000;
+      const retainedPractices = state.practices.filter((practice) => {
+        const endTime = practiceEndTimestamp(practice);
+        const shouldDelete = Number.isFinite(endTime) && endTime <= cutoff;
+        if (shouldDelete) deletedCount++;
+        return !shouldDelete;
+      });
+      if (deletedCount > 0) {
+        state.practices = retainedPractices;
+        store.write(state);
+      }
+    });
     return deletedCount;
   }
 
@@ -2151,5 +2189,6 @@ export function createApplication(options: ApplicationOptions) {
     errorHandler,
     sendPracticeReminders,
     cleanupArchivedDemos,
+    cleanupPastPractices,
   };
 }

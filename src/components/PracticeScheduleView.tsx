@@ -21,6 +21,11 @@ import { formatClockTime } from '../shared/time.ts';
 import { categoryLabel } from '../shared/songMetadata.ts';
 import { AddToCalendarMenu } from './AddToCalendarMenu.tsx';
 
+const practiceHasEnded = (practice: PracticeSession) => {
+  const endTime = Date.parse(`${practice.date}T${practice.endTime}:00`);
+  return Number.isFinite(endTime) && endTime <= Date.now();
+};
+
 export const PracticeScheduleView: React.FC = () => {
   const { practices, songs, currentUser, permissions, appSettings, addPracticeSession, updatePracticeSession, updateRsvp, deletePracticeSession } = useBand();
   const { playSong } = useAudioPlayer();
@@ -62,6 +67,7 @@ export const PracticeScheduleView: React.FC = () => {
   };
 
   const openEditPractice = (practice: PracticeSession) => {
+    if (practiceHasEnded(practice)) return;
     setEditingPracticeId(practice.id);
     setTitle(practice.title);
     setDate(practice.date);
@@ -163,15 +169,20 @@ export const PracticeScheduleView: React.FC = () => {
           practices.map(practice => {
             const myRsvp = practice.rsvps.find(r => r.userId === currentUser.id)?.status;
             const setlistSongs = songs.filter(s => practice.setlistSongIds.includes(s.id));
+            const isPast = practiceHasEnded(practice);
 
             return (
               <div
                 key={practice.id}
-                className="p-5 sm:p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700/80 transition space-y-4"
+                className={`p-5 sm:p-6 rounded-2xl border transition space-y-4 ${
+                  isPast
+                    ? 'bg-zinc-950/50 border-zinc-900'
+                    : 'bg-zinc-900/70 border-zinc-800 hover:border-zinc-700/80'
+                }`}
               >
                 {/* Top Info */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-zinc-800">
-                  <div>
+                  <div className={isPast ? 'opacity-45' : ''}>
                     <div className="flex items-center gap-2.5">
                       <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold">
                         {new Date(practice.date + 'T12:00:00').toLocaleDateString(undefined, {
@@ -183,6 +194,11 @@ export const PracticeScheduleView: React.FC = () => {
                       <h3 className="text-lg font-bold text-white tracking-tight">
                         {practice.title}
                       </h3>
+                      {isPast && (
+                        <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                          Past
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-zinc-400">
@@ -200,13 +216,14 @@ export const PracticeScheduleView: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-1 self-end sm:self-auto">
-                    <AddToCalendarMenu practice={practice} />
+                    {!isPast && <AddToCalendarMenu practice={practice} />}
                     {canSchedule && (
                       <button
                         type="button"
                         onClick={() => openEditPractice(practice)}
-                        className="text-zinc-400 hover:text-amber-300 p-1.5 rounded-lg hover:bg-amber-500/10 transition"
-                        title="Edit practice session"
+                        disabled={isPast}
+                        className="text-zinc-400 hover:text-amber-300 p-1.5 rounded-lg hover:bg-amber-500/10 transition disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+                        title={isPast ? 'Past practice sessions cannot be edited' : 'Edit practice session'}
                         aria-label={`Edit ${practice.title}`}
                       >
                         <Pencil className="w-4 h-4" />
@@ -219,7 +236,11 @@ export const PracticeScheduleView: React.FC = () => {
                             deletePracticeSession(practice.id);
                           }
                         }}
-                        className="text-zinc-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition"
+                        className={`p-1.5 rounded-lg transition ${
+                          isPast
+                            ? 'border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:border-rose-400/60 hover:bg-rose-500/20 hover:text-rose-300'
+                            : 'text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10'
+                        }`}
                         title="Delete practice session"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -230,7 +251,7 @@ export const PracticeScheduleView: React.FC = () => {
 
                 {/* Goals & Notes */}
                 {practice.goals && practice.goals.length > 0 && (
-                  <div className="space-y-1.5">
+                  <div className={`space-y-1.5 ${isPast ? 'opacity-45' : ''}`}>
                     <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                       Rehearsal Goals:
                     </h4>
@@ -247,7 +268,7 @@ export const PracticeScheduleView: React.FC = () => {
 
                 {/* Linked Rehearsal Setlist */}
                 {setlistSongs.length > 0 && (
-                  <div className="space-y-2">
+                  <div className={`space-y-2 ${isPast ? 'opacity-45' : ''}`}>
                     <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
                       <ListMusic className="w-3.5 h-3.5 text-amber-400" />
                       <span>Rehearsal Setlist ({setlistSongs.length} tracks to practice):</span>
@@ -264,7 +285,8 @@ export const PracticeScheduleView: React.FC = () => {
                           </div>
                           <button
                             onClick={() => playSong(song)}
-                            className="p-1.5 rounded-full bg-zinc-800 group-hover:bg-amber-500 group-hover:text-zinc-950 text-zinc-300 transition shrink-0"
+                            disabled={isPast}
+                            className="p-1.5 rounded-full bg-zinc-800 group-hover:bg-amber-500 group-hover:text-zinc-950 text-zinc-300 transition shrink-0 disabled:cursor-not-allowed disabled:group-hover:bg-zinc-800 disabled:group-hover:text-zinc-300"
                             title={`Play ${song.title} audio demo`}
                           >
                             <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
@@ -276,7 +298,7 @@ export const PracticeScheduleView: React.FC = () => {
                 )}
 
                 {/* Member RSVPs & Current User RSVP buttons */}
-                <div className="pt-3 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className={`pt-3 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${isPast ? 'opacity-45' : ''}`}>
                   {/* Attendance roster */}
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rsvp-heading text-zinc-500 text-[11px] font-semibold uppercase mr-1">
@@ -315,31 +337,34 @@ export const PracticeScheduleView: React.FC = () => {
                     <span className="rsvp-heading text-[11px] text-zinc-500 px-2 font-medium">Your RSVP:</span>
                     <button
                       onClick={() => updateRsvp(practice.id, 'attending')}
+                      disabled={isPast}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                         myRsvp === 'attending'
                           ? 'bg-emerald-600 text-white shadow-sm'
                           : 'text-zinc-400 hover:text-emerald-300 hover:bg-zinc-900'
-                      }`}
+                      } disabled:cursor-not-allowed`}
                     >
                       Going
                     </button>
                     <button
                       onClick={() => updateRsvp(practice.id, 'tentative')}
+                      disabled={isPast}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                         myRsvp === 'tentative'
                           ? 'bg-amber-600 text-white shadow-sm'
                           : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-900'
-                      }`}
+                      } disabled:cursor-not-allowed`}
                     >
                       Maybe
                     </button>
                     <button
                       onClick={() => updateRsvp(practice.id, 'declined')}
+                      disabled={isPast}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                         myRsvp === 'declined'
                           ? 'bg-rose-600 text-white shadow-sm'
                           : 'text-zinc-400 hover:text-rose-300 hover:bg-zinc-900'
-                      }`}
+                      } disabled:cursor-not-allowed`}
                     >
                       Can't Make It
                     </button>

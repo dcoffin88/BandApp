@@ -565,6 +565,8 @@ async function fixture() {
       application.sendPracticeReminders(referenceTime),
     cleanupArchivedDemos: (referenceTime?: Date) =>
       application.cleanupArchivedDemos(referenceTime),
+    cleanupPastPractices: (referenceTime?: Date) =>
+      application.cleanupPastPractices(referenceTime),
     get store() {
       return application.store;
     },
@@ -677,6 +679,33 @@ test('RSVP reminders target unconfirmed members and event reminders target atten
       f.store.read().emailLogs[0].eventType,
       'practice_event_reminder',
     );
+    const pastState = f.store.read();
+    pastState.practices[0].date = '2000-01-01';
+    f.store.write(pastState);
+    const pastEdit = await f.action(admin.cookie, 'practice.update', {
+      practiceId: pastState.practices[0].id,
+      title: 'Edited Past Practice',
+      date: '2027-01-01',
+      startTime: '18:00',
+      endTime: '20:00',
+      location: 'Studio A',
+      setlistSongIds: [],
+      goals: [],
+      notes: '',
+    });
+    assert.equal(pastEdit.status, 400);
+    assert.match(await pastEdit.text(), /past practice sessions cannot be edited/i);
+    const pastRsvp = await f.action(admin.cookie, 'practice.rsvp', {
+      practiceId: pastState.practices[0].id,
+      status: 'attending',
+    });
+    assert.equal(pastRsvp.status, 400);
+    assert.match(await pastRsvp.text(), /rsvps cannot be changed/i);
+    assert.equal(
+      f.cleanupPastPractices(new Date('2000-02-01T20:00:01')),
+      1,
+    );
+    assert.equal(f.store.read().practices.length, 0);
   } finally {
     await smtp.close();
     await f.close();
