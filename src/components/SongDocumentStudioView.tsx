@@ -4,6 +4,8 @@ import {
   Copy,
   FileText,
   Lock,
+  Maximize2,
+  Minimize2,
   Music,
   Music2,
   Save,
@@ -11,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
+import { useFullscreenEditor } from '../hooks/useFullscreenEditor.ts';
 
 interface SongDocumentStudioViewProps {
   mode: 'lyrics' | 'chords';
@@ -38,6 +41,7 @@ export const SongDocumentStudioView: React.FC<
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const { isFullscreen, setIsFullscreen } = useFullscreenEditor();
 
   const selectedSong =
     songs.find((song) => song.id === selectedSongId) || songs[0];
@@ -187,32 +191,61 @@ export const SongDocumentStudioView: React.FC<
           </div>
         </div>
 
-        <div className="flex min-h-[500px] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70 lg:col-span-8">
+        <div
+          className={
+            isFullscreen
+              ? 'fixed inset-0 z-50 bg-zinc-950 p-3 sm:p-6'
+              : 'lg:col-span-8'
+          }
+        >
+          <div
+            role={isFullscreen ? 'dialog' : undefined}
+            aria-modal={isFullscreen || undefined}
+            aria-label={isFullscreen ? `${isChords ? 'Chords' : 'Lyrics'} editor` : undefined}
+            className={`flex flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70 ${
+              isFullscreen ? 'h-full' : 'min-h-[500px]'
+            }`}
+          >
           {selectedSong ? (
             <>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950/40 p-4">
                 <div className="text-xs font-semibold text-zinc-300">
                   {isChords ? 'Chord & Structure Chart' : 'Lyrics & Vocal Notes'}
                 </div>
-                {!isChords && canEditDocument && (
-                  <div className="flex flex-wrap items-center gap-1">
-                    <span className="mr-1 hidden text-[11px] text-zinc-500 sm:inline">
-                      Add:
-                    </span>
-                    {['Intro', 'Verse', 'Chorus', 'Bridge', 'Outro'].map(
-                      (section) => (
-                        <button
-                          key={section}
-                          type="button"
-                          onClick={() => insertSection(section)}
-                          className="rounded bg-zinc-800 px-2 py-0.5 font-mono text-[11px] text-zinc-300 hover:bg-zinc-700"
-                        >
-                          +{section}
-                        </button>
-                      ),
+                <div className="flex flex-wrap items-center gap-2">
+                  {!isChords && canEditDocument && (
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="mr-1 hidden text-[11px] text-zinc-500 sm:inline">
+                        Add:
+                      </span>
+                      {['Intro', 'Verse', 'Chorus', 'Bridge', 'Outro'].map(
+                        (section) => (
+                          <button
+                            key={section}
+                            type="button"
+                            onClick={() => insertSection(section)}
+                            className="rounded bg-zinc-800 px-2 py-0.5 font-mono text-[11px] text-zinc-300 hover:bg-zinc-700"
+                          >
+                            +{section}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsFullscreen(!isFullscreen)}
+                    className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 transition hover:bg-zinc-700 hover:text-white"
+                    title={isFullscreen ? 'Close full-screen editor' : 'Open full-screen editor'}
+                  >
+                    {isFullscreen ? (
+                      <Minimize2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <Maximize2 className="h-3.5 w-3.5" />
                     )}
-                  </div>
-                )}
+                    {isFullscreen ? 'Close' : 'Full screen'}
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-1 flex-col p-4">
@@ -295,6 +328,7 @@ export const SongDocumentStudioView: React.FC<
               Select a song idea from the left.
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

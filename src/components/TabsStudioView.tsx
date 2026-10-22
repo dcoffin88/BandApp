@@ -7,12 +7,15 @@ import {
   FileUp,
   Guitar,
   Lock,
+  Maximize2,
+  Minimize2,
   Music,
   Save,
   Search,
 } from 'lucide-react';
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
+import { useFullscreenEditor } from '../hooks/useFullscreenEditor.ts';
 import { DEFAULT_TAB_TUNING, TAB_TUNINGS } from '../shared/tabs.ts';
 
 interface TabsStudioViewProps {
@@ -128,6 +131,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const { isFullscreen, setIsFullscreen } = useFullscreenEditor();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -352,7 +356,21 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
           </div>
         </div>
 
-        <div className="flex min-h-[600px] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70 lg:col-span-8">
+        <div
+          className={
+            isFullscreen
+              ? 'fixed inset-0 z-50 bg-zinc-950 p-3 sm:p-6'
+              : 'lg:col-span-8'
+          }
+        >
+          <div
+            role={isFullscreen ? 'dialog' : undefined}
+            aria-modal={isFullscreen || undefined}
+            aria-label={isFullscreen ? 'Tabs editor' : undefined}
+            className={`flex flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70 ${
+              isFullscreen ? 'h-full' : 'min-h-[600px]'
+            }`}
+          >
           {selectedSong ? (
             <>
               <div className="space-y-3 border-b border-zinc-800 bg-zinc-950/40 p-4">
@@ -387,6 +405,23 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                     >
                       <Download className="h-3.5 w-3.5" />
                       <span>Download</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsFullscreen(!isFullscreen)}
+                      className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-700 hover:text-white"
+                      title={
+                        isFullscreen
+                          ? 'Close full-screen editor'
+                          : 'Open full-screen editor'
+                      }
+                    >
+                      {isFullscreen ? (
+                        <Minimize2 className="h-3.5 w-3.5" />
+                      ) : (
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      )}
+                      <span>{isFullscreen ? 'Close' : 'Full screen'}</span>
                     </button>
                   </div>
                 </div>
@@ -558,6 +593,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
               Upload an audio demo before creating a tab sheet.
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>
