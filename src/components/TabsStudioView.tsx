@@ -457,7 +457,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                       ) : (
                         <Maximize2 className="h-3.5 w-3.5" />
                       )}
-                      <span>{isFullscreen ? 'Close' : 'Full screen'}</span>
+                      <span>{isFullscreen ? 'Close' : 'Full Screen'}</span>
                     </button>
                   </div>
                 </div>
