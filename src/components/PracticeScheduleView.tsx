@@ -133,9 +133,6 @@ export const PracticeScheduleView: React.FC = () => {
               Band Practice Schedule
             </h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
-            Coordinate upcoming rehearsals, track RSVPs, and assign demo songs to work on.
-          </p>
         </div>
 
         {canSchedule && (

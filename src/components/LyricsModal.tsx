@@ -1,18 +1,5 @@
 import React, { useState } from 'react';
-import {
-  AlertCircle,
-  Check,
-  Copy,
-  Download,
-  Edit3,
-  FileText,
-  Lock,
-  Music,
-  Plus,
-  Save,
-  Sparkles,
-  X,
-} from 'lucide-react';
+import { Check, Copy, Download, FileText, Lock, Save, X } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { SongIdea } from '../types/band.ts';
 import { memberDisplayName } from '../shared/member.ts';
@@ -31,43 +18,35 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
   const { updateLyrics, permissions, currentUser } = useBand();
 
   const [draft, setDraft] = useState(song?.lyrics?.draft || '');
-  const [chordsSheet, setChordsSheet] = useState(song?.lyrics?.chordsSheet || '');
-  const [activeTab, setActiveTab] = useState<'lyrics' | 'chords'>('lyrics');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
 
   React.useEffect(() => {
     setDraft(song?.lyrics?.draft || '');
-    setChordsSheet(song?.lyrics?.chordsSheet || '');
   }, [song?.id, isOpen]);
   if (!isOpen || !song) return null;
   const canEdit = permissions.canEditLyrics;
 
   const handleSave = async () => {
     if (!canEdit) return;
-    if (!await updateLyrics(song.id, draft, chordsSheet)) return;
+    if (!await updateLyrics(song.id, draft)) return;
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2500);
   };
 
   const insertSection = (tag: string) => {
     const addition = `\n\n[${tag}]\n`;
-    if (activeTab === 'lyrics') {
-      setDraft(prev => prev + addition);
-    } else {
-      setChordsSheet(prev => prev + addition);
-    }
+    setDraft(prev => prev + addition);
   };
 
   const handleCopy = () => {
-    const textToCopy = activeTab === 'lyrics' ? draft : (chordsSheet || draft);
-    navigator.clipboard.writeText(textToCopy);
+    navigator.clipboard.writeText(draft);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDownloadText = () => {
-    const textToSave = `=== ${song.title} - Lyrics & Chords ===\nCategory: ${song.category.toUpperCase()}\nKey: ${song.musicalKey || 'N/A'}\nBPM: ${song.bpm || 'N/A'}\nLast Edited By: ${song.lyrics.lastEditedBy || memberDisplayName(currentUser)}\n\n${draft}\n\n=== Chords Chart ===\n${chordsSheet || '(None specified)'}`;
+    const textToSave = `=== ${song.title} - Lyrics ===\nCategory: ${song.category.toUpperCase()}\nKey: ${song.musicalKey || 'N/A'}\nBPM: ${song.bpm || 'N/A'}\nLast Edited By: ${song.lyrics.lastEditedBy || memberDisplayName(currentUser)}\n\n${draft}`;
     const blob = new Blob([textToSave], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -111,30 +90,9 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
           </button>
         </div>
 
-        {/* Toolbar & Tabs */}
+        {/* Section tools */}
         <div className="px-6 py-2.5 bg-zinc-950/40 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setActiveTab('lyrics')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition ${
-                activeTab === 'lyrics'
-                  ? 'bg-zinc-800 text-purple-300 shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-              }`}
-            >
-              Lyrics Draft
-            </button>
-            <button
-              onClick={() => setActiveTab('chords')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition ${
-                activeTab === 'chords'
-                  ? 'bg-zinc-800 text-purple-300 shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-              }`}
-            >
-              Chords &amp; Lead Sheet
-            </button>
-          </div>
+          <span className="font-semibold text-zinc-300">Lyrics &amp; Vocal Notes</span>
 
           {/* Quick section insert buttons for editors */}
           {canEdit && (
@@ -165,38 +123,19 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
             </div>
           )}
 
-          {activeTab === 'lyrics' ? (
-            <div className="flex-1 flex flex-col">
-              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                Lyrics Text &amp; Vocal Notes
-              </label>
-              <textarea
-                value={draft}
-                readOnly={!canEdit}
-                onChange={e => setDraft(e.target.value)}
-                placeholder="Type or paste lyric drafts here... (e.g. [Verse 1], [Chorus])"
-                rows={14}
-                className="w-full flex-1 bg-zinc-950 border border-zinc-700/80 rounded-xl p-4 text-zinc-100 placeholder-zinc-600 font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-y"
-              />
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col">
-              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                <span>Chords &amp; Structure Sheet</span>
-                <span className="text-[11px] font-normal text-zinc-500">
-                  Tip: Put chords in brackets above lines, e.g. [Em] [G]
-                </span>
-              </label>
-              <textarea
-                value={chordsSheet}
-                readOnly={!canEdit}
-                onChange={e => setChordsSheet(e.target.value)}
-                placeholder="[Em]                [G]&#10;Walking down the neon road at 2 AM..."
-                rows={14}
-                className="w-full flex-1 bg-zinc-950 border border-zinc-700/80 rounded-xl p-4 text-amber-200 placeholder-zinc-600 font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-y"
-              />
-            </div>
-          )}
+          <div className="flex-1 flex flex-col">
+            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+              Lyrics Text &amp; Vocal Notes
+            </label>
+            <textarea
+              value={draft}
+              readOnly={!canEdit}
+              onChange={e => setDraft(e.target.value)}
+              placeholder="Type or paste lyric drafts here... (e.g. [Verse 1], [Chorus])"
+              rows={14}
+              className="w-full flex-1 bg-zinc-950 border border-zinc-700/80 rounded-xl p-4 text-zinc-100 placeholder-zinc-600 font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-y"
+            />
+          </div>
         </div>
 
         {/* Footer: Save Option as sketched on Page 2 ("must have save option") */}

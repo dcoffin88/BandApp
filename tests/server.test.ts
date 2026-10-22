@@ -407,7 +407,6 @@ test('action notifications include branded song, feedback, and rehearsal details
         await f.action(admin.cookie, 'song.lyrics', {
           songId: song.id,
           draft: 'Updated words',
-          chordsSheet: 'Em C G D',
         })
       ).status,
       200,
@@ -415,8 +414,21 @@ test('action notifications include branded song, feedback, and rehearsal details
     await waitForMessages(smtp.messages, 3);
     const lyricsEmail = decodeEmail(smtp.messages[2]);
     assert.match(lyricsEmail, /Lyrics updated/);
-    assert.match(lyricsEmail, /Chord chart/);
-    assert.match(lyricsEmail, /Included/);
+    assert.match(lyricsEmail, /Review lyrics/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.chords', {
+          songId: song.id,
+          chordsSheet: 'Em C G D',
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 4);
+    const chordsEmail = decodeEmail(smtp.messages[3]);
+    assert.match(chordsEmail, /Chord chart updated/);
+    assert.match(chordsEmail, /Review chord chart/);
 
     assert.equal(
       (
@@ -428,8 +440,8 @@ test('action notifications include branded song, feedback, and rehearsal details
       ).status,
       200,
     );
-    await waitForMessages(smtp.messages, 4);
-    const commentEmail = decodeEmail(smtp.messages[3]);
+    await waitForMessages(smtp.messages, 5);
+    const commentEmail = decodeEmail(smtp.messages[4]);
     assert.match(commentEmail, /New band feedback/);
     assert.match(commentEmail, /1:02/);
     assert.match(commentEmail, /harmony lands perfectly/);
@@ -450,8 +462,8 @@ test('action notifications include branded song, feedback, and rehearsal details
       ).status,
       200,
     );
-    await waitForMessages(smtp.messages, 5);
-    const practiceEmail = decodeEmail(smtp.messages[4]);
+    await waitForMessages(smtp.messages, 6);
+    const practiceEmail = decodeEmail(smtp.messages[5]);
     assert.match(practiceEmail, /New rehearsal/);
     assert.match(practiceEmail, /Album Run-through/);
     assert.match(practiceEmail, /Studio B/);
@@ -1036,6 +1048,15 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       ).status,
       403,
     );
+    assert.equal(
+      (
+        await f.action(guest.cookie, 'song.chords', {
+          songId: 'missing-song',
+          chordsSheet: 'Am G',
+        })
+      ).status,
+      403,
+    );
     const branding = {
       headerLogoUrl: 'data:image/png;base64,aGVhZGVy',
       headerLogoShape: 'circle',
@@ -1290,6 +1311,12 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     assert.equal(updatedSong.bpm, 132);
     assert.equal(updatedSong.musicalKey, 'D minor');
     assert.equal(updatedSong.description, 'Use the quieter intro.');
+    const earlyChordChart = await f.action(admin.cookie, 'song.chords', {
+      songId: song.id,
+      chordsSheet: 'Am G',
+    });
+    assert.equal(earlyChordChart.status, 400);
+    assert.match(await earlyChordChart.text(), /Add lyrics in Lyrics Studio/);
     assert.equal(
       (
         await f.action(admin.cookie, 'song.comment', {
@@ -1304,6 +1331,14 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
         await f.action(admin.cookie, 'song.lyrics', {
           songId: song.id,
           draft: 'Shared words',
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.chords', {
+          songId: song.id,
           chordsSheet: 'Am G',
         })
       ).status,
@@ -1385,6 +1420,7 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       await f.request('/api/state', undefined, admin.cookie)
     ).json();
     assert.equal(state.songs[0].lyrics.draft, 'Shared words');
+    assert.equal(state.songs[0].lyrics.chordsSheet, 'Am G');
     assert.equal(state.songs[0].tabs.tuning, 'D A D G B E');
     assert.match(state.songs[0].tabs.content, /^\[Intro\]/);
     assert.equal(state.songs[0].tabs.versionNumber, 1);

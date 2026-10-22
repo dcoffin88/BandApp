@@ -3,6 +3,7 @@ export type Role = 'admin' | 'member' | 'guest';
 export type AppTab =
   | 'songs'
   | 'lyrics'
+  | 'chords'
   | 'tabs'
   | 'practice'
   | 'admin'

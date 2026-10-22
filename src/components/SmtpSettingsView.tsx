@@ -562,7 +562,7 @@ export const SmtpSettingsView: React.FC = () => {
               },
               {
                 id: 'lyricEdits' as const,
-                title: 'Lyrics / Chords Revised',
+                title: 'Lyrics or Chords Revised',
                 desc: 'Send email notice when song lyrics or chord sheet drafts are edited.',
                 icon: FileText,
               },

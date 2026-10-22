@@ -17,6 +17,7 @@ import { formatClockTime } from '../shared/time.ts';
 interface SongListMainViewProps {
   onOpenUploadModal: () => void;
   onOpenLyricsModal: (song: SongIdea) => void;
+  onOpenChordsStudio: (song: SongIdea) => void;
   onOpenTabsStudio: (song: SongIdea) => void;
   onOpenNewVersionModal: (song: SongIdea) => void;
 }
@@ -24,6 +25,7 @@ interface SongListMainViewProps {
 export const SongListMainView: React.FC<SongListMainViewProps> = ({
   onOpenUploadModal,
   onOpenLyricsModal,
+  onOpenChordsStudio,
   onOpenTabsStudio,
   onOpenNewVersionModal,
 }) => {
@@ -161,6 +163,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
                 key={song.id}
                 song={song}
                 onOpenLyrics={onOpenLyricsModal}
+                onOpenChords={onOpenChordsStudio}
                 onOpenTabs={onOpenTabsStudio}
                 onOpenNewVersion={onOpenNewVersionModal}
               />

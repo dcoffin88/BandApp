@@ -292,9 +292,6 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
               Tabs Studio
             </h2>
           </div>
-          <p className="mt-1 text-xs text-zinc-400">
-            Create fixed-width guitar and bass tabs alongside each audio demo.
-          </p>
         </div>
         {selectedSong && (
           <button

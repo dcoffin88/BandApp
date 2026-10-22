@@ -1214,21 +1214,51 @@ export function createApplication(options: ApplicationOptions) {
             event = {
               type: 'lyric_edit',
               subject: `Lyrics updated: ${target.title}`,
-              preheader: `${memberDisplayName(user)} updated the lyrics and chords.`,
+              preheader: `${memberDisplayName(user)} updated the lyrics.`,
               eyebrow: 'Lyrics updated',
               title: target.title,
-              intro: `${memberDisplayName(user)} saved a new lyrics and chords revision.`,
+              intro: `${memberDisplayName(user)} saved a new lyrics revision.`,
               details: [
                 { label: 'Revision', value: `Version ${target.lyrics.versionNumber}` },
                 { label: 'Edited by', value: memberDisplayName(user) },
-                {
-                  label: 'Chord chart',
-                  value: target.lyrics.chordsSheet?.trim()
-                    ? 'Included'
-                    : 'Not included',
-                },
               ],
-              ctaLabel: 'Review lyrics and chords',
+              ctaLabel: 'Review lyrics',
+            };
+            break;
+          }
+          case 'song.chords': {
+            if (!permissions.canEditLyrics) {
+              fail(403, 'Editing permission required.');
+            }
+            const target = song();
+            const lyricsDraft = target.lyrics.draft.trim();
+            if (
+              !lyricsDraft ||
+              /^\[Draft Lyrics for .+\]\s*\(Add lyrics here\.\.\.\)$/s.test(
+                lyricsDraft,
+              )
+            ) {
+              fail(400, 'Add lyrics in Lyrics Studio before creating a chord chart.');
+            }
+            target.lyrics = {
+              ...target.lyrics,
+              chordsSheet: text.parse(p.chordsSheet),
+              lastEditedBy: memberDisplayName(user),
+              lastEditedAt: now(),
+              versionNumber: target.lyrics.versionNumber + 1,
+            };
+            event = {
+              type: 'lyric_edit',
+              subject: `Chord chart updated: ${target.title}`,
+              preheader: `${memberDisplayName(user)} updated the chord chart.`,
+              eyebrow: 'Chord chart updated',
+              title: target.title,
+              intro: `${memberDisplayName(user)} saved a new chord chart revision.`,
+              details: [
+                { label: 'Revision', value: `Version ${target.lyrics.versionNumber}` },
+                { label: 'Edited by', value: memberDisplayName(user) },
+              ],
+              ctaLabel: 'Review chord chart',
             };
             break;
           }

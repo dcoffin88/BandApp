@@ -106,6 +106,7 @@ interface BandContextType {
     draft: string,
     chordsSheet?: string,
   ) => Promise<boolean>;
+  updateChords: (songId: string, chordsSheet: string) => Promise<boolean>;
   updateTabs: (
     songId: string,
     tuning: string,
@@ -495,6 +496,8 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     addSongVersion,
     updateLyrics: (songId, draft, chordsSheet) =>
       save('song.lyrics', { songId, draft, chordsSheet }),
+    updateChords: (songId, chordsSheet) =>
+      save('song.chords', { songId, chordsSheet }),
     updateTabs: (songId, tuning, content) =>
       save('song.tabs', { songId, tuning, content }),
     updateSongMetadata: (songId, updates) =>

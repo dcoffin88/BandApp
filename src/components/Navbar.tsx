@@ -9,6 +9,7 @@ import {
   KeyRound,
   LogOut,
   Music,
+  Music2,
   Palette,
   Plus,
   Settings,
@@ -268,6 +269,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <FileText className="w-4 h-4" />
               <span>Lyrics Studio</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('chords')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition whitespace-nowrap ${
+                activeTab === 'chords'
+                  ? 'bg-zinc-800 text-amber-400 shadow-inner'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              }`}
+            >
+              <Music2 className="w-4 h-4" />
+              <span>Chords Studio</span>
             </button>
             <button
               onClick={() => setActiveTab('tabs')}

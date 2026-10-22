@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AdminSettingsView } from './components/AdminSettingsView.tsx';
 import { AuthView } from './components/AuthView.tsx';
+import { ChordsStudioView } from './components/ChordsStudioView.tsx';
 import { GlobalAudioPlayer } from './components/GlobalAudioPlayer.tsx';
 import { LyricsModal } from './components/LyricsModal.tsx';
 import { LyricsStudioView } from './components/LyricsStudioView.tsx';
@@ -24,6 +25,7 @@ const AppContent: React.FC = () => {
   const [lyricsModalSong, setLyricsModalSong] = useState<SongIdea | null>(null);
   const [newVersionModalSong, setNewVersionModalSong] = useState<SongIdea | null>(null);
   const [tabsStudioSongId, setTabsStudioSongId] = useState('');
+  const [chordsStudioSongId, setChordsStudioSongId] = useState('');
 
   const { currentSong } = useAudioPlayer();
 
@@ -59,11 +61,19 @@ const AppContent: React.FC = () => {
               setTabsStudioSongId(song.id);
               setActiveTab('tabs');
             }}
+            onOpenChordsStudio={(song) => {
+              setChordsStudioSongId(song.id);
+              setActiveTab('chords');
+            }}
             onOpenNewVersionModal={(song) => setNewVersionModalSong(song)}
           />
         )}
 
         {activeTab === 'lyrics' && <LyricsStudioView />}
+
+        {activeTab === 'chords' && (
+          <ChordsStudioView initialSongId={chordsStudioSongId} />
+        )}
 
         {activeTab === 'tabs' && (
           <TabsStudioView initialSongId={tabsStudioSongId} />
