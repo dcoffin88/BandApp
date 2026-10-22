@@ -202,6 +202,17 @@ export const SongCard: React.FC<SongCardProps> = ({
 
           {/* Right Action Menu: Version button & delete */}
           <div className="flex items-center gap-1.5">
+            {permissions.canUploadVersion && (
+              <button
+                onClick={() => onOpenNewVersion(song)}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-zinc-700/80 transition"
+                title="Upload a new version or audio take for this track"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">New Take</span>
+              </button>
+            )}
+
             {permissions.canUploadDemo && (
               <button
                 type="button"
@@ -211,17 +222,6 @@ export const SongCard: React.FC<SongCardProps> = ({
                 aria-label={`Edit details for ${song.title}`}
               >
                 <Pencil className="h-4 w-4" />
-              </button>
-            )}
-
-            {permissions.canUploadVersion && (
-              <button
-                onClick={() => onOpenNewVersion(song)}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-zinc-700/80 transition"
-                title="Upload a new version or audio take for this track"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">New Take</span>
               </button>
             )}
 

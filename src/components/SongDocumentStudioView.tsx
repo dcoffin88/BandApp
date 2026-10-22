@@ -8,12 +8,14 @@ import {
   Minimize2,
   Music,
   Music2,
+  Printer,
   Save,
   Search,
 } from 'lucide-react';
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { useFullscreenEditor } from '../hooks/useFullscreenEditor.ts';
+import { printStudioDocument } from '../shared/printStudioDocument.ts';
 
 interface SongDocumentStudioViewProps {
   mode: 'lyrics' | 'chords';
@@ -95,6 +97,22 @@ export const SongDocumentStudioView: React.FC<
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
       setError('Your browser could not copy this document.');
+    }
+  };
+
+  const handlePrint = () => {
+    if (!selectedSong) return;
+    const opened = printStudioDocument({
+      title: selectedSong.title,
+      documentLabel: isChords ? 'Chord Chart' : 'Lyrics',
+      content,
+      details: [
+        selectedSong.musicalKey ? `Key: ${selectedSong.musicalKey}` : '',
+        selectedSong.bpm ? `Tempo: ${selectedSong.bpm} BPM` : '',
+      ].filter(Boolean),
+    });
+    if (!opened) {
+      setError('Allow pop-ups to print or download this document as a PDF.');
     }
   };
 
@@ -287,18 +305,29 @@ export const SongDocumentStudioView: React.FC<
               </div>
 
               <div className="flex items-center justify-between border-t border-zinc-800 bg-zinc-950/60 p-4 text-xs">
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-zinc-300 transition hover:bg-zinc-700"
-                >
-                  {copied ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-400" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-zinc-300 transition hover:bg-zinc-700"
+                  >
+                    {copied ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-zinc-300 transition hover:bg-zinc-700"
+                    title="Print or save as a Letter-size PDF"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Print / PDF
+                  </button>
+                </div>
 
                 <div className="flex items-center gap-2">
                   {saveSuccess && (

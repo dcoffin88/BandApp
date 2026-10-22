@@ -10,12 +10,14 @@ import {
   Maximize2,
   Minimize2,
   Music,
+  Printer,
   Save,
   Search,
 } from 'lucide-react';
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { useFullscreenEditor } from '../hooks/useFullscreenEditor.ts';
+import { printStudioDocument } from '../shared/printStudioDocument.ts';
 import { DEFAULT_TAB_TUNING, TAB_TUNINGS } from '../shared/tabs.ts';
 
 interface TabsStudioViewProps {
@@ -266,6 +268,24 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const handlePrint = () => {
+    if (!selectedSong) return;
+    const opened = printStudioDocument({
+      title: selectedSong.title,
+      documentLabel: 'Guitar Tab',
+      content,
+      avoidSectionBreaks: true,
+      details: [
+        `Tuning: ${tuning || 'Not specified'}`,
+        selectedSong.musicalKey ? `Key: ${selectedSong.musicalKey}` : '',
+        selectedSong.bpm ? `Tempo: ${selectedSong.bpm} BPM` : '',
+      ].filter(Boolean),
+    });
+    if (!opened) {
+      setError('Allow pop-ups to print or download this tab as a PDF.');
+    }
+  };
+
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -405,6 +425,15 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                     >
                       <Download className="h-3.5 w-3.5" />
                       <span>Download</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrint}
+                      className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-700"
+                      title="Print or save as a Letter-size PDF"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      <span>Print / PDF</span>
                     </button>
                     <button
                       type="button"
