@@ -45,6 +45,8 @@ export const PracticeScheduleView: React.FC = () => {
   const [eventReminderFourHours, setEventReminderFourHours] = useState(true);
 
   const canSchedule = permissions.canSchedulePractice;
+  const selectableSongs = songs.filter((song) => song.category !== 'archived');
+  const selectableSongIds = new Set(selectableSongs.map((song) => song.id));
 
   const resetPracticeForm = () => {
     setEditingPracticeId(null);
@@ -75,7 +77,9 @@ export const PracticeScheduleView: React.FC = () => {
     setEndTime(practice.endTime);
     setLocation(practice.location);
     setNotes(practice.notes);
-    setSelectedSongIds([...practice.setlistSongIds]);
+    setSelectedSongIds(
+      practice.setlistSongIds.filter((songId) => selectableSongIds.has(songId)),
+    );
     setGoalInput('');
     setGoals([...practice.goals]);
     setEventReminderOneDay(practice.eventReminderOneDay ?? true);
@@ -115,7 +119,7 @@ export const PracticeScheduleView: React.FC = () => {
       startTime,
       endTime,
       location: location.trim() || 'Band Rehearsal Space',
-      setlistSongIds: selectedSongIds,
+      setlistSongIds: selectedSongIds.filter((songId) => selectableSongIds.has(songId)),
       goals,
       notes: notes.trim(),
       eventReminderOneDay,
@@ -495,7 +499,12 @@ export const PracticeScheduleView: React.FC = () => {
                   Select Songs to Rehearse
                 </label>
                 <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-2 bg-zinc-950 border border-zinc-800 rounded-lg">
-                  {songs.map(song => {
+                  {selectableSongs.length === 0 && (
+                    <p className="col-span-2 px-2 py-3 text-center text-zinc-500">
+                      No active demos are available.
+                    </p>
+                  )}
+                  {selectableSongs.map(song => {
                     const isSelected = selectedSongIds.includes(song.id);
                     return (
                       <button
