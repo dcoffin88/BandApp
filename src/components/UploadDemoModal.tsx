@@ -110,7 +110,7 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
           description: description.trim() || 'New recorded demo idea.',
           tags: [category.toUpperCase(), musicalKey, bpm ? `${bpm} BPM` : ''].filter(Boolean),
           lyrics: {
-            draft: initialLyrics.trim() || `[Draft Lyrics for ${title}]\n(Add lyrics here...)`,
+            draft: initialLyrics.trim() || ``,
             lastEditedBy: memberDisplayName(currentUser),
             lastEditedAt: new Date().toISOString(),
             versionNumber: 1,

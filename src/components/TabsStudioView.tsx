@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CircleHelp,
@@ -133,8 +133,14 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
 }) => {
   const { songs, permissions, updateTabs, appSettings } = useBand();
   const { playSong } = useAudioPlayer();
-  const [selectedSongId, setSelectedSongId] = useState(
-    initialSongId || songs[0]?.id || '',
+  const availableSongs = useMemo(
+    () => songs.filter((song) => song.category !== 'archived'),
+    [songs],
+  );
+  const [selectedSongId, setSelectedSongId] = useState(() =>
+    availableSongs.some((song) => song.id === initialSongId)
+      ? initialSongId || ''
+      : availableSongs[0]?.id || '',
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [tuning, setTuning] = useState('');
@@ -145,9 +151,11 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
   const { isFullscreen, setIsFullscreen } = useFullscreenEditor();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialSongIdRef = useRef(initialSongId);
 
   const selectedSong =
-    songs.find((song) => song.id === selectedSongId) || songs[0];
+    availableSongs.find((song) => song.id === selectedSongId) ||
+    availableSongs[0];
   const isArchived = selectedSong?.category === 'archived';
   const canEdit = permissions.canEditLyrics && !isArchived;
   const isDirty = Boolean(
@@ -157,10 +165,21 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
   );
 
   useEffect(() => {
-    if (initialSongId) {
-      setSelectedSongId(initialSongId);
-    }
-  }, [initialSongId]);
+    const initialSongChanged = initialSongIdRef.current !== initialSongId;
+    initialSongIdRef.current = initialSongId;
+    const requestedSong = availableSongs.find(
+      (song) => song.id === initialSongId,
+    );
+    setSelectedSongId((currentSongId) => {
+      if (
+        !initialSongChanged &&
+        availableSongs.some((song) => song.id === currentSongId)
+      ) {
+        return currentSongId;
+      }
+      return requestedSong?.id || availableSongs[0]?.id || '';
+    });
+  }, [availableSongs, initialSongId]);
 
   useEffect(() => {
     if (!selectedSong) return;
@@ -170,13 +189,12 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
     setSaveSuccess(false);
   }, [selectedSong?.id, selectedSong?.tabs?.versionNumber]);
 
-  const filteredSongs = songs.filter(
+  const filteredSongs = availableSongs.filter(
     (song) =>
-      song.category !== 'archived' &&
-      (song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         categoryLabel(appSettings.demoCategories, song.category)
           .toLowerCase()
-          .includes(searchQuery.toLowerCase())),
+          .includes(searchQuery.toLowerCase()),
   );
   const usedNotationLegend = notationLegend(content);
 

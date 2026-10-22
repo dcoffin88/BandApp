@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   Copy,
@@ -49,8 +49,14 @@ export const SongDocumentStudioView: React.FC<
 > = ({ mode, initialSongId }) => {
   const { songs, updateLyrics, updateChords, permissions, appSettings } = useBand();
   const { playSong } = useAudioPlayer();
-  const [selectedSongId, setSelectedSongId] = useState(
-    initialSongId || songs[0]?.id || '',
+  const availableSongs = useMemo(
+    () => songs.filter((song) => song.category !== 'archived'),
+    [songs],
+  );
+  const [selectedSongId, setSelectedSongId] = useState(() =>
+    availableSongs.some((song) => song.id === initialSongId)
+      ? initialSongId || ''
+      : availableSongs[0]?.id || '',
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [content, setContent] = useState('');
@@ -61,10 +67,12 @@ export const SongDocumentStudioView: React.FC<
   const [chordSelection, setChordSelection] = useState<ChordSelection | null>(
     null,
   );
+  const initialSongIdRef = useRef(initialSongId);
   const { isFullscreen, setIsFullscreen } = useFullscreenEditor();
 
   const selectedSong =
-    songs.find((song) => song.id === selectedSongId) || songs[0];
+    availableSongs.find((song) => song.id === selectedSongId) ||
+    availableSongs[0];
   const canEdit = permissions.canEditLyrics;
   const isChords = mode === 'chords';
   const isArchived = selectedSong?.category === 'archived';
@@ -73,8 +81,21 @@ export const SongDocumentStudioView: React.FC<
     canEdit && !isArchived && (!isChords || lyricsAreReady);
 
   useEffect(() => {
-    if (initialSongId) setSelectedSongId(initialSongId);
-  }, [initialSongId]);
+    const initialSongChanged = initialSongIdRef.current !== initialSongId;
+    initialSongIdRef.current = initialSongId;
+    const requestedSong = availableSongs.find(
+      (song) => song.id === initialSongId,
+    );
+    setSelectedSongId((currentSongId) => {
+      if (
+        !initialSongChanged &&
+        availableSongs.some((song) => song.id === currentSongId)
+      ) {
+        return currentSongId;
+      }
+      return requestedSong?.id || availableSongs[0]?.id || '';
+    });
+  }, [availableSongs, initialSongId]);
 
   useEffect(() => {
     if (!selectedSong) return;
@@ -91,13 +112,12 @@ export const SongDocumentStudioView: React.FC<
     setChordSelection(null);
   }, [isChords, selectedSong?.id]);
 
-  const filteredSongs = songs.filter(
+  const filteredSongs = availableSongs.filter(
     (song) =>
-      song.category !== 'archived' &&
-      (song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         categoryLabel(appSettings.demoCategories, song.category)
           .toLowerCase()
-          .includes(searchQuery.toLowerCase())),
+          .includes(searchQuery.toLowerCase()),
   );
 
   const handleSave = async () => {
