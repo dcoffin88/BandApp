@@ -18,7 +18,12 @@ import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { useFullscreenEditor } from '../hooks/useFullscreenEditor.ts';
 import { printStudioDocument } from '../shared/printStudioDocument.ts';
-import { DEFAULT_TAB_TUNING, TAB_TUNINGS } from '../shared/tabs.ts';
+import {
+  DEFAULT_TAB_TUNING,
+  importedTabTuningToStaff,
+  TAB_TUNINGS,
+  tabTuningName,
+} from '../shared/tabs.ts';
 
 interface TabsStudioViewProps {
   initialSongId?: string;
@@ -243,7 +248,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
 
   const handleCopy = async () => {
     if (!selectedSong) return;
-    const text = `${selectedSong.title} Tab\n\nTuning: ${tuning || 'Not specified'}\n\n${content}`;
+    const text = `${selectedSong.title} Tab\n\nTuning: ${tuning ? tabTuningName(tuning) : 'Not specified'}\n\n${content}`;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -255,7 +260,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
 
   const handleDownload = () => {
     if (!selectedSong) return;
-    const text = `${selectedSong.title} Tab\n\nTuning: ${tuning || 'Not specified'}\n\n${content}`;
+    const text = `${selectedSong.title} Tab\n\nTuning: ${tuning ? tabTuningName(tuning) : 'Not specified'}\n\n${content}`;
     const url = URL.createObjectURL(
       new Blob([text], { type: 'text/plain;charset=utf-8' }),
     );
@@ -276,7 +281,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
       content,
       avoidSectionBreaks: true,
       details: [
-        `Tuning: ${tuning || 'Not specified'}`,
+        `Tuning: ${tuning ? tabTuningName(tuning) : 'Not specified'}`,
         selectedSong.musicalKey ? `Key: ${selectedSong.musicalKey}` : '',
         selectedSong.bpm ? `Tempo: ${selectedSong.bpm} BPM` : '',
       ].filter(Boolean),
@@ -298,7 +303,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
     reader.onload = () => {
       const imported = String(reader.result || '');
       const importedTuning = imported.match(/^Tuning:\s*(.+)$/im)?.[1]?.trim();
-      if (importedTuning) setTuning(importedTuning);
+      if (importedTuning) setTuning(importedTabTuningToStaff(importedTuning));
       setContent(imported);
       setError('');
     };
@@ -362,7 +367,8 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                     </p>
                     <p className="mt-0.5 text-[11px] font-mono uppercase text-zinc-500">
                       {song.category}
-                      {song.tabs?.tuning ? ` · ${song.tabs.tuning}` : ''}
+                      {song.musicalKey && ` · ${song.musicalKey}`}
+                      {song.bpm && ` · ${song.bpm} BPM`}
                     </p>
                   </div>
                   <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-mono text-zinc-400">
@@ -472,11 +478,13 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                     >
                       {tuning &&
                         !TAB_TUNINGS.some((option) => option.value === tuning) && (
-                          <option value={tuning}>Custom — {tuning}</option>
+                          <option value={tuning}>
+                            Custom — {tabTuningName(tuning)}
+                          </option>
                         )}
                       {TAB_TUNINGS.map((option) => (
                         <option key={option.label} value={option.value}>
-                          {option.label} — {option.value}
+                          {option.label} — {tabTuningName(option.value)}
                         </option>
                       ))}
                     </select>
