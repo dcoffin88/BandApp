@@ -1385,6 +1385,28 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       200,
     );
     assert.equal(
+      (await f.request(`/api/demos/${song.id}/export`)).status,
+      401,
+    );
+    const bundle = await f.request(
+      `/api/demos/${song.id}/export`,
+      undefined,
+      admin.cookie,
+    );
+    assert.equal(bundle.status, 200, await bundle.clone().text());
+    assert.match(bundle.headers.get('content-type') || '', /application\/zip/);
+    assert.match(
+      bundle.headers.get('content-disposition') || '',
+      /attachment; filename="Finished Demo\.zip"/,
+    );
+    const bundleBytes = Buffer.from(await bundle.arrayBuffer());
+    assert.equal(bundleBytes.subarray(0, 2).toString('ascii'), 'PK');
+    const bundleIndex = bundleBytes.toString('latin1');
+    assert.match(bundleIndex, /Finished Demo\/Audio\/01_v1\.wav/);
+    assert.match(bundleIndex, /Finished Demo\/Lyrics\.txt/);
+    assert.match(bundleIndex, /Finished Demo\/Chords\.txt/);
+    assert.match(bundleIndex, /Finished Demo\/Tabs\.txt/);
+    assert.equal(
       (
         await f.action(admin.cookie, 'practice.add', {
           title: 'Practice',

@@ -221,6 +221,15 @@ export const SongCard: React.FC<SongCardProps> = ({
               </button>
             )}
 
+            <a
+              href={`/api/demos/${encodeURIComponent(song.id)}/export`}
+              className="flex items-center gap-1 rounded-lg border border-zinc-700/80 bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-300 transition hover:bg-zinc-700 hover:text-white"
+              title={`Download ${song.title} with all audio takes, lyrics, chords, and tabs`}
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Download ZIP</span>
+            </a>
+
             {permissions.canUploadDemo && (
               <button
                 type="button"

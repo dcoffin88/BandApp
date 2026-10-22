@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import nodemailer from 'nodemailer';
+import { ZipArchive } from 'archiver';
 import { statSync, createReadStream } from 'node:fs';
 import path from 'node:path';
 import {
@@ -264,6 +265,14 @@ const requireAvailableCategory = (state: SharedState, categoryId: string) => {
     fail(400, 'Choose an available demo category.');
   }
 };
+
+const safeArchiveName = (value: string, fallback: string) =>
+  value
+    .normalize('NFKC')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '_')
+    .replace(/[. ]+$/g, '')
+    .trim()
+    .slice(0, 120) || fallback;
 
 const requireAdmin = (user: BandMember) => {
   if (user.role !== 'admin') fail(403, 'Admin permission required.');
@@ -849,6 +858,63 @@ export function createApplication(options: ApplicationOptions) {
       }
       res.status(201).json({ audioUrl: `/api/uploads/${id}` });
     })
+  );
+
+  app.get(
+    '/api/demos/:songId/export',
+    route((req: Request, res: Response) => {
+      const state = store.read();
+      const song = state.songs.find(
+        (candidate) => candidate.id === String(req.params.songId),
+      );
+      if (!song) fail(404, 'Demo not found.');
+
+      const folderName = safeArchiveName(song.title, 'Demo');
+      const archiveName = `${folderName}.zip`;
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${archiveName.replaceAll('"', '')}"; filename*=UTF-8''${encodeURIComponent(archiveName)}`,
+        'Cache-Control': 'private, no-store',
+      });
+
+      const archive = new ZipArchive({ zlib: { level: 6 } });
+      archive.on('warning', (error) => {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          res.destroy(error);
+        }
+      });
+      archive.on('error', (error) => res.destroy(error));
+      archive.pipe(res);
+
+      song.versions.forEach((version, index) => {
+        const uploadId = version.audioUrl.split('/').pop() || '';
+        const row = db
+          .prepare('SELECT relative_path FROM uploads WHERE id=?')
+          .get(uploadId) as { relative_path?: string } | undefined;
+        if (!row?.relative_path || !media.exists(row.relative_path)) return;
+        const extension = path.extname(row.relative_path).toLowerCase() || '.audio';
+        const versionName = safeArchiveName(
+          version.label || `Version ${index + 1}`,
+          `Version_${index + 1}`,
+        );
+        archive.file(media.resolve(row.relative_path), {
+          name: `${folderName}/Audio/${String(index + 1).padStart(2, '0')}_${versionName}${extension}`,
+        });
+      });
+
+      archive.append(song.lyrics?.draft || '', {
+        name: `${folderName}/Lyrics.txt`,
+      });
+      archive.append(song.lyrics?.chordsSheet || '', {
+        name: `${folderName}/Chords.txt`,
+      });
+      const tabsContent = song.tabs?.content || '';
+      const tabsDocument = song.tabs?.tuning
+        ? `Tuning: ${song.tabs.tuning}\n\n${tabsContent}`
+        : tabsContent;
+      archive.append(tabsDocument, { name: `${folderName}/Tabs.txt` });
+      void archive.finalize();
+    }),
   );
 
   app.get(
