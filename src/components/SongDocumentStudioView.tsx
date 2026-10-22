@@ -22,6 +22,7 @@ import {
 } from '../shared/chords.ts';
 import { printStudioDocument } from '../shared/printStudioDocument.ts';
 import { nextSongSectionHeading } from '../shared/songSections.ts';
+import { categoryLabel } from '../shared/songMetadata.ts';
 
 interface SongDocumentStudioViewProps {
   mode: 'lyrics' | 'chords';
@@ -46,7 +47,7 @@ const hasLyricsDraft = (draft?: string) => {
 export const SongDocumentStudioView: React.FC<
   SongDocumentStudioViewProps
 > = ({ mode, initialSongId }) => {
-  const { songs, updateLyrics, updateChords, permissions } = useBand();
+  const { songs, updateLyrics, updateChords, permissions, appSettings } = useBand();
   const { playSong } = useAudioPlayer();
   const [selectedSongId, setSelectedSongId] = useState(
     initialSongId || songs[0]?.id || '',
@@ -91,7 +92,9 @@ export const SongDocumentStudioView: React.FC<
   const filteredSongs = songs.filter(
     (song) =>
       song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      song.category.toLowerCase().includes(searchQuery.toLowerCase()),
+      categoryLabel(appSettings.demoCategories, song.category)
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()),
   );
 
   const handleSave = async () => {
@@ -257,7 +260,7 @@ export const SongDocumentStudioView: React.FC<
                       {song.title}
                     </p>
                     <p className="mt-0.5 text-[11px] font-mono uppercase text-zinc-500">
-                      {song.category}
+                      {categoryLabel(appSettings.demoCategories, song.category)}
                       {song.musicalKey && ` · ${song.musicalKey}`}
                       {song.bpm && ` · ${song.bpm} BPM`}
                     </p>

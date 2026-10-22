@@ -96,7 +96,7 @@ export interface SongTabs {
 export interface SongIdea {
   id: string;
   title: string;
-  category: 'idea' | 'chorus' | 'riff' | 'bass' | 'full' | 'verse' | 'bridge';
+  category: string;
   bpm?: number;
   musicalKey?: string;
   description?: string;
@@ -187,12 +187,18 @@ export interface UserAppearance {
   customColor?: string;
 }
 
+export interface DemoCategory {
+  id: string;
+  label: string;
+}
+
 export interface AppSettings extends UserAppearance {
   headerLogoUrl: string;
   headerLogoShape: 'circle' | 'rounded' | 'square';
   headerSubtitle: string;
   accentGlow: boolean;
   timeFormat: '12' | '24';
+  demoCategories: DemoCategory[];
 }
 
 export interface SmtpNotificationTriggers {

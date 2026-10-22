@@ -14,6 +14,10 @@ import {
   type SharedState,
 } from '../src/shared/defaults.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
+import {
+  DEFAULT_DEMO_CATEGORIES,
+  categoryLabel,
+} from '../src/shared/songMetadata.ts';
 import type { BandMember } from '../src/types/band.ts';
 
 function refreshMemberIdentities(state: SharedState): void {
@@ -165,6 +169,21 @@ export function openDatabase(filename: string) {
     const state = JSON.parse(String(row.value)) as SharedState;
     state.band.members = members();
     state.appSettings.timeFormat ??= '12';
+    state.appSettings.demoCategories ??= DEFAULT_DEMO_CATEGORIES.map(
+      (category) => ({ ...category }),
+    );
+    for (const song of state.songs) {
+      if (
+        !state.appSettings.demoCategories.some(
+          (category) => category.id === song.category,
+        )
+      ) {
+        state.appSettings.demoCategories.push({
+          id: song.category,
+          label: categoryLabel([], song.category),
+        });
+      }
+    }
     state.smtpSettings.notificationTriggers.practiceEventReminder ??= true;
     refreshMemberIdentities(state);
     return state;

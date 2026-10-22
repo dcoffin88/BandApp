@@ -35,8 +35,14 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
 
   const nextPractice = practices[0];
 
+  const activeCategory = appSettings.demoCategories.some(
+    (category) => category.id === selectedCategory,
+  )
+    ? selectedCategory
+    : 'all';
+
   const filteredSongs = songs.filter(song => {
-    const matchesCategory = selectedCategory === 'all' || song.category === selectedCategory;
+    const matchesCategory = activeCategory === 'all' || song.category === activeCategory;
     const matchesSearch =
       song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       song.createdBy.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -101,18 +107,12 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Category Filters (matching Page 1 tracks: Song Idea, Chorus Idea, Riff, Bass Idea) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {[
-            { id: 'all', label: 'All Demos' },
-            { id: 'idea', label: 'Song Ideas' },
-            { id: 'chorus', label: 'Chorus Ideas' },
-            { id: 'riff', label: 'Riffs' },
-            { id: 'bass', label: 'Bass Ideas' },
-          ].map(cat => (
+          {appSettings.demoCategories.map(cat => (
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap border ${
-                selectedCategory === cat.id
+                activeCategory === cat.id
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
                   : 'bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 border-zinc-800'
               }`}

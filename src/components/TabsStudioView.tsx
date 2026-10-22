@@ -19,6 +19,7 @@ import { useBand } from '../context/BandContext.tsx';
 import { useFullscreenEditor } from '../hooks/useFullscreenEditor.ts';
 import { printStudioDocument } from '../shared/printStudioDocument.ts';
 import { nextSongSectionHeading } from '../shared/songSections.ts';
+import { categoryLabel } from '../shared/songMetadata.ts';
 import {
   DEFAULT_TAB_TUNING,
   importedTabTuningToStaff,
@@ -130,7 +131,7 @@ const guitarStaff = (tuning: string) =>
 export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
   initialSongId,
 }) => {
-  const { songs, permissions, updateTabs } = useBand();
+  const { songs, permissions, updateTabs, appSettings } = useBand();
   const { playSong } = useAudioPlayer();
   const [selectedSongId, setSelectedSongId] = useState(
     initialSongId || songs[0]?.id || '',
@@ -171,7 +172,9 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
   const filteredSongs = songs.filter(
     (song) =>
       song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      song.category.toLowerCase().includes(searchQuery.toLowerCase()),
+      categoryLabel(appSettings.demoCategories, song.category)
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()),
   );
   const usedNotationLegend = notationLegend(content);
 
@@ -367,7 +370,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                       {song.title}
                     </p>
                     <p className="mt-0.5 text-[11px] font-mono uppercase text-zinc-500">
-                      {song.category}
+                      {categoryLabel(appSettings.demoCategories, song.category)}
                       {song.musicalKey && ` · ${song.musicalKey}`}
                       {song.bpm && ` · ${song.bpm} BPM`}
                     </p>

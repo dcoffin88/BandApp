@@ -13,7 +13,7 @@ import { SongIdea } from '../types/band.ts';
 import { useMicrophoneRecorder } from '../hooks/useMicrophoneRecorder.ts';
 import { MicrophoneSelector } from './MicrophoneSelector.tsx';
 import { memberDisplayName } from '../shared/member.ts';
-import { KEY_ROOTS, SONG_CATEGORY_OPTIONS } from '../shared/songMetadata.ts';
+import { KEY_ROOTS, selectableDemoCategories } from '../shared/songMetadata.ts';
 
 interface UploadDemoModalProps {
   isOpen: boolean;
@@ -26,10 +26,13 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
   onClose,
   onSongCreated,
 }) => {
-  const { addSongIdea, currentUser, permissions } = useBand();
+  const { addSongIdea, currentUser, permissions, appSettings } = useBand();
+  const categoryOptions = selectableDemoCategories(appSettings.demoCategories);
 
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<SongIdea['category']>('idea');
+  const [category, setCategory] = useState<SongIdea['category']>(
+    categoryOptions[0]?.id || 'idea',
+  );
   const [bpm, setBpm] = useState<string>('120');
   const [musicalKey, setMusicalKey] = useState('E minor');
   const [description, setDescription] = useState('');
@@ -326,11 +329,11 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
               </label>
               <select
                 value={category}
-                onChange={e => setCategory(e.target.value as any)}
+                onChange={e => setCategory(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
               >
-                {SONG_CATEGORY_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                {categoryOptions.map(option => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
                 ))}
               </select>
             </div>

@@ -12,6 +12,7 @@ import type {
   UserRolePermissions,
   UserAppearance,
 } from '../types/band.ts';
+import { DEFAULT_DEMO_CATEGORIES } from './songMetadata.ts';
 
 export const DEFAULT_APPEARANCE: UserAppearance = {
   appearance: 'dark',
@@ -114,6 +115,7 @@ export function emptyState(): SharedState {
       accentGlow: true,
       headerSubtitle: 'Your band\'s home base.',
       timeFormat: '12',
+      demoCategories: DEFAULT_DEMO_CATEGORIES.map((category) => ({ ...category })),
     },
     smtpSettings: {
       isEnabled: false,

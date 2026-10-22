@@ -21,6 +21,7 @@ import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { AudioVersion, SongIdea } from '../types/band.ts';
 import { EditSongMetadataModal } from './EditSongMetadataModal.tsx';
+import { categoryLabel } from '../shared/songMetadata.ts';
 
 interface SongCardProps {
   song: SongIdea;
@@ -67,7 +68,14 @@ export const SongCard: React.FC<SongCardProps> = ({
     downloadTrack,
   } = useAudioPlayer();
 
-  const { currentUser, permissions, deleteSong, setActiveVersion, addComment } = useBand();
+  const {
+    currentUser,
+    permissions,
+    deleteSong,
+    setActiveVersion,
+    addComment,
+    appSettings,
+  } = useBand();
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showEditMetadata, setShowEditMetadata] = useState(false);
@@ -151,7 +159,7 @@ export const SongCard: React.FC<SongCardProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span className={`text-[11px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full border ${getCategoryTheme(song.category)}`}>
-                {song.category}
+                {categoryLabel(appSettings.demoCategories, song.category)}
               </span>
 
               {song.musicalKey && (

@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Tags,
   Trash2,
   Upload,
   UserCheck,
@@ -80,6 +81,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     authSettings,
     auditLogs,
     appSettings,
+    songs,
     updateBandName,
     updateUserRole,
     updateUserStatus,
@@ -115,6 +117,9 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [appSettingsSaveSuccess, setAppSettingsSaveSuccess] = useState(false);
   const [timeSettingsSaveSuccess, setTimeSettingsSaveSuccess] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
+  const [categorySaveSuccess, setCategorySaveSuccess] = useState(false);
 
   // User Management State
   const [userSearch, setUserSearch] = useState('');
@@ -162,6 +167,68 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     if (!(await updateAppSettings({ timeFormat: localAppSettings.timeFormat }))) return;
     setTimeSettingsSaveSuccess(true);
     setTimeout(() => setTimeSettingsSaveSuccess(false), 2500);
+  };
+
+  const handleAddCategory = () => {
+    const label = newCategoryName.trim();
+    if (!label) {
+      setCategoryError('Enter a category name.');
+      return;
+    }
+    if (
+      localAppSettings.demoCategories.some(
+        (category) => category.label.toLowerCase() === label.toLowerCase(),
+      )
+    ) {
+      setCategoryError('Category names must be unique.');
+      return;
+    }
+    const baseId =
+      label
+        .normalize('NFKD')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 42) || 'category';
+    const existingIds = new Set(
+      localAppSettings.demoCategories.map((category) => category.id),
+    );
+    let id = baseId;
+    let suffix = 2;
+    while (existingIds.has(id)) id = `${baseId}-${suffix++}`;
+    setLocalAppSettings({
+      ...localAppSettings,
+      demoCategories: [...localAppSettings.demoCategories, { id, label }],
+    });
+    setNewCategoryName('');
+    setCategoryError('');
+    setCategorySaveSuccess(false);
+  };
+
+  const handleSaveCategories = async () => {
+    const categories = localAppSettings.demoCategories.map((category) => ({
+      ...category,
+      label: category.label.trim(),
+    }));
+    if (categories.some((category) => !category.label)) {
+      setCategoryError('Category names cannot be blank.');
+      return;
+    }
+    if (
+      new Set(categories.map((category) => category.label.toLowerCase())).size !==
+      categories.length
+    ) {
+      setCategoryError('Category names must be unique.');
+      return;
+    }
+    if (!(await updateAppSettings({ demoCategories: categories }))) {
+      setCategoryError('Unable to save demo categories.');
+      return;
+    }
+    setLocalAppSettings({ ...localAppSettings, demoCategories: categories });
+    setCategoryError('');
+    setCategorySaveSuccess(true);
+    setTimeout(() => setCategorySaveSuccess(false), 2500);
   };
 
   const handleSaveAuthSettings = async (e: React.FormEvent) => {
@@ -395,6 +462,137 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </div>
               )}
             </form>
+          </div>
+
+          <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-zinc-800">
+              <Tags className="w-5 h-5 text-amber-400" />
+              <div>
+                <h3 className="font-bold text-white text-base">Demo Category Management</h3>
+            </div>
+          </div>
+
+          {categoryError && (
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+              {categoryError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {localAppSettings.demoCategories.map((category) => {
+              const assignedCount = songs.filter(
+                (song) => song.category === category.id,
+              ).length;
+              const selectableCount = localAppSettings.demoCategories.filter(
+                (item) => item.id !== 'all',
+              ).length;
+              const cannotRemove =
+                category.id === 'all' ||
+                assignedCount > 0 ||
+                selectableCount <= 1;
+              return (
+                <div
+                  key={category.id}
+                  className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-2"
+                >
+                  <input
+                    type="text"
+                    value={category.label}
+                    maxLength={200}
+                    onChange={(event) => {
+                      setCategorySaveSuccess(false);
+                      setLocalAppSettings({
+                        ...localAppSettings,
+                        demoCategories: localAppSettings.demoCategories.map(
+                          (item) =>
+                            item.id === category.id
+                              ? { ...item, label: event.target.value }
+                              : item,
+                        ),
+                      });
+                    }}
+                    className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                    aria-label={`Category name for ${category.id}`}
+                  />
+                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <span className="text-[10px] text-zinc-500">
+                      {category.id === 'all'
+                        ? 'Required library filter'
+                        : `${assignedCount} ${assignedCount === 1 ? 'demo' : 'demos'}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLocalAppSettings({
+                          ...localAppSettings,
+                          demoCategories:
+                            localAppSettings.demoCategories.filter(
+                              (item) => item.id !== category.id,
+                            ),
+                        });
+                        setCategoryError('');
+                        setCategorySaveSuccess(false);
+                      }}
+                      disabled={cannotRemove}
+                      className="rounded-lg border border-zinc-700 p-2 text-zinc-400 transition hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-30"
+                      title={
+                        category.id === 'all'
+                          ? 'All Demos is required'
+                          : assignedCount > 0
+                            ? 'Move demos out of this category before removing it'
+                            : selectableCount <= 1
+                              ? 'At least one demo category is required'
+                              : `Remove ${category.label}`
+                      }
+                      aria-label={`Remove ${category.label}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleAddCategory();
+            }}
+            className="flex flex-col gap-2 border-t border-zinc-800 pt-4 sm:flex-row"
+          >
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(event) => setNewCategoryName(event.target.value)}
+              maxLength={200}
+              placeholder="New category name"
+              className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-zinc-700"
+            >
+              <Plus className="h-4 w-4" />
+              Add Category
+            </button>
+          </form>
+
+          <div className="flex items-center justify-end gap-3 border-t border-zinc-800 pt-3 text-xs">
+            {categorySaveSuccess && (
+              <span className="flex items-center gap-1 font-medium text-emerald-400">
+                <Check className="h-4 w-4" /> Categories saved!
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleSaveCategories}
+              className="flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2 font-bold text-zinc-950 transition hover:bg-amber-400"
+            >
+              <Save className="h-4 w-4" />
+              Save Categories
+            </button>
+          </div>
           </div>
 
           {/* Header Logo & Name Area Live Mockup */}

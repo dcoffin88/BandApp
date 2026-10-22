@@ -1067,6 +1067,36 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       (await f.action(admin.cookie, 'app.update', branding)).status,
       200,
     );
+    const demoCategories = [
+      { id: 'all', label: 'All Demos' },
+      { id: 'idea', label: 'Song Ideas' },
+      { id: 'chorus', label: 'Chorus Ideas' },
+      { id: 'riff', label: 'Riffs' },
+      { id: 'bass', label: 'Bass Ideas' },
+      { id: 'verse', label: 'Verse Ideas' },
+      { id: 'bridge', label: 'Bridge Ideas' },
+      { id: 'full', label: 'Full Arrangements' },
+    ];
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'app.update', {
+          demoCategories,
+        })
+      ).status,
+      200,
+    );
+    assert.deepEqual(f.store.read().appSettings.demoCategories, demoCategories);
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'app.update', {
+          demoCategories: [
+            { id: 'all', label: 'All Demos' },
+            { id: 'idea', label: 'All Demos' },
+          ],
+        })
+      ).status,
+      400,
+    );
     assert.equal(
       (await f.action(admin.cookie, 'band.update', { name: 'Admin Band' }))
         .status,

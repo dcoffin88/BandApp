@@ -18,6 +18,7 @@ import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { PracticeSession, SongIdea } from '../types/band.ts';
 import { formatClockTime } from '../shared/time.ts';
+import { categoryLabel } from '../shared/songMetadata.ts';
 import { AddToCalendarMenu } from './AddToCalendarMenu.tsx';
 
 export const PracticeScheduleView: React.FC = () => {
@@ -259,7 +260,7 @@ export const PracticeScheduleView: React.FC = () => {
                         >
                           <div className="min-w-0 pr-2">
                             <p className="font-semibold text-zinc-200 truncate">{song.title}</p>
-                            <p className="text-[11px] text-zinc-500 uppercase">{song.category} • {song.bpm ? `${song.bpm} BPM` : 'Idea'}</p>
+                            <p className="text-[11px] text-zinc-500 uppercase">{categoryLabel(appSettings.demoCategories, song.category)} • {song.bpm ? `${song.bpm} BPM` : 'Idea'}</p>
                           </div>
                           <button
                             onClick={() => playSong(song)}

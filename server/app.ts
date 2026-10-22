@@ -37,6 +37,7 @@ import type {
 import { memberDisplayName } from '../src/shared/member.ts';
 import { formatClockTime } from '../src/shared/time.ts';
 import { DEFAULT_TAB_TUNING } from '../src/shared/tabs.ts';
+import { categoryLabel } from '../src/shared/songMetadata.ts';
 import {
   prepareEmailForDelivery,
   renderBrandedEmail,
@@ -51,6 +52,34 @@ const short = z.string().trim().max(200);
 const required = short.min(1);
 const email = z.string().trim().toLowerCase().email().max(254);
 const roleSchema = z.enum(['admin', 'member', 'guest']);
+const categoryIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(50)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const demoCategoriesSchema = z
+  .array(
+    z
+      .object({ id: categoryIdSchema, label: required })
+      .strict(),
+  )
+  .min(2)
+  .max(30)
+  .refine(
+    (categories) => categories.filter((category) => category.id === 'all').length === 1,
+    'Categories must include All Demos.',
+  )
+  .refine(
+    (categories) => new Set(categories.map((category) => category.id)).size === categories.length,
+    'Category identifiers must be unique.',
+  )
+  .refine(
+    (categories) =>
+      new Set(categories.map((category) => category.label.toLowerCase())).size ===
+      categories.length,
+    'Category names must be unique.',
+  );
 const avatar = z
   .string()
   .max(5e5)
@@ -131,6 +160,7 @@ const appSchema = z
     headerSubtitle: short,
     accentGlow: z.boolean(),
     timeFormat: z.enum(['12', '24']),
+    demoCategories: demoCategoriesSchema,
   })
   .partial()
   .strict();
@@ -171,15 +201,7 @@ const versionSchema = z.object({
 
 const songSchema = z.object({
   title: required,
-  category: z.enum([
-    'idea',
-    'chorus',
-    'riff',
-    'bass',
-    'full',
-    'verse',
-    'bridge',
-  ]),
+  category: categoryIdSchema,
   bpm: z.number().min(1).max(500).optional(),
   musicalKey: short.optional(),
   description: text.optional(),
@@ -192,15 +214,7 @@ const songMetadataSchema = z
   .object({
     songId: short,
     title: required,
-    category: z.enum([
-      'idea',
-      'chorus',
-      'riff',
-      'bass',
-      'full',
-      'verse',
-      'bridge',
-    ]),
+    category: categoryIdSchema,
     bpm: z.number().int().min(40).max(260).optional(),
     musicalKey: short.optional(),
     description: text.optional(),
@@ -235,6 +249,21 @@ export class HttpError extends Error {
 function fail(status: number, message: string): never {
   throw new HttpError(status, message);
 }
+
+const legacyCategoryIds = new Set(['full', 'verse', 'bridge']);
+
+const categoryIsAvailable = (state: SharedState, categoryId: string) =>
+  categoryId !== 'all' &&
+  (legacyCategoryIds.has(categoryId) ||
+    state.appSettings.demoCategories.some(
+      (category) => category.id === categoryId,
+    ));
+
+const requireAvailableCategory = (state: SharedState, categoryId: string) => {
+  if (!categoryIsAvailable(state, categoryId)) {
+    fail(400, 'Choose an available demo category.');
+  }
+};
 
 const requireAdmin = (user: BandMember) => {
   if (user.role !== 'admin') fail(403, 'Admin permission required.');
@@ -806,9 +835,8 @@ export function createApplication(options: ApplicationOptions) {
         fail(400, 'Choose a non-empty audio file.');
       }
       const id = randomUUID();
-      const category = z
-        .enum(['idea', 'chorus', 'riff', 'bass', 'full', 'verse', 'bridge'])
-        .parse(req.query.category || 'idea');
+      const category = categoryIdSchema.parse(req.query.category || 'idea');
+      requireAvailableCategory(store.read(), category);
       const relative = media.location(user.name, category, id, mime);
       media.write(relative, req.body);
       try {
@@ -1089,6 +1117,7 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Upload permission required.');
             }
             const data = songSchema.parse(p);
+            requireAvailableCategory(state, data.category);
             ensureVersion(data.version.audioUrl, user);
             const version = {
               ...data.version,
@@ -1130,7 +1159,13 @@ export function createApplication(options: ApplicationOptions) {
               title: data.title,
               intro: `${memberDisplayName(user)} added a new recording to the demo vault.`,
               details: [
-                { label: 'Category', value: data.category },
+                {
+                  label: 'Category',
+                  value: categoryLabel(
+                    state.appSettings.demoCategories,
+                    data.category,
+                  ),
+                },
                 { label: 'Tempo', value: data.bpm ? `${data.bpm} BPM` : '' },
                 { label: 'Key', value: data.musicalKey || '' },
                 { label: 'Initial take', value: version.label },
@@ -1189,6 +1224,7 @@ export function createApplication(options: ApplicationOptions) {
             }
             const data = songMetadataSchema.parse(p);
             const target = song();
+            requireAvailableCategory(state, data.category);
             target.title = data.title;
             target.category = data.category;
             target.bpm = data.bpm;
