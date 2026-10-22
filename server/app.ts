@@ -36,6 +36,7 @@ import type {
 } from '../src/types/band.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
 import { formatClockTime } from '../src/shared/time.ts';
+import { DEFAULT_TAB_TUNING } from '../src/shared/tabs.ts';
 import {
   prepareEmailForDelivery,
   renderBrandedEmail,
@@ -45,6 +46,7 @@ import {
 } from './emailTemplates.ts';
 
 const text = z.string().max(1e4);
+const tabText = z.string().max(1e5);
 const short = z.string().trim().max(200);
 const required = short.min(1);
 const email = z.string().trim().toLowerCase().email().max(254);
@@ -1108,6 +1110,13 @@ export function createApplication(options: ApplicationOptions) {
                 lastEditedAt: now(),
                 versionNumber: 1,
               },
+              tabs: {
+                tuning: DEFAULT_TAB_TUNING,
+                content: '',
+                lastEditedBy: memberDisplayName(user),
+                lastEditedAt: now(),
+                versionNumber: 0,
+              },
               comments: [],
               createdAt: now(),
               createdBy: identity(user),
@@ -1220,6 +1229,28 @@ export function createApplication(options: ApplicationOptions) {
                 },
               ],
               ctaLabel: 'Review lyrics and chords',
+            };
+            break;
+          }
+          case 'song.tabs': {
+            if (!permissions.canEditLyrics) {
+              fail(403, 'Editing permission required.');
+            }
+            const target = song();
+            const data = z
+              .object({
+                songId: short,
+                tuning: z.string().trim().max(100),
+                content: tabText,
+              })
+              .strict()
+              .parse(p);
+            target.tabs = {
+              tuning: data.tuning,
+              content: data.content,
+              lastEditedBy: memberDisplayName(user),
+              lastEditedAt: now(),
+              versionNumber: (target.tabs?.versionNumber || 0) + 1,
             };
             break;
           }

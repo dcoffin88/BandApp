@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Edit2,
   FileText,
+  Guitar,
   KeyRound,
   LogOut,
   Music,
@@ -18,7 +19,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
-import { Role } from '../types/band.ts';
+import { AppTab, Role } from '../types/band.ts';
 import { useAppVersion } from '../hooks/useAppVersion.ts';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionBadge } from './VersionBadge.tsx';
@@ -26,8 +27,8 @@ import { VersionModal } from './VersionModal.tsx';
 import { memberDisplayName } from '../shared/member.ts';
 
 interface NavbarProps {
-  activeTab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile';
-  setActiveTab: (tab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile') => void;
+  activeTab: AppTab;
+  setActiveTab: (tab: AppTab) => void;
   onOpenUploadModal: () => void;
   onSelectAdminSubTab?: (subTab: 'users' | 'auth' | 'app' | 'smtp') => void;
 }
@@ -267,6 +268,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <FileText className="w-4 h-4" />
               <span>Lyrics Studio</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('tabs')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition whitespace-nowrap ${
+                activeTab === 'tabs'
+                  ? 'bg-zinc-800 text-amber-400 shadow-inner'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              }`}
+            >
+              <Guitar className="w-4 h-4" />
+              <span>Tabs Studio</span>
             </button>
             <button
               onClick={() => setActiveTab('practice')}

@@ -17,12 +17,14 @@ import { formatClockTime } from '../shared/time.ts';
 interface SongListMainViewProps {
   onOpenUploadModal: () => void;
   onOpenLyricsModal: (song: SongIdea) => void;
+  onOpenTabsStudio: (song: SongIdea) => void;
   onOpenNewVersionModal: (song: SongIdea) => void;
 }
 
 export const SongListMainView: React.FC<SongListMainViewProps> = ({
   onOpenUploadModal,
   onOpenLyricsModal,
+  onOpenTabsStudio,
   onOpenNewVersionModal,
 }) => {
   const { songs, permissions, practices, appSettings } = useBand();
@@ -159,6 +161,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
                 key={song.id}
                 song={song}
                 onOpenLyrics={onOpenLyricsModal}
+                onOpenTabs={onOpenTabsStudio}
                 onOpenNewVersion={onOpenNewVersionModal}
               />
             ))}
@@ -174,9 +177,6 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
             >
               <Upload className="w-5 h-5 stroke-[2.5]" />
               <span>Upload New Demo</span>
-              <span className="text-xs font-semibold text-zinc-800 ml-1">
-                (MP3, WAV, Mic &amp; Presets)
-              </span>
             </button>
           ) : (
             <div className="p-3 text-xs text-zinc-500 italic">

@@ -64,7 +64,7 @@ const PERMISSION_ROWS: Array<{
 }> = [
   { label: 'Upload Audio Demo Tracks', permission: 'canUploadDemo' },
   { label: 'Upload Multi-Take Versions (v1, v2...)', permission: 'canUploadVersion' },
-  { label: 'Edit Lyrics Drafts & Chords', permission: 'canEditLyrics' },
+  { label: 'Edit Lyrics, Chords & Tabs', permission: 'canEditLyrics' },
   { label: 'Schedule Practices & Rehearsals', permission: 'canSchedulePractice' },
   { label: 'Delete Song Ideas from Vault', permission: 'canDeleteTracks' },
   { label: 'Manage Member Roles & Security Settings', permission: 'canManageMembers' },

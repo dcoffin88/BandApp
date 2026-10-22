@@ -1,5 +1,13 @@
 export type Role = 'admin' | 'member' | 'guest';
 
+export type AppTab =
+  | 'songs'
+  | 'lyrics'
+  | 'tabs'
+  | 'practice'
+  | 'admin'
+  | 'profile';
+
 export type UserStatus = 'active' | 'suspended' | 'invited';
 
 export interface UserRolePermissions {
@@ -76,6 +84,14 @@ export interface SongLyrics {
   versionNumber: number;
 }
 
+export interface SongTabs {
+  tuning: string;
+  content: string;
+  lastEditedBy: string;
+  lastEditedAt: string;
+  versionNumber: number;
+}
+
 export interface SongIdea {
   id: string;
   title: string;
@@ -87,6 +103,7 @@ export interface SongIdea {
   activeVersionId: string;
   versions: AudioVersion[];
   lyrics: SongLyrics;
+  tabs?: SongTabs;
   comments: SongComment[];
   createdAt: string;
   createdBy: {

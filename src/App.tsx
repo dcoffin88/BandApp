@@ -9,19 +9,21 @@ import { NewVersionModal } from './components/NewVersionModal.tsx';
 import { PracticeScheduleView } from './components/PracticeScheduleView.tsx';
 import { ProfileSettingsView } from './components/ProfileSettingsView.tsx';
 import { SongListMainView } from './components/SongListMainView.tsx';
+import { TabsStudioView } from './components/TabsStudioView.tsx';
 import { UploadDemoModal } from './components/UploadDemoModal.tsx';
 import { AudioPlayerProvider, useAudioPlayer } from './context/AudioPlayerContext.tsx';
 import { BandProvider, useBand } from './context/BandContext.tsx';
-import { SongIdea } from './types/band.ts';
+import { AppTab, SongIdea } from './types/band.ts';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, currentUser } = useBand();
-  const [activeTab, setActiveTab] = useState<'songs' | 'lyrics' | 'practice' | 'admin' | 'profile'>('songs');
+  const [activeTab, setActiveTab] = useState<AppTab>('songs');
   const [adminSubTab, setAdminSubTab] = useState<'users' | 'auth' | 'app' | 'smtp'>('app');
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [lyricsModalSong, setLyricsModalSong] = useState<SongIdea | null>(null);
   const [newVersionModalSong, setNewVersionModalSong] = useState<SongIdea | null>(null);
+  const [tabsStudioSongId, setTabsStudioSongId] = useState('');
 
   const { currentSong } = useAudioPlayer();
 
@@ -53,11 +55,19 @@ const AppContent: React.FC = () => {
           <SongListMainView
             onOpenUploadModal={() => setIsUploadModalOpen(true)}
             onOpenLyricsModal={(song) => setLyricsModalSong(song)}
+            onOpenTabsStudio={(song) => {
+              setTabsStudioSongId(song.id);
+              setActiveTab('tabs');
+            }}
             onOpenNewVersionModal={(song) => setNewVersionModalSong(song)}
           />
         )}
 
         {activeTab === 'lyrics' && <LyricsStudioView />}
+
+        {activeTab === 'tabs' && (
+          <TabsStudioView initialSongId={tabsStudioSongId} />
+        )}
 
         {activeTab === 'practice' && <PracticeScheduleView />}
 

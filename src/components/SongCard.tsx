@@ -4,6 +4,7 @@ import {
   Download,
   FileText,
   Gauge,
+  Guitar,
   History,
   MessageSquare,
   MoreVertical,
@@ -24,6 +25,7 @@ import { EditSongMetadataModal } from './EditSongMetadataModal.tsx';
 interface SongCardProps {
   song: SongIdea;
   onOpenLyrics: (song: SongIdea) => void;
+  onOpenTabs: (song: SongIdea) => void;
   onOpenNewVersion: (song: SongIdea) => void;
 }
 
@@ -46,6 +48,7 @@ const createFallbackWaveform = (versionId: string): number[] => {
 export const SongCard: React.FC<SongCardProps> = ({
   song,
   onOpenLyrics,
+  onOpenTabs,
   onOpenNewVersion,
 }) => {
   const {
@@ -328,6 +331,15 @@ export const SongCard: React.FC<SongCardProps> = ({
               >
                 <FileText className="w-3.5 h-3.5 text-amber-400" />
                 <span>Lyrics</span>
+              </button>
+
+              <button
+                onClick={() => onOpenTabs(song)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/80 transition"
+                title="Open the tab sheet for this track"
+              >
+                <Guitar className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Tabs</span>
               </button>
 
               {/* [Playback Speed] button -> "Playback speed button" */}

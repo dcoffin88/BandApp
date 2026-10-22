@@ -1026,6 +1026,16 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       ).status,
       403,
     );
+    assert.equal(
+      (
+        await f.action(guest.cookie, 'song.tabs', {
+          songId: 'missing-song',
+          tuning: 'E A D G B E',
+          content: 'e|---|',
+        })
+      ).status,
+      403,
+    );
     const branding = {
       headerLogoUrl: 'data:image/png;base64,aGVhZGVy',
       headerLogoShape: 'circle',
@@ -1301,6 +1311,16 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     );
     assert.equal(
       (
+        await f.action(admin.cookie, 'song.tabs', {
+          songId: song.id,
+          tuning: 'D A D G B E',
+          content: '[Intro]\ne|--0--2--3--|\nB|-----------|',
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
         await f.action(admin.cookie, 'practice.add', {
           title: 'Practice',
           date: '2026-12-01',
@@ -1365,6 +1385,10 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       await f.request('/api/state', undefined, admin.cookie)
     ).json();
     assert.equal(state.songs[0].lyrics.draft, 'Shared words');
+    assert.equal(state.songs[0].tabs.tuning, 'D A D G B E');
+    assert.match(state.songs[0].tabs.content, /^\[Intro\]/);
+    assert.equal(state.songs[0].tabs.versionNumber, 1);
+    assert.equal(state.songs[0].tabs.lastEditedBy, 'The Conductor');
     assert.equal(state.songs[0].title, 'Finished Demo');
     assert.equal(state.songs[0].category, 'full');
     assert.equal(state.songs[0].bpm, 132);
