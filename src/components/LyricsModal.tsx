@@ -27,7 +27,8 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
     setDraft(song?.lyrics?.draft || '');
   }, [song?.id, isOpen]);
   if (!isOpen || !song) return null;
-  const canEdit = permissions.canEditLyrics;
+  const isArchived = song.category === 'archived';
+  const canEdit = permissions.canEditLyrics && !isArchived;
 
   const handleSave = async () => {
     if (!canEdit) return;
@@ -122,7 +123,10 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
             <div className="p-3 rounded-xl bg-zinc-800/60 border border-zinc-700 text-zinc-300 text-xs flex items-center gap-2">
               <Lock className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
-                <strong>Read-Only Mode:</strong> Your current role (<em>{currentUser.role}</em>) does not have edit permissions. Switch to Admin or Member to edit.
+                <strong>Read-Only Mode:</strong>{' '}
+                {isArchived
+                  ? 'Archived demos must be restored before they can be edited.'
+                  : <>Your current role (<em>{currentUser.role}</em>) does not have edit permissions. Switch to Admin or Member to edit.</>}
               </span>
             </div>
           )}

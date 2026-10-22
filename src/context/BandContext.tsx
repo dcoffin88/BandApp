@@ -122,6 +122,8 @@ interface BandContextType {
     timestampSeconds?: number,
   ) => Promise<boolean>;
   deleteSong: (songId: string) => Promise<boolean>;
+  archiveSong: (songId: string) => Promise<boolean>;
+  restoreSong: (songId: string) => Promise<boolean>;
   setActiveVersion: (songId: string, versionId: string) => Promise<boolean>;
   addPracticeSession: (
     session: Omit<
@@ -505,6 +507,8 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     addComment: (songId, text, timestampSeconds) =>
       save('song.comment', { songId, text, timestampSeconds }),
     deleteSong: (songId) => save('song.delete', { songId }),
+    archiveSong: (songId) => save('song.archive', { songId }),
+    restoreSong: (songId) => save('song.restore', { songId }),
     setActiveVersion: (songId, versionId) =>
       save('song.active', { songId, versionId }),
     addPracticeSession: (session) => save('practice.add', session),

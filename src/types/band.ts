@@ -97,6 +97,7 @@ export interface SongIdea {
   id: string;
   title: string;
   category: string;
+  archivedFromCategory?: string;
   bpm?: number;
   musicalKey?: string;
   description?: string;

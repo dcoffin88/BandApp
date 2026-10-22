@@ -67,7 +67,7 @@ const PERMISSION_ROWS: Array<{
   { label: 'Upload Multi-Take Versions (v1, v2...)', permission: 'canUploadVersion' },
   { label: 'Edit Lyrics, Chords & Tabs', permission: 'canEditLyrics' },
   { label: 'Schedule Practices & Rehearsals', permission: 'canSchedulePractice' },
-  { label: 'Delete Song Ideas from Vault', permission: 'canDeleteTracks' },
+  { label: 'Archive Song Ideas from Vault', permission: 'canDeleteTracks' },
   { label: 'Manage Member Roles & Security Settings', permission: 'canManageMembers' },
 ];
 
@@ -484,10 +484,11 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 (song) => song.category === category.id,
               ).length;
               const selectableCount = localAppSettings.demoCategories.filter(
-                (item) => item.id !== 'all',
+                  (item) => item.id !== 'all' && item.id !== 'archived',
               ).length;
               const cannotRemove =
-                category.id === 'all' ||
+                  category.id === 'all' ||
+                  category.id === 'archived' ||
                 assignedCount > 0 ||
                 selectableCount <= 1;
               return (
@@ -516,8 +517,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   />
                   <div className="flex items-center justify-between gap-3 sm:justify-end">
                     <span className="text-[10px] text-zinc-500">
-                      {category.id === 'all'
+                        {category.id === 'all'
                         ? 'Required library filter'
+                          : category.id === 'archived'
+                            ? 'Required archive filter'
                         : `${assignedCount} ${assignedCount === 1 ? 'demo' : 'demos'}`}
                     </span>
                     <button
@@ -536,8 +539,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                       disabled={cannotRemove}
                       className="rounded-lg border border-zinc-700 p-2 text-zinc-400 transition hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-30"
                       title={
-                        category.id === 'all'
-                          ? 'All Demos is required'
+                          category.id === 'all' || category.id === 'archived'
+                            ? `${category.label} is required`
                           : assignedCount > 0
                             ? 'Move demos out of this category before removing it'
                             : selectableCount <= 1

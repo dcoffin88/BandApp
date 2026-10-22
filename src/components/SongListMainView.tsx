@@ -34,6 +34,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
 
   const nextPractice = practices[0];
+  const activeSongs = songs.filter((song) => song.category !== 'archived');
 
   const activeCategory = appSettings.demoCategories.some(
     (category) => category.id === selectedCategory,
@@ -42,7 +43,10 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
     : 'all';
 
   const filteredSongs = songs.filter(song => {
-    const matchesCategory = activeCategory === 'all' || song.category === activeCategory;
+    const matchesCategory =
+      activeCategory === 'all'
+        ? song.category !== 'archived'
+        : song.category === activeCategory;
     const matchesSearch =
       song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       song.createdBy.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -61,7 +65,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
           <div>
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Demo Vault</p>
             <p className="text-base font-bold text-white">
-              {songs.length} Track Ideas &amp; Takes
+              {activeSongs.length} Track Ideas &amp; Takes
             </p>
           </div>
         </div>
@@ -73,7 +77,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
           <div>
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total Recorded Takes</p>
             <p className="text-base font-bold text-white">
-              {songs.reduce((acc, s) => acc + s.versions.length, 0)} Versions Stored
+              {activeSongs.reduce((acc, s) => acc + s.versions.length, 0)} Versions Stored
             </p>
           </div>
         </div>

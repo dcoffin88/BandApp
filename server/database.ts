@@ -172,6 +172,16 @@ export function openDatabase(filename: string) {
     state.appSettings.demoCategories ??= DEFAULT_DEMO_CATEGORIES.map(
       (category) => ({ ...category }),
     );
+    if (
+      !state.appSettings.demoCategories.some(
+        (category) => category.id === 'archived',
+      )
+    ) {
+      state.appSettings.demoCategories.push({
+        id: 'archived',
+        label: 'Archived',
+      });
+    }
     for (const song of state.songs) {
       if (
         !state.appSettings.demoCategories.some(

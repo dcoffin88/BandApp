@@ -1076,6 +1076,7 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       { id: 'verse', label: 'Verse Ideas' },
       { id: 'bridge', label: 'Bridge Ideas' },
       { id: 'full', label: 'Full Arrangements' },
+      { id: 'archived', label: 'Archived' },
     ];
     assert.equal(
       (
@@ -1516,6 +1517,25 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       1,
     );
     restored.close();
+    assert.equal(
+      (await f.action(admin.cookie, 'song.archive', { songId: song.id })).status,
+      200,
+    );
+    assert.equal(f.store.read().songs[0].category, 'archived');
+    assert.equal(f.store.read().songs[0].archivedFromCategory, 'full');
+    assert.equal(existsSync(audioPath), true);
+    const archivedEdit = await f.action(admin.cookie, 'song.comment', {
+      songId: song.id,
+      text: 'This should remain read-only.',
+    });
+    assert.equal(archivedEdit.status, 400);
+    assert.match(await archivedEdit.text(), /restore this archived demo/i);
+    assert.equal(
+      (await f.action(admin.cookie, 'song.restore', { songId: song.id })).status,
+      200,
+    );
+    assert.equal(f.store.read().songs[0].category, 'full');
+    assert.equal(f.store.read().songs[0].archivedFromCategory, undefined);
     assert.equal(
       (await f.action(admin.cookie, 'song.delete', { songId: song.id })).status,
       200,

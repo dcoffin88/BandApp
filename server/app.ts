@@ -72,6 +72,11 @@ const demoCategoriesSchema = z
     'Categories must include All Demos.',
   )
   .refine(
+    (categories) =>
+      categories.filter((category) => category.id === 'archived').length === 1,
+    'Categories must include Archived.',
+  )
+  .refine(
     (categories) => new Set(categories.map((category) => category.id)).size === categories.length,
     'Category identifiers must be unique.',
   )
@@ -1030,6 +1035,11 @@ export function createApplication(options: ApplicationOptions) {
         const song = () =>
           state.songs.find((s) => s.id === (p.songId as string)) ||
           fail(404, 'Song not found.');
+        const requireEditableSong = (target: ReturnType<typeof song>) => {
+          if (target.category === 'archived') {
+            fail(400, 'Restore this archived demo before editing it.');
+          }
+        };
         const practice = () =>
           state.practices.find((s) => s.id === (p.practiceId as string)) ||
           fail(404, 'Practice not found.');
@@ -1249,6 +1259,7 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Upload permission required.');
             }
             const target = song();
+            requireEditableSong(target);
             const data = versionSchema.parse(p.version);
             ensureVersion(data.audioUrl, user);
             const version = {
@@ -1290,6 +1301,7 @@ export function createApplication(options: ApplicationOptions) {
             }
             const data = songMetadataSchema.parse(p);
             const target = song();
+            requireEditableSong(target);
             requireAvailableCategory(state, data.category);
             target.title = data.title;
             target.category = data.category;
@@ -1303,6 +1315,7 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Editing permission required.');
             }
             const target = song();
+            requireEditableSong(target);
             target.lyrics = {
               draft: text.parse(p.draft),
               chordsSheet:
@@ -1333,6 +1346,7 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Editing permission required.');
             }
             const target = song();
+            requireEditableSong(target);
             const lyricsDraft = target.lyrics.draft.trim();
             if (
               !lyricsDraft ||
@@ -1369,6 +1383,7 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Editing permission required.');
             }
             const target = song();
+            requireEditableSong(target);
             const data = z
               .object({
                 songId: short,
@@ -1388,6 +1403,7 @@ export function createApplication(options: ApplicationOptions) {
           }
           case 'song.comment': {
             const target = song();
+            requireEditableSong(target);
             const comment = {
               id: randomUUID(),
               userId: user.id,
@@ -1425,6 +1441,7 @@ export function createApplication(options: ApplicationOptions) {
           }
           case 'song.active': {
             const target = song();
+            requireEditableSong(target);
             if (!permissions.canUploadVersion) {
               fail(403, 'Editing permission required.');
             }
@@ -1432,6 +1449,39 @@ export function createApplication(options: ApplicationOptions) {
               fail(404, 'Version not found.');
             }
             target.activeVersionId = String(p.versionId);
+            break;
+          }
+          case 'song.archive': {
+            requireAdmin(user);
+            const target = song();
+            if (target.category !== 'archived') {
+              target.archivedFromCategory = target.category;
+              target.category = 'archived';
+            }
+            break;
+          }
+          case 'song.restore': {
+            requireAdmin(user);
+            const target = song();
+            if (target.category !== 'archived') {
+              fail(400, 'Only archived demos can be restored.');
+            }
+            const previousCategory = target.archivedFromCategory;
+            const fallbackCategory =
+              state.appSettings.demoCategories.find(
+                (category) =>
+                  category.id !== 'all' && category.id !== 'archived',
+              )?.id || 'idea';
+            target.category =
+              previousCategory &&
+              previousCategory !== 'all' &&
+              previousCategory !== 'archived' &&
+              state.appSettings.demoCategories.some(
+                (category) => category.id === previousCategory,
+              )
+                ? previousCategory
+                : fallbackCategory;
+            delete target.archivedFromCategory;
             break;
           }
           case 'song.delete': {

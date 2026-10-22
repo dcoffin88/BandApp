@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Archive,
+  ArchiveRestore,
   Clock,
   Download,
   FileText,
@@ -71,6 +73,8 @@ export const SongCard: React.FC<SongCardProps> = ({
   const {
     currentUser,
     permissions,
+    archiveSong,
+    restoreSong,
     deleteSong,
     setActiveVersion,
     addComment,
@@ -80,6 +84,7 @@ export const SongCard: React.FC<SongCardProps> = ({
   const [showComments, setShowComments] = useState(false);
   const [showEditMetadata, setShowEditMetadata] = useState(false);
   const [newCommentText, setNewCommentText] = useState('');
+  const isArchived = song.category === 'archived';
 
   const isCurrentPlaying = currentSong?.id === song.id;
   const activeVersion =
@@ -210,7 +215,7 @@ export const SongCard: React.FC<SongCardProps> = ({
 
           {/* Right Action Menu: Version button & delete */}
           <div className="flex items-center gap-1.5">
-            {permissions.canUploadVersion && (
+            {permissions.canUploadVersion && !isArchived && (
               <button
                 onClick={() => onOpenNewVersion(song)}
                 className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-zinc-700/80 transition"
@@ -230,7 +235,7 @@ export const SongCard: React.FC<SongCardProps> = ({
               <span className="hidden sm:inline">Download ZIP</span>
             </a>
 
-            {permissions.canUploadDemo && (
+            {permissions.canUploadDemo && !isArchived && (
               <button
                 type="button"
                 onClick={() => setShowEditMetadata(true)}
@@ -243,17 +248,45 @@ export const SongCard: React.FC<SongCardProps> = ({
             )}
 
             {permissions.canDeleteTracks && (
-              <button
-                onClick={() => {
-                  if (confirm(`Are you sure you want to delete "${song.title}"?`)) {
-                    deleteSong(song.id);
-                  }
-                }}
-                className="p-1.5 text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
-                title="Delete track (Admin only)"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              isArchived ? (
+                <>
+                  <button
+                    onClick={() => restoreSong(song.id)}
+                    className="flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+                    title="Restore this demo to its previous category"
+                    aria-label={`Restore ${song.title}`}
+                  >
+                    <ArchiveRestore className="h-3.5 w-3.5" />
+                    <span>Restore</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `Permanently delete "${song.title}" and all of its audio takes? This cannot be undone.`,
+                        )
+                      ) {
+                        deleteSong(song.id);
+                      }
+                    }}
+                    className="flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20"
+                    title="Permanently delete this archived demo"
+                    aria-label={`Permanently delete ${song.title}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Delete Permanently</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => archiveSong(song.id)}
+                  className="p-1.5 text-zinc-500 hover:text-amber-300 rounded-lg hover:bg-amber-500/10 transition"
+                  title="Move this demo to Archived"
+                  aria-label={`Archive ${song.title}`}
+                >
+                  <Archive className="w-4 h-4" />
+                </button>
+              )
             )}
           </div>
         </div>
@@ -484,7 +517,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 self-end sm:self-auto">
-                      {!isActive && (
+                      {!isActive && !isArchived && (
                         <button
                           onClick={() => setActiveVersion(song.id, version.id)}
                           className="px-2 py-1 text-[11px] font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition"
@@ -565,22 +598,28 @@ export const SongCard: React.FC<SongCardProps> = ({
             </div>
 
             {/* Comment input form */}
-            <form onSubmit={handleAddComment} className="flex gap-2 pt-1">
-              <input
-                type="text"
-                placeholder={isCurrentPlaying ? `Add note at ${formatSeconds(currentTime)}...` : 'Add band feedback or idea...'}
-                value={newCommentText}
-                onChange={e => setNewCommentText(e.target.value)}
-                className="flex-1 bg-zinc-900 border border-zinc-700/80 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-              <button
-                type="submit"
-                disabled={!newCommentText.trim()}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:hover:bg-amber-500 text-zinc-950 font-bold rounded-lg transition flex items-center gap-1"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
+            {isArchived ? (
+              <p className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-center text-zinc-500">
+                Archived demos are read-only. Restore this demo to add feedback.
+              </p>
+            ) : (
+              <form onSubmit={handleAddComment} className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder={isCurrentPlaying ? `Add note at ${formatSeconds(currentTime)}...` : 'Add band feedback or idea...'}
+                  value={newCommentText}
+                  onChange={e => setNewCommentText(e.target.value)}
+                  className="flex-1 bg-zinc-900 border border-zinc-700/80 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!newCommentText.trim()}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:hover:bg-amber-500 text-zinc-950 font-bold rounded-lg transition flex items-center gap-1"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
+            )}
           </div>
         )}
       </div>

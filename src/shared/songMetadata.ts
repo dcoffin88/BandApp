@@ -9,10 +9,13 @@ export const DEFAULT_DEMO_CATEGORIES: DemoCategory[] = [
   { id: 'verse', label: 'Verse Ideas' },
   { id: 'bridge', label: 'Bridge Ideas' },
   { id: 'full', label: 'Full Arrangements' },
+  { id: 'archived', label: 'Archived' },
 ];
 
 export const selectableDemoCategories = (categories: DemoCategory[]) =>
-  categories.filter((category) => category.id !== 'all');
+  categories.filter(
+    (category) => category.id !== 'all' && category.id !== 'archived',
+  );
 
 export const categoryLabel = (categories: DemoCategory[], id: string) =>
   categories.find((category) => category.id === id)?.label ||

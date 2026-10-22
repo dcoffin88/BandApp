@@ -67,8 +67,10 @@ export const SongDocumentStudioView: React.FC<
     songs.find((song) => song.id === selectedSongId) || songs[0];
   const canEdit = permissions.canEditLyrics;
   const isChords = mode === 'chords';
+  const isArchived = selectedSong?.category === 'archived';
   const lyricsAreReady = hasLyricsDraft(selectedSong?.lyrics?.draft);
-  const canEditDocument = canEdit && (!isChords || lyricsAreReady);
+  const canEditDocument =
+    canEdit && !isArchived && (!isChords || lyricsAreReady);
 
   useEffect(() => {
     if (initialSongId) setSelectedSongId(initialSongId);
@@ -91,10 +93,11 @@ export const SongDocumentStudioView: React.FC<
 
   const filteredSongs = songs.filter(
     (song) =>
-      song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      categoryLabel(appSettings.demoCategories, song.category)
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()),
+      song.category !== 'archived' &&
+      (song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        categoryLabel(appSettings.demoCategories, song.category)
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())),
   );
 
   const handleSave = async () => {
@@ -381,10 +384,14 @@ export const SongDocumentStudioView: React.FC<
               </div>
 
               <div className="flex flex-1 flex-col p-4">
-                {!canEdit && (
+                {(!canEdit || isArchived) && (
                   <div className="mb-3 flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800/60 p-2.5 text-xs text-zinc-300">
                     <Lock className="h-4 w-4 shrink-0 text-amber-400" />
-                    <span>Read-only mode.</span>
+                    <span>
+                      {isArchived
+                        ? 'Archived demos are read-only. Restore this demo to edit it.'
+                        : 'Read-only mode.'}
+                    </span>
                   </div>
                 )}
                 {isChords && !lyricsAreReady && (
