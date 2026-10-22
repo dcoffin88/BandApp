@@ -24,6 +24,7 @@ const AppContent: React.FC = () => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [lyricsModalSong, setLyricsModalSong] = useState<SongIdea | null>(null);
   const [newVersionModalSong, setNewVersionModalSong] = useState<SongIdea | null>(null);
+  const [lyricsStudioSongId, setLyricsStudioSongId] = useState('');
   const [tabsStudioSongId, setTabsStudioSongId] = useState('');
   const [chordsStudioSongId, setChordsStudioSongId] = useState('');
 
@@ -69,7 +70,9 @@ const AppContent: React.FC = () => {
           />
         )}
 
-        {activeTab === 'lyrics' && <LyricsStudioView />}
+        {activeTab === 'lyrics' && (
+          <LyricsStudioView initialSongId={lyricsStudioSongId} />
+        )}
 
         {activeTab === 'chords' && (
           <ChordsStudioView initialSongId={chordsStudioSongId} />
@@ -93,7 +96,18 @@ const AppContent: React.FC = () => {
 
       {/* Persistent Bottom Audio Player Bar */}
       <GlobalAudioPlayer
-        onOpenLyrics={(song) => setLyricsModalSong(song)}
+        onOpenLyrics={(song) => {
+          setLyricsStudioSongId(song.id);
+          setActiveTab('lyrics');
+        }}
+        onOpenChords={(song) => {
+          setChordsStudioSongId(song.id);
+          setActiveTab('chords');
+        }}
+        onOpenTabs={(song) => {
+          setTabsStudioSongId(song.id);
+          setActiveTab('tabs');
+        }}
       />
 
       {/* Modals */}

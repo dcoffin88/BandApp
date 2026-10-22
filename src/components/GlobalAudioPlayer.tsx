@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  BookOpen,
+  ChevronUp,
   Download,
   FileText,
-  Gauge,
-  Maximize2,
+  Guitar,
+  ListMusic,
   Pause,
   Play,
   Repeat,
@@ -18,9 +20,15 @@ import { SongIdea } from '../types/band.ts';
 
 interface GlobalAudioPlayerProps {
   onOpenLyrics: (song: SongIdea) => void;
+  onOpenChords: (song: SongIdea) => void;
+  onOpenTabs: (song: SongIdea) => void;
 }
 
-export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ onOpenLyrics }) => {
+export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({
+  onOpenLyrics,
+  onOpenChords,
+  onOpenTabs,
+}) => {
   const {
     currentSong,
     currentVersion,
@@ -40,6 +48,30 @@ export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ onOpenLyri
     toggleLoop,
     downloadTrack,
   } = useAudioPlayer();
+  const [isDocumentsMenuOpen, setIsDocumentsMenuOpen] = useState(false);
+  const documentsMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setIsDocumentsMenuOpen(false);
+  }, [currentSong?.id]);
+
+  useEffect(() => {
+    if (!isDocumentsMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!documentsMenuRef.current?.contains(event.target as Node)) {
+        setIsDocumentsMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsDocumentsMenuOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isDocumentsMenuOpen]);
 
   if (!currentSong || !currentVersion) return null;
 
@@ -155,15 +187,69 @@ export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ onOpenLyri
               {playbackRate}x
             </button>
 
-            {/* Lyrics popup trigger */}
-            <button
-              onClick={() => onOpenLyrics(currentSong)}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition"
-              title="Open lyrics pop-up"
-            >
-              <FileText className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden sm:inline">Lyrics</span>
-            </button>
+            {/* Lyrics, chords, and tabs menu */}
+            <div ref={documentsMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsDocumentsMenuOpen((open) => !open)}
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1 text-xs font-semibold text-zinc-200 transition hover:bg-zinc-700"
+                title="Open lyrics, chords, or tabs"
+                aria-haspopup="menu"
+                aria-expanded={isDocumentsMenuOpen}
+              >
+                <BookOpen className="h-3.5 w-3.5 text-purple-400" />
+                <span className="hidden sm:inline">Song Docs</span>
+                <ChevronUp
+                  className={`h-3 w-3 transition-transform ${
+                    isDocumentsMenuOpen ? '' : 'rotate-180'
+                  }`}
+                />
+              </button>
+
+              {isDocumentsMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute bottom-full right-0 z-50 mb-2 w-44 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 text-xs shadow-2xl"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsDocumentsMenuOpen(false);
+                      onOpenLyrics(currentSong);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-zinc-200 transition hover:bg-zinc-800"
+                  >
+                    <FileText className="h-4 w-4 text-purple-400" />
+                    Lyrics
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsDocumentsMenuOpen(false);
+                      onOpenChords(currentSong);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-zinc-200 transition hover:bg-zinc-800"
+                  >
+                    <Guitar className="h-4 w-4 text-amber-400" />
+                    Chords
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsDocumentsMenuOpen(false);
+                      onOpenTabs(currentSong);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-zinc-200 transition hover:bg-zinc-800"
+                  >
+                    <ListMusic className="h-4 w-4 text-cyan-400" />
+                    Tabs
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Download track */}
             <button
