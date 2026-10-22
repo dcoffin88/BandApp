@@ -163,7 +163,7 @@ export const SongCard: React.FC<SongCardProps> = ({
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              <span className={`text-[11px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full border ${getCategoryTheme(song.category)}`}>
+              <span data-category={song.category} className={`demo-category-pill text-[11px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full border ${getCategoryTheme(song.category)}`}>
                 {categoryLabel(appSettings.demoCategories, song.category)}
               </span>
 
@@ -252,7 +252,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                 <>
                   <button
                     onClick={() => restoreSong(song.id)}
-                    className="flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+                    className="archive-restore-button flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
                     title="Restore this demo to its previous category"
                     aria-label={`Restore ${song.title}`}
                   >
@@ -269,7 +269,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                         deleteSong(song.id);
                       }
                     }}
-                    className="flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20"
+                    className="archive-delete-button flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20"
                     title="Permanently delete this archived demo"
                     aria-label={`Permanently delete ${song.title}`}
                   >

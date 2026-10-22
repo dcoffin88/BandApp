@@ -623,7 +623,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                   wrap="off"
                   spellCheck={false}
                   placeholder={`[Intro] - starts at 0:05\n\n${guitarStaff(DEFAULT_TAB_TUNING)}`}
-                  className="min-h-[420px] w-full flex-1 resize-y overflow-auto whitespace-pre rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-relaxed text-cyan-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 sm:text-sm"
+                  className="tabs-editor min-h-[420px] w-full flex-1 resize-y overflow-auto whitespace-pre rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-relaxed text-cyan-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 sm:text-sm"
                 />
               </div>
 

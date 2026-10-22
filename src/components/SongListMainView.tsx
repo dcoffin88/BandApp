@@ -114,8 +114,9 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
           {appSettings.demoCategories.map(cat => (
             <button
               key={cat.id}
+              data-active={activeCategory === cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap border ${
+              className={`demo-category-filter px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap border ${
                 activeCategory === cat.id
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
                   : 'bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 border-zinc-800'
@@ -185,7 +186,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
           {permissions.canUploadDemo ? (
             <button
               onClick={onOpenUploadModal}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-zinc-950 font-black text-sm tracking-wide shadow-xl shadow-amber-500/15 hover:shadow-amber-500/25 transition active:scale-[0.99] border border-amber-300/40"
+              className="theme-bg-accent w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl text-zinc-950 font-black text-sm tracking-wide shadow-xl shadow-amber-500/15 hover:shadow-amber-500/25 transition active:scale-[0.99] border border-amber-300/40"
             >
               <Upload className="w-5 h-5 stroke-[2.5]" />
               <span>Upload New Demo</span>

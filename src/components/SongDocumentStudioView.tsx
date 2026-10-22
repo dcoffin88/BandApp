@@ -415,7 +415,7 @@ export const SongDocumentStudioView: React.FC<
                   </div>
                 )}
                 {isChords && !lyricsAreReady && (
-                  <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                  <div className="chords-lyrics-required mb-3 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
                     <FileText className="h-4 w-4 shrink-0" />
                     <span>
                       Add and save lyrics in Lyrics Studio before creating this
@@ -443,7 +443,7 @@ export const SongDocumentStudioView: React.FC<
                   }
                   className={`min-h-[360px] w-full flex-1 resize-y rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-relaxed focus:outline-none focus:ring-1 sm:text-sm ${
                     isChords
-                      ? 'text-amber-200 focus:ring-amber-500/50'
+                      ? 'chords-editor text-amber-200 focus:ring-amber-500/50'
                       : 'text-zinc-200 focus:ring-purple-500/50'
                   }`}
                 />

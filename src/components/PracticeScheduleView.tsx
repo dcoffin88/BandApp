@@ -279,7 +279,7 @@ export const PracticeScheduleView: React.FC = () => {
                 <div className="pt-3 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   {/* Attendance roster */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-zinc-500 text-[11px] font-semibold uppercase mr-1">
+                    <span className="rsvp-heading text-zinc-500 text-[11px] font-semibold uppercase mr-1">
                       RSVPs:
                     </span>
                     {practice.rsvps.map((rsvp, idx) => {
@@ -293,7 +293,8 @@ export const PracticeScheduleView: React.FC = () => {
                       return (
                         <span
                           key={idx}
-                          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] ${color}`}
+                          data-status={rsvp.status}
+                          className={`rsvp-pill flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] ${color}`}
                         >
                           <img
                             src={rsvp.userAvatar}
@@ -310,8 +311,8 @@ export const PracticeScheduleView: React.FC = () => {
                   </div>
 
                   {/* Interactive RSVP buttons for current user */}
-                  <div className="flex items-center gap-1.5 self-end sm:self-auto bg-zinc-950 p-1 rounded-xl border border-zinc-800">
-                    <span className="text-[11px] text-zinc-500 px-2 font-medium">Your RSVP:</span>
+                  <div className="rsvp-controls flex items-center gap-1.5 self-end sm:self-auto bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+                    <span className="rsvp-heading text-[11px] text-zinc-500 px-2 font-medium">Your RSVP:</span>
                     <button
                       onClick={() => updateRsvp(practice.id, 'attending')}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
