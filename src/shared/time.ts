@@ -2,6 +2,13 @@ import type { AppSettings } from '../types/band.ts';
 
 export type TimeFormat = AppSettings['timeFormat'];
 
+export function localDateValue(referenceTime = new Date()): string {
+  const year = referenceTime.getFullYear();
+  const month = String(referenceTime.getMonth() + 1).padStart(2, '0');
+  const day = String(referenceTime.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function formatClockTime(
   time: string,
   timeFormat: TimeFormat,

@@ -642,6 +642,18 @@ test('RSVP reminders target unconfirmed members and event reminders target atten
       (await f.action(admin.cookie, 'smtp.update', smtpSettings)).status,
       200,
     );
+    const pastDate = await f.action(admin.cookie, 'practice.add', {
+      title: 'Past Practice',
+      date: '2000-01-01',
+      startTime: '18:00',
+      endTime: '20:00',
+      location: 'Studio A',
+      setlistSongIds: [],
+      goals: [],
+      notes: '',
+    });
+    assert.equal(pastDate.status, 400);
+    assert.match(await pastDate.text(), /cannot be earlier than today/i);
     assert.equal(
       (
         await f.action(admin.cookie, 'practice.add', {

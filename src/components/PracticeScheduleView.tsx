@@ -17,7 +17,7 @@ import {
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { PracticeSession, SongIdea } from '../types/band.ts';
-import { formatClockTime } from '../shared/time.ts';
+import { formatClockTime, localDateValue } from '../shared/time.ts';
 import { categoryLabel } from '../shared/songMetadata.ts';
 import { AddToCalendarMenu } from './AddToCalendarMenu.tsx';
 
@@ -45,8 +45,12 @@ export const PracticeScheduleView: React.FC = () => {
   const [eventReminderFourHours, setEventReminderFourHours] = useState(true);
 
   const canSchedule = permissions.canSchedulePractice;
+  const today = localDateValue();
   const selectableSongs = songs.filter((song) => song.category !== 'archived');
   const selectableSongIds = new Set(selectableSongs.map((song) => song.id));
+  const upcomingPractices = practices.filter((practice) => !practiceHasEnded(practice));
+  const pastPractices = practices.filter(practiceHasEnded);
+  const orderedPractices = [...upcomingPractices, ...pastPractices];
 
   const resetPracticeForm = () => {
     setEditingPracticeId(null);
@@ -170,14 +174,23 @@ export const PracticeScheduleView: React.FC = () => {
             )}
           </div>
         ) : (
-          practices.map(practice => {
+          orderedPractices.map((practice, index) => {
             const myRsvp = practice.rsvps.find(r => r.userId === currentUser.id)?.status;
             const setlistSongs = songs.filter(s => practice.setlistSongIds.includes(s.id));
             const isPast = practiceHasEnded(practice);
 
             return (
-              <div
-                key={practice.id}
+              <React.Fragment key={practice.id}>
+                {index === upcomingPractices.length && upcomingPractices.length > 0 && (
+                  <div className="flex items-center gap-3 py-2" aria-label="Past scheduled events">
+                    <hr className="flex-1 border-zinc-800" />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                      Past Events
+                    </span>
+                    <hr className="flex-1 border-zinc-800" />
+                  </div>
+                )}
+                <div
                 className={`p-5 sm:p-6 rounded-2xl border transition space-y-4 ${
                   isPast
                     ? 'bg-zinc-950/50 border-zinc-900'
@@ -374,7 +387,8 @@ export const PracticeScheduleView: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              </div>
+                </div>
+              </React.Fragment>
             );
           })
         )}
@@ -421,6 +435,7 @@ export const PracticeScheduleView: React.FC = () => {
                   </label>
                   <input
                     type="date"
+                  min={today}
                     value={date}
                     onChange={e => setDate(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-2 text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -457,7 +472,7 @@ export const PracticeScheduleView: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Sonic Vault Studios, Alex's Garage..."
+                  placeholder="e.g. Recording Studio, Alex's Garage..."
                   value={location}
                   onChange={e => setLocation(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white"

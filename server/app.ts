@@ -37,7 +37,7 @@ import type {
   SmtpSettings,
 } from '../src/types/band.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
-import { formatClockTime } from '../src/shared/time.ts';
+import { formatClockTime, localDateValue } from '../src/shared/time.ts';
 import { DEFAULT_TAB_TUNING } from '../src/shared/tabs.ts';
 import { categoryLabel } from '../src/shared/songMetadata.ts';
 import {
@@ -1583,6 +1583,9 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Scheduling permission required.');
             }
             const data = practiceSchema.parse(p);
+            if (data.date < localDateValue()) {
+              fail(400, 'Practice date cannot be earlier than today.');
+            }
             if (data.endTime <= data.startTime) {
               fail(400, 'Practice must end after it starts.');
             }
@@ -1622,6 +1625,9 @@ export function createApplication(options: ApplicationOptions) {
               fail(400, 'Past practice sessions cannot be edited.');
             }
             const data = practiceSchema.parse(p);
+            if (data.date < localDateValue()) {
+              fail(400, 'Practice date cannot be earlier than today.');
+            }
             if (data.endTime <= data.startTime) {
               fail(400, 'Practice must end after it starts.');
             }
