@@ -150,8 +150,12 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
         {filteredSongs.length === 0 ? (
           <div className="p-12 text-center text-zinc-500 space-y-3">
             <Music className="w-10 h-10 mx-auto text-zinc-700" />
-            <p className="text-sm font-medium text-zinc-300">No song demos found in this filter.</p>
-            {permissions.canUploadDemo && (
+            <p className="text-sm font-medium text-zinc-300">
+              {activeCategory === 'archived'
+                ? 'No archived demos.'
+                : 'No song demos found in this filter.'}
+            </p>
+            {activeCategory !== 'archived' && permissions.canUploadDemo && (
               <button
                 onClick={onOpenUploadModal}
                 className="px-4 py-2 rounded-xl bg-amber-500 text-zinc-950 font-bold text-xs"
@@ -176,6 +180,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
         )}
 
         {/* Bottom Upload Section as sketched on Page 1: "upload new demo (see page 2)" */}
+        {activeCategory !== 'archived' && (
         <div className="mt-6 pt-5 border-t border-zinc-800/90 text-center">
           {permissions.canUploadDemo ? (
             <button
@@ -191,6 +196,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );
