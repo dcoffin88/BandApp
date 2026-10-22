@@ -115,6 +115,7 @@ export function emptyState(): SharedState {
       accentGlow: true,
       headerSubtitle: 'Your band\'s home base.',
       timeFormat: '12',
+      autoDeleteArchivedDemos: true,
       demoCategories: DEFAULT_DEMO_CATEGORIES.map((category) => ({ ...category })),
     },
     smtpSettings: {

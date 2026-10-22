@@ -98,6 +98,7 @@ export interface SongIdea {
   title: string;
   category: string;
   archivedFromCategory?: string;
+  archivedAt?: string;
   bpm?: number;
   musicalKey?: string;
   description?: string;
@@ -199,6 +200,7 @@ export interface AppSettings extends UserAppearance {
   headerSubtitle: string;
   accentGlow: boolean;
   timeFormat: '12' | '24';
+  autoDeleteArchivedDemos: boolean;
   demoCategories: DemoCategory[];
 }
 
@@ -228,6 +230,7 @@ export interface SmtpSettings {
 
 export type EmailEventType =
   | 'member_invite'
+  | 'demo_archived'
   | 'new_demo'
   | 'new_version'
   | 'lyric_edit'

@@ -166,6 +166,7 @@ const appSchema = z
     headerSubtitle: short,
     accentGlow: z.boolean(),
     timeFormat: z.enum(['12', '24']),
+    autoDeleteArchivedDemos: z.boolean(),
     demoCategories: demoCategoriesSchema,
   })
   .partial()
@@ -323,6 +324,35 @@ export function createApplication(options: ApplicationOptions) {
     store,
     options.mediaDirectory || path.join(path.dirname(options.databasePath), 'media')
   );
+  const collectSongDeletion = (
+    state: SharedState,
+    target: SharedState['songs'][number],
+    deletedMedia: string[],
+  ) => {
+    for (const version of target.versions) {
+      const uploadId = version.audioUrl.split('/').pop() || '';
+      const upload = db
+        .prepare('SELECT relative_path FROM uploads WHERE id=?')
+        .get(uploadId) as { relative_path?: string } | undefined;
+      if (upload?.relative_path) deletedMedia.push(String(upload.relative_path));
+      db.prepare('DELETE FROM uploads WHERE id=?').run(uploadId);
+    }
+    state.songs = state.songs.filter((song) => song.id !== target.id);
+    for (const session of state.practices) {
+      session.setlistSongIds = session.setlistSongIds.filter(
+        (id) => id !== target.id,
+      );
+    }
+  };
+  const removeMediaFiles = (relativePaths: string[]) => {
+    for (const relative of relativePaths) {
+      try {
+        media.remove(relative);
+      } catch (error) {
+        console.error('Could not remove deleted audio:', error);
+      }
+    }
+  };
   const app = express();
   const origin = new URL(options.appUrl).origin;
   const key = createHash('sha256').update(options.secret).digest();
@@ -1457,6 +1487,47 @@ export function createApplication(options: ApplicationOptions) {
             if (target.category !== 'archived') {
               target.archivedFromCategory = target.category;
               target.category = 'archived';
+              target.archivedAt = now();
+              const autoDelete = state.appSettings.autoDeleteArchivedDemos;
+              const deletionDate = new Date(
+                Date.parse(target.archivedAt) + 30 * 24 * 60 * 60 * 1000,
+              ).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                timeZone: 'UTC',
+              });
+              event = {
+                type: 'demo_archived',
+                subject: `Demo archived: ${target.title}`,
+                preheader: autoDelete
+                  ? `${target.title} was archived and will be permanently deleted in 30 days.`
+                  : `${target.title} was moved to Archived.`,
+                eyebrow: 'Demo archived',
+                title: target.title,
+                intro: `${memberDisplayName(user)} moved this demo to Archived. Its audio, lyrics, chords, tabs, and comments are now read-only.`,
+                details: [
+                  { label: 'Archived by', value: memberDisplayName(user) },
+                  {
+                    label: 'Previous category',
+                    value: categoryLabel(
+                      state.appSettings.demoCategories,
+                      target.archivedFromCategory,
+                    ),
+                  },
+                  {
+                    label: autoDelete ? 'Scheduled deletion' : 'Automatic deletion',
+                    value: autoDelete ? deletionDate : 'Disabled',
+                  },
+                ],
+                callout: autoDelete
+                  ? {
+                      label: '30-day deletion notice',
+                      text: 'This item will be permanently deleted in 30 days. Download its ZIP archive before deletion if you want to keep the audio takes, lyrics, chords, and tabs for your own records.',
+                    }
+                  : undefined,
+                ctaLabel: 'Open Archived Demos',
+              };
             }
             break;
           }
@@ -1482,29 +1553,13 @@ export function createApplication(options: ApplicationOptions) {
                 ? previousCategory
                 : fallbackCategory;
             delete target.archivedFromCategory;
+            delete target.archivedAt;
             break;
           }
           case 'song.delete': {
             requireAdmin(user);
             const target = song();
-            for (const version of target.versions) {
-              const uploadId = version.audioUrl.split('/').pop() || '';
-              const upload = db
-                .prepare('SELECT relative_path FROM uploads WHERE id=?')
-                .get(uploadId) as
-                | { relative_path?: string }
-                | undefined;
-              if (upload?.relative_path) {
-                deletedMedia.push(String(upload.relative_path));
-              }
-              db.prepare('DELETE FROM uploads WHERE id=?').run(uploadId);
-            }
-            state.songs = state.songs.filter((s) => s.id !== target.id);
-            for (const session of state.practices) {
-              session.setlistSongIds = session.setlistSongIds.filter(
-                (id) => id !== target.id
-              );
-            }
+            collectSongDeletion(state, target, deletedMedia);
             break;
           }
           case 'practice.add': {
@@ -1594,13 +1649,7 @@ export function createApplication(options: ApplicationOptions) {
         store.write(state);
       });
 
-      for (const relative of deletedMedia) {
-        try {
-          media.remove(relative);
-        } catch (error) {
-          console.error('Could not remove deleted audio:', error);
-        }
-      }
+      removeMediaFiles(deletedMedia);
 
       if (invitationRecipient) {
         const recipient = invitationRecipient;
@@ -1745,6 +1794,7 @@ export function createApplication(options: ApplicationOptions) {
     const state = store.read();
     if (!state.smtpSettings.isEnabled) return;
     const trigger: Record<string, keyof SmtpSettings['notificationTriggers']> = {
+      demo_archived: 'newDemos',
       new_demo: 'newDemos',
       new_version: 'newVersions',
       lyric_edit: 'lyricEdits',
@@ -1756,6 +1806,7 @@ export function createApplication(options: ApplicationOptions) {
       member_invite: 'newDemos',
     };
     const preference: Record<string, string> = {
+      demo_archived: 'newDemos',
       new_demo: 'newDemos',
       new_version: 'newVersions',
       lyric_edit: 'lyricEdits',
@@ -1789,6 +1840,36 @@ export function createApplication(options: ApplicationOptions) {
         event.type
       );
     }
+  }
+
+  function cleanupArchivedDemos(referenceTime = new Date()): number {
+    const deletedMedia: string[] = [];
+    let deletedCount = 0;
+    store.transaction(() => {
+      const state = store.read();
+      if (!state.appSettings.autoDeleteArchivedDemos) return;
+
+      const referenceIso = referenceTime.toISOString();
+      const cutoff = referenceTime.getTime() - 30 * 24 * 60 * 60 * 1000;
+      let changed = false;
+      for (const target of [...state.songs]) {
+        if (target.category !== 'archived') continue;
+        if (!target.archivedAt) {
+          target.archivedAt = referenceIso;
+          changed = true;
+          continue;
+        }
+        const archivedTime = Date.parse(target.archivedAt);
+        if (Number.isFinite(archivedTime) && archivedTime <= cutoff) {
+          collectSongDeletion(state, target, deletedMedia);
+          deletedCount++;
+          changed = true;
+        }
+      }
+      if (changed) store.write(state);
+    });
+    removeMediaFiles(deletedMedia);
+    return deletedCount;
   }
 
   async function sendPracticeReminders(
@@ -2082,5 +2163,11 @@ export function createApplication(options: ApplicationOptions) {
       .json({ message: 'The server could not complete this request.' });
   };
 
-  return { app, store, errorHandler, sendPracticeReminders };
+  return {
+    app,
+    store,
+    errorHandler,
+    sendPracticeReminders,
+    cleanupArchivedDemos,
+  };
 }

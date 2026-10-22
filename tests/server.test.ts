@@ -471,6 +471,23 @@ test('action notifications include branded song, feedback, and rehearsal details
     assert.match(practiceEmail, /Midnight Drive/);
     assert.match(practiceEmail, /Bring in-ear monitors/);
     assert.match(practiceEmail, /View practice and RSVP/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.archive', {
+          songId: song.id,
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 7);
+    const archiveEmail = decodeEmail(smtp.messages[6]);
+    assert.match(archiveEmail, /Demo archived/);
+    assert.match(archiveEmail, /Midnight Drive/);
+    assert.match(archiveEmail, /permanently deleted in 30 days/i);
+    assert.match(archiveEmail, /Download its ZIP archive before deletion/i);
+    assert.match(archiveEmail, /audio takes, lyrics, chords, and tabs/i);
+    assert.equal(f.store.read().emailLogs[0].eventType, 'demo_archived');
   } finally {
     await smtp.close();
     await f.close();
@@ -546,6 +563,8 @@ async function fixture() {
     action,
     sendPracticeReminders: (referenceTime?: Date) =>
       application.sendPracticeReminders(referenceTime),
+    cleanupArchivedDemos: (referenceTime?: Date) =>
+      application.cleanupArchivedDemos(referenceTime),
     get store() {
       return application.store;
     },
@@ -1523,6 +1542,7 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     );
     assert.equal(f.store.read().songs[0].category, 'archived');
     assert.equal(f.store.read().songs[0].archivedFromCategory, 'full');
+    assert.ok(f.store.read().songs[0].archivedAt);
     assert.equal(existsSync(audioPath), true);
     const archivedEdit = await f.action(admin.cookie, 'song.comment', {
       songId: song.id,
@@ -1536,9 +1556,38 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     );
     assert.equal(f.store.read().songs[0].category, 'full');
     assert.equal(f.store.read().songs[0].archivedFromCategory, undefined);
+    assert.equal(f.store.read().songs[0].archivedAt, undefined);
     assert.equal(
-      (await f.action(admin.cookie, 'song.delete', { songId: song.id })).status,
+      (await f.action(admin.cookie, 'song.archive', { songId: song.id })).status,
       200,
+    );
+    const oldArchiveState = f.store.read();
+    oldArchiveState.songs[0].archivedAt = '2026-01-01T00:00:00.000Z';
+    f.store.write(oldArchiveState);
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'app.update', {
+          autoDeleteArchivedDemos: false,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      f.cleanupArchivedDemos(new Date('2026-02-01T00:00:01.000Z')),
+      0,
+    );
+    assert.equal(f.store.read().songs.length, 1);
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'app.update', {
+          autoDeleteArchivedDemos: true,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      f.cleanupArchivedDemos(new Date('2026-02-01T00:00:01.000Z')),
+      1,
     );
     assert.equal(
       (await f.request(audioUrl, undefined, admin.cookie)).status,

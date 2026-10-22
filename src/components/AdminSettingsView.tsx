@@ -117,6 +117,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [appSettingsSaveSuccess, setAppSettingsSaveSuccess] = useState(false);
   const [timeSettingsSaveSuccess, setTimeSettingsSaveSuccess] = useState(false);
+  const [archiveSettingsSaveSuccess, setArchiveSettingsSaveSuccess] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryError, setCategoryError] = useState('');
   const [categorySaveSuccess, setCategorySaveSuccess] = useState(false);
@@ -167,6 +168,15 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     if (!(await updateAppSettings({ timeFormat: localAppSettings.timeFormat }))) return;
     setTimeSettingsSaveSuccess(true);
     setTimeout(() => setTimeSettingsSaveSuccess(false), 2500);
+  };
+
+  const handleSaveArchiveSettings = async () => {
+    if (!isAdmin) return;
+    if (!(await updateAppSettings({
+      autoDeleteArchivedDemos: localAppSettings.autoDeleteArchivedDemos,
+    }))) return;
+    setArchiveSettingsSaveSuccess(true);
+    setTimeout(() => setArchiveSettingsSaveSuccess(false), 2500);
   };
 
   const handleAddCategory = () => {
@@ -769,7 +779,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             </div>
             <div>
               <p className="text-xs text-zinc-400 mb-3">
-                Choose how clock times appear throughout RehearsalHQ.
+                Choose how time appears throughout RehearsalHQ.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
@@ -809,6 +819,50 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               >
                 <Save className="w-4 h-4" />
                 <span>Save Time Display</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-zinc-800">
+              <Trash2 className="w-5 h-5 text-amber-400" />
+              <h3 className="font-bold text-white text-base">Archive Retention</h3>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+              <input
+                type="checkbox"
+                checked={localAppSettings.autoDeleteArchivedDemos}
+                onChange={(event) => {
+                  setLocalAppSettings({
+                    ...localAppSettings,
+                    autoDeleteArchivedDemos: event.target.checked,
+                  });
+                  setArchiveSettingsSaveSuccess(false);
+                }}
+                className="mt-0.5 h-4 w-4 rounded accent-amber-500"
+              />
+              <div>
+                <p className="text-xs font-semibold text-zinc-200">
+                  Automatically delete archived demos after 30 days
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                  Permanently removes the demo, every audio take, and its setlist references after it has remained archived for 30 days.
+                </p>
+              </div>
+            </label>
+            <div className="flex items-center justify-end gap-3 border-t border-zinc-800 pt-3 text-xs">
+              {archiveSettingsSaveSuccess && (
+                <span className="flex items-center gap-1 font-medium text-emerald-400">
+                  <Check className="h-4 w-4" /> Archive retention saved!
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleSaveArchiveSettings}
+                className="flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-2.5 font-bold text-zinc-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400"
+              >
+                <Save className="h-4 w-4" />
+                Save Archive Retention
               </button>
             </div>
           </div>

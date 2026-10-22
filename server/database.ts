@@ -169,6 +169,7 @@ export function openDatabase(filename: string) {
     const state = JSON.parse(String(row.value)) as SharedState;
     state.band.members = members();
     state.appSettings.timeFormat ??= '12';
+    state.appSettings.autoDeleteArchivedDemos ??= true;
     state.appSettings.demoCategories ??= DEFAULT_DEMO_CATEGORIES.map(
       (category) => ({ ...category }),
     );

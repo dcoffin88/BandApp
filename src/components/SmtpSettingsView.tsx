@@ -71,7 +71,7 @@ export const SmtpSettingsView: React.FC = () => {
 
   // Email Outbox Filter State
   const [logSearch, setLogSearch] = useState('');
-  const [logFilter, setLogFilter] = useState<'all' | 'new_demo' | 'new_version' | 'lyric_edit' | 'practice_schedule' | 'practice_reminder' | 'practice_event_reminder' | 'comment' | 'test_probe'>('all');
+  const [logFilter, setLogFilter] = useState<'all' | EmailEventType>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'simulated' | 'failed'>('all');
 
   // Preview Modal State
@@ -230,6 +230,8 @@ export const SmtpSettingsView: React.FC = () => {
     switch (type) {
       case 'member_invite':
         return { label: 'Invitation', bg: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' };
+      case 'demo_archived':
+        return { label: 'Archived', bg: 'bg-rose-500/20 text-rose-300 border-rose-500/40' };
       case 'new_demo':
         return { label: 'New Demo', bg: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
       case 'new_version':
@@ -764,6 +766,7 @@ export const SmtpSettingsView: React.FC = () => {
             >
               <option value="all">All Events</option>
               <option value="member_invite">Member Invitations</option>
+              <option value="demo_archived">Archived Demos</option>
               <option value="new_demo">New Demos</option>
               <option value="new_version">New Takes</option>
               <option value="lyric_edit">Lyrics Edits</option>
