@@ -24,8 +24,11 @@ export interface UserNotifications {
   newDemos: boolean;
   newVersions: boolean;
   lyricEdits: boolean;
-  practiceReminders: boolean;
+  practiceSchedule: boolean;
+  practiceRsvpReminders: boolean;
+  practiceEventReminders: boolean;
   comments: boolean;
+  demoArchived: boolean;
 }
 
 export interface BandMember {

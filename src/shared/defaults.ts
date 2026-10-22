@@ -11,6 +11,7 @@ import type {
   SongIdea,
   UserRolePermissions,
   UserAppearance,
+  UserNotifications,
 } from '../types/band.ts';
 import { DEFAULT_DEMO_CATEGORIES } from './songMetadata.ts';
 
@@ -20,6 +21,31 @@ export const DEFAULT_APPEARANCE: UserAppearance = {
   primaryColor: 'amber',
   customColor: '#f59e0b',
 };
+
+export const DEFAULT_USER_NOTIFICATIONS: UserNotifications = {
+  newDemos: true,
+  newVersions: true,
+  lyricEdits: true,
+  practiceSchedule: true,
+  practiceRsvpReminders: true,
+  practiceEventReminders: true,
+  comments: true,
+  demoArchived: true,
+};
+
+export function notificationsFrom(
+  notifications?: Partial<UserNotifications> & { practiceReminders?: boolean },
+): UserNotifications {
+  const legacyPracticeReminders = notifications?.practiceReminders ?? true;
+  return {
+    ...DEFAULT_USER_NOTIFICATIONS,
+    ...notifications,
+    practiceRsvpReminders:
+      notifications?.practiceRsvpReminders ?? legacyPracticeReminders,
+    practiceEventReminders:
+      notifications?.practiceEventReminders ?? legacyPracticeReminders,
+  };
+}
 
 export function appearanceFrom(settings: UserAppearance): UserAppearance {
   return {

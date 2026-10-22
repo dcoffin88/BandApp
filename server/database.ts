@@ -10,6 +10,7 @@ import {
 import {
   DEFAULT_APPEARANCE,
   appearanceFrom,
+  notificationsFrom,
   emptyState,
   type SharedState,
 } from '../src/shared/defaults.ts';
@@ -210,6 +211,7 @@ export function openDatabase(filename: string) {
   function saveUser(user: BandMember, passwordHash?: string): void {
     const { password: _password, ...profile } = {
       ...user,
+      notifications: notificationsFrom(user.notifications),
       appearanceSettings: appearanceFrom(
         user.appearanceSettings ?? DEFAULT_APPEARANCE,
       ),
@@ -250,9 +252,11 @@ export function openDatabase(filename: string) {
       ...read().appSettings,
     });
     for (const user of members()) {
-      if (!user.appearanceSettings) {
-        saveUser({ ...user, appearanceSettings: legacyAppearance });
-      }
+      saveUser({
+        ...user,
+        notifications: notificationsFrom(user.notifications),
+        appearanceSettings: user.appearanceSettings ?? legacyAppearance,
+      });
     }
   });
 

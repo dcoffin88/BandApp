@@ -7,11 +7,9 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
-  Clock,
   Copy,
   Eye,
   EyeOff,
-  FileText,
   Filter,
   Guitar,
   HelpCircle,
@@ -22,7 +20,6 @@ import {
   MailCheck,
   Maximize2,
   Minimize2,
-  Music,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -36,7 +33,6 @@ import {
   Smartphone,
   Trash2,
   X,
-  Zap,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { EmailEventType, EmailNotificationLog, SmtpSettings } from '../types/band.ts';
@@ -359,7 +355,7 @@ export const SmtpSettingsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Form: SMTP Configuration & Notification Triggers */}
+      {/* SMTP configuration */}
       <form onSubmit={handleSaveSettings} className="space-y-6">
         <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -538,118 +534,22 @@ export const SmtpSettingsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Notification Event Triggers Card */}
-        <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-400" />
-              <h4 className="font-bold text-white text-sm">Automated Event Triggers</h4>
-            </div>
-            <span className="text-xs text-zinc-400">Select which actions dispatch emails</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-            {[
-              {
-                id: 'newDemos' as const,
-                title: 'New Demo Uploaded',
-                desc: 'Alert members when a fresh demo sketch or idea is posted to the vault.',
-                icon: Music,
-              },
-              {
-                id: 'newVersions' as const,
-                title: 'New Version / Audio Take',
-                desc: 'Notify band when an updated take (v2, v3) is recorded or auditioned.',
-                icon: RefreshCw,
-              },
-              {
-                id: 'lyricEdits' as const,
-                title: 'Lyrics or Chords Revised',
-                desc: 'Send email notice when song lyrics or chord sheet drafts are edited.',
-                icon: FileText,
-              },
-              {
-                id: 'practiceSchedule' as const,
-                title: 'Practice Scheduled / Updated',
-                desc: 'Email date, time, location, goals, and setlist songs to all members.',
-                icon: Clock,
-              },
-              {
-                id: 'practiceReminder' as const,
-                title: 'Practice RSVP Reminders',
-                desc: 'Send one RSVP nudge during the 24 hours before rehearsal to tentative or unconfirmed members.',
-                icon: Bell,
-              },
-              {
-                id: 'practiceEventReminder' as const,
-                title: 'Practice Event Reminders',
-                desc: 'Send each rehearsal’s enabled 1-day and 4-hour reminders to members who RSVP Going.',
-                icon: Bell,
-              },
-              {
-                id: 'comments' as const,
-                title: 'Audio Timeline Comments',
-                desc: 'Notify track author when a bandmate leaves feedback or timestamp notes.',
-                icon: Mail,
-              },
-            ].map(trigger => {
-              const isChecked = localSettings.notificationTriggers[trigger.id];
-              const Icon = trigger.icon;
-
-              return (
-                <label
-                  key={trigger.id}
-                  className={`p-3.5 rounded-2xl border flex items-start gap-3 cursor-pointer transition ${
-                    isChecked
-                      ? 'bg-zinc-800/80 border-amber-500/50 shadow-sm'
-                      : 'bg-zinc-950/60 border-zinc-800 hover:border-zinc-700'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    disabled={!isAdmin}
-                    onChange={e =>
-                      setLocalSettings({
-                        ...localSettings,
-                        notificationTriggers: {
-                          ...localSettings.notificationTriggers,
-                          [trigger.id]: e.target.checked,
-                        },
-                      })
-                    }
-                    className="rounded accent-amber-500 w-4 h-4 mt-0.5"
-                  />
-                  <div className="min-w-0">
-                    <p className="font-bold text-white flex items-center gap-1.5">
-                      <Icon className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{trigger.title}</span>
-                    </p>
-                    <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">{trigger.desc}</p>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-
-          {/* Form Actions */}
-          <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3 text-xs">
-            {saveSuccess && (
-              <span className="text-emerald-400 font-medium flex items-center gap-1">
-                <Check className="w-4 h-4" />
-                <span>SMTP settings and trigger rules updated!</span>
-              </span>
-            )}
-            {isAdmin && (
-              <button
-                type="submit"
-                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold transition flex items-center gap-2 shadow-lg shadow-amber-500/20"
-              >
-                <Save className="w-4 h-4" />
-                <span>Save SMTP Settings</span>
-              </button>
-            )}
-          </div>
+        <div className="flex items-center justify-end gap-3 text-xs">
+          {saveSuccess && (
+            <span className="flex items-center gap-1 font-medium text-emerald-400">
+              <Check className="h-4 w-4" />
+              <span>SMTP settings updated!</span>
+            </span>
+          )}
+          {isAdmin && (
+            <button
+              type="submit"
+              className="flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-2.5 font-bold text-zinc-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400"
+            >
+              <Save className="h-4 w-4" />
+              <span>Save SMTP Settings</span>
+            </button>
+          )}
         </div>
       </form>
 

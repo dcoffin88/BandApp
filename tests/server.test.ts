@@ -589,14 +589,38 @@ test('RSVP reminders target unconfirmed members and event reminders target atten
   const smtp = await localSmtp();
   try {
     const admin = await f.login();
-    assert.equal(
-      (
-        await f.action(admin.cookie, 'member.add', {
+    const memberResponse = await f.action(admin.cookie, 'member.add', {
           name: 'Unconfirmed Member',
           email: 'unconfirmed@example.com',
           password,
           role: 'member',
           instrument: 'Bass',
+        });
+    assert.equal(memberResponse.status, 200);
+    const memberId = (await memberResponse.json()).result.memberId;
+    const memberProfile = f.store
+      .members()
+      .find((member) => member.id === memberId)!;
+    assert.deepEqual(memberProfile.notifications, {
+      newDemos: true,
+      newVersions: true,
+      lyricEdits: true,
+      practiceSchedule: true,
+      practiceRsvpReminders: true,
+      practiceEventReminders: true,
+      comments: true,
+      demoArchived: true,
+    });
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.profile', {
+          userId: memberId,
+          updates: {
+            notifications: {
+              ...memberProfile.notifications!,
+              practiceSchedule: false,
+            },
+          },
         })
       ).status,
       200,
@@ -611,11 +635,6 @@ test('RSVP reminders target unconfirmed members and event reminders target atten
       username: '',
       password: '',
       fromEmail: 'band@example.com',
-      notificationTriggers: {
-        ...f.store.read().smtpSettings.notificationTriggers,
-        practiceSchedule: false,
-        practiceReminder: true,
-      },
     };
     assert.equal(
       (await f.action(admin.cookie, 'smtp.update', smtpSettings)).status,

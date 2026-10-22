@@ -102,8 +102,11 @@ const notifications = z.object({
   newDemos: z.boolean(),
   newVersions: z.boolean(),
   lyricEdits: z.boolean(),
-  practiceReminders: z.boolean(),
+  practiceSchedule: z.boolean(),
+  practiceRsvpReminders: z.boolean(),
+  practiceEventReminders: z.boolean(),
   comments: z.boolean(),
+  demoArchived: z.boolean(),
 });
 
 const profileSchema = z
@@ -1793,32 +1796,18 @@ export function createApplication(options: ApplicationOptions) {
   async function notify(user: BandMember, event: AppNotification) {
     const state = store.read();
     if (!state.smtpSettings.isEnabled) return;
-    const trigger: Record<string, keyof SmtpSettings['notificationTriggers']> = {
-      demo_archived: 'newDemos',
+    const preference: Record<string, string> = {
+      demo_archived: 'demoArchived',
       new_demo: 'newDemos',
       new_version: 'newVersions',
       lyric_edit: 'lyricEdits',
       practice_schedule: 'practiceSchedule',
-      practice_reminder: 'practiceReminder',
-      practice_event_reminder: 'practiceEventReminder',
+      practice_reminder: 'practiceRsvpReminders',
+      practice_event_reminder: 'practiceEventReminders',
       comment: 'comments',
       test_probe: 'newDemos',
       member_invite: 'newDemos',
     };
-    const preference: Record<string, string> = {
-      demo_archived: 'newDemos',
-      new_demo: 'newDemos',
-      new_version: 'newVersions',
-      lyric_edit: 'lyricEdits',
-      practice_schedule: 'practiceReminders',
-      practice_reminder: 'practiceReminders',
-      practice_event_reminder: 'practiceReminders',
-      comment: 'comments',
-      test_probe: 'newDemos',
-      member_invite: 'newDemos',
-    };
-    const triggerKey = trigger[event.type];
-    if (!triggerKey || !state.smtpSettings.notificationTriggers[triggerKey]) return;
     for (const recipient of state.band.members.filter(
       (m) =>
         m.status === 'active' &&
@@ -1876,11 +1865,7 @@ export function createApplication(options: ApplicationOptions) {
     referenceTime = new Date()
   ): Promise<number> {
     const state = store.read();
-    if (
-      !state.smtpSettings.isEnabled ||
-      (!state.smtpSettings.notificationTriggers.practiceReminder &&
-        !state.smtpSettings.notificationTriggers.practiceEventReminder)
-    ) {
+    if (!state.smtpSettings.isEnabled) {
       return 0;
     }
 
@@ -1913,23 +1898,21 @@ export function createApplication(options: ApplicationOptions) {
       const delivered = new Set(practice.reminderDeliveryKeys ?? []);
       const deliveredBefore = delivered.size;
 
-      if (state.smtpSettings.notificationTriggers.practiceReminder) {
-        for (const recipient of state.band.members) {
-          const deliveryKey = `rsvp:${recipient.id}`;
-          const rsvp = practice.rsvps.find(
-            (entry) => entry.userId === recipient.id
-          );
-          if (
-            recipient.status !== 'active' ||
-            recipient.notifications?.practiceReminders === false ||
-            delivered.has(deliveryKey) ||
-            (rsvp && rsvp.status !== 'tentative')
-          ) {
-            continue;
-          }
-          delivered.add(deliveryKey);
-          pending.push({ recipient, practice, type: 'practice_reminder' });
+      for (const recipient of state.band.members) {
+        const deliveryKey = `rsvp:${recipient.id}`;
+        const rsvp = practice.rsvps.find(
+          (entry) => entry.userId === recipient.id
+        );
+        if (
+          recipient.status !== 'active' ||
+          recipient.notifications?.practiceRsvpReminders === false ||
+          delivered.has(deliveryKey) ||
+          (rsvp && rsvp.status !== 'tentative')
+        ) {
+          continue;
         }
+        delivered.add(deliveryKey);
+        pending.push({ recipient, practice, type: 'practice_reminder' });
       }
 
       const dueWindows = [
@@ -1949,7 +1932,6 @@ export function createApplication(options: ApplicationOptions) {
         },
       ].filter(
         (window) =>
-          state.smtpSettings.notificationTriggers.practiceEventReminder &&
           window.enabled &&
           millisecondsUntilPractice <= window.maximum &&
           millisecondsUntilPractice > window.minimum
@@ -1963,7 +1945,7 @@ export function createApplication(options: ApplicationOptions) {
           );
           if (
             recipient.status !== 'active' ||
-            recipient.notifications?.practiceReminders === false ||
+            recipient.notifications?.practiceEventReminders === false ||
             delivered.has(deliveryKey) ||
             rsvp?.status !== 'attending'
           ) {
