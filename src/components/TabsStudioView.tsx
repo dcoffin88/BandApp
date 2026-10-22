@@ -18,6 +18,7 @@ import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { useFullscreenEditor } from '../hooks/useFullscreenEditor.ts';
 import { printStudioDocument } from '../shared/printStudioDocument.ts';
+import { nextSongSectionHeading } from '../shared/songSections.ts';
 import {
   DEFAULT_TAB_TUNING,
   importedTabTuningToStaff,
@@ -99,7 +100,9 @@ const notationLegend = (tabContent: string) => {
     .split(/\r?\n/)
     .filter(
       (line) =>
-        !/^\s*\[(?:Intro|Verse|Chorus|Bridge|Outro)\]\s*$/.test(line),
+        !/^\s*\[(?:Intro|Verse|Chorus|Bridge|Outro)(?:\s+\d+)?\]\s*$/.test(
+          line,
+        ),
     )
     .map((line) => {
       const staffSeparator = line.indexOf('|');
@@ -208,10 +211,8 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
     if (!canEdit) return;
     const hadLegend = removeNotationLegends(content) !== content;
     const body = removeNotationLegends(content).trim();
-    const sectionBlock = `[${section}]\n\n${guitarStaff(tuning)}`;
-    const hasSection = /^\[(?:Intro|Verse|Chorus|Bridge|Outro)\]\s*$/m.test(
-      body,
-    );
+    const sectionBlock = `${nextSongSectionHeading(body, section)}\n\n${guitarStaff(tuning)}`;
+    const hasSection = /^\[(?:Intro|Verse|Chorus|Bridge|Outro)(?:\s+\d+)?\]\s*$/m.test(body);
     let nextContent = hasSection
       ? `${body}\n\n${sectionBlock}`
       : body

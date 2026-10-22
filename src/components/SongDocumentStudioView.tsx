@@ -16,6 +16,7 @@ import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { useFullscreenEditor } from '../hooks/useFullscreenEditor.ts';
 import { printStudioDocument } from '../shared/printStudioDocument.ts';
+import { nextSongSectionHeading } from '../shared/songSections.ts';
 
 interface SongDocumentStudioViewProps {
   mode: 'lyrics' | 'chords';
@@ -118,11 +119,12 @@ export const SongDocumentStudioView: React.FC<
 
   const insertSection = (section: string) => {
     if (!canEditDocument) return;
-    setContent((current) =>
-      current.trimEnd()
-        ? `${current.trimEnd()}\n\n[${section}]\n`
-        : `[${section}]\n`,
-    );
+    setContent((current) => {
+      const heading = nextSongSectionHeading(current, section);
+      return current.trimEnd()
+        ? `${current.trimEnd()}\n\n${heading}\n`
+        : `${heading}\n`;
+    });
   };
 
   return (

@@ -3,6 +3,7 @@ import { Check, Copy, Download, FileText, Lock, Save, X } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
 import { SongIdea } from '../types/band.ts';
 import { memberDisplayName } from '../shared/member.ts';
+import { nextSongSectionHeading } from '../shared/songSections.ts';
 
 interface LyricsModalProps {
   song: SongIdea | null;
@@ -35,8 +36,10 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
   };
 
   const insertSection = (tag: string) => {
-    const addition = `\n\n[${tag}]\n`;
-    setDraft(prev => prev + addition);
+    setDraft((current) => {
+      const heading = nextSongSectionHeading(current, tag);
+      return `${current.trimEnd()}${current.trim() ? '\n\n' : ''}${heading}\n`;
+    });
   };
 
   const handleCopy = () => {
