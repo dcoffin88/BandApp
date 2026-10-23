@@ -108,6 +108,7 @@ export interface PublicSessionState {
   currentUser: null;
   bandName: string;
   appSettings: AppSettings;
+  passwordResetEnabled: boolean;
 }
 export function emptyState(): SharedState {
   return {

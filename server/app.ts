@@ -817,10 +817,12 @@ export function createApplication(options: ApplicationOptions) {
         res.json(snapshot(authenticate(req)));
       } catch (error) {
         if (!(error instanceof HttpError) || error.status !== 401) throw error;
-        const { band, appSettings } = store.read();
+        const state = store.read();
+        const { band, appSettings } = state;
         res.json({
           currentUser: null,
           bandName: band.name,
+          passwordResetEnabled: state.smtpSettings.isEnabled,
           appSettings: {
             headerLogoUrl: appSettings.headerLogoUrl,
             headerLogoShape: appSettings.headerLogoShape,
@@ -904,6 +906,152 @@ export function createApplication(options: ApplicationOptions) {
       createSession(user, res);
       res.json(snapshot(user));
     })
+  );
+
+  async function issuePasswordReset(
+    recipient: BandMember,
+    state: SharedState,
+    intro = 'A password reset was requested for your RehearsalHQ account. Use the button below to choose a new password.',
+  ) {
+    const resetToken = randomBytes(32).toString('hex');
+    db.prepare('DELETE FROM password_reset_tokens WHERE expires_at<=? OR user_id=?')
+      .run(Date.now(), recipient.id);
+    db.prepare('INSERT INTO password_reset_tokens VALUES (?,?,?)').run(
+      tokenHash(resetToken),
+      recipient.id,
+      Date.now() + 30 * 60 * 1000,
+    );
+    const resetUrl = `${origin}/?resetToken=${encodeURIComponent(resetToken)}`;
+    const log = await deliver(
+      recipient.email,
+      memberDisplayName(recipient),
+      `[${state.band.name}] Reset your RehearsalHQ password`,
+      brandedEmail(
+        {
+          preheader: 'Use this secure link to reset your password.',
+          eyebrow: 'Account security',
+          title: 'Reset your password',
+          greeting: memberDisplayName(recipient),
+          intro,
+          callout: {
+            label: 'Link expires',
+            text: 'This one-time link expires in 30 minutes. If you did not request it, contact your Band Admin.',
+          },
+          ctaLabel: 'Reset Password',
+          ctaUrl: resetUrl,
+          afterCta:
+            'For your security, this link can be used only once. RehearsalHQ support will never ask you for your password.',
+        },
+        state,
+      ),
+      'password_reset',
+      true,
+      state.band.id,
+      false,
+    );
+    if (log.status !== 'sent') {
+      db.prepare('DELETE FROM password_reset_tokens WHERE user_id=?').run(recipient.id);
+    }
+    return log;
+  }
+
+  app.post(
+    '/api/auth/password/forgot',
+    route(async (req: Request, res: Response) => {
+      const address = email.parse(req.body.email);
+      const genericMessage =
+        'If an active account matches that email, a password reset link has been sent.';
+      const row = db
+        .prepare('SELECT id FROM users WHERE email=?')
+        .get(address) as { id: string } | undefined;
+      const user = row && store.members().find((member) => member.id === row.id);
+      const bandId = user && store.bandsForUser(user.id)[0]?.id;
+      const state = bandId ? store.read(bandId) : store.read();
+
+      if (state.smtpSettings.isEnabled && user?.status === 'active' && bandId) {
+        await issuePasswordReset(user, state);
+      }
+      res.json({ success: true, message: genericMessage });
+    }),
+  );
+
+  app.post(
+    '/api/auth/password/reset',
+    route((req: Request, res: Response) => {
+      const input = z
+        .object({
+          token: z.string().regex(/^[a-f0-9]{64}$/),
+          newPassword: z.string().max(128),
+        })
+        .strict()
+        .parse(req.body);
+      const reset = db
+        .prepare('SELECT user_id,expires_at FROM password_reset_tokens WHERE token_hash=?')
+        .get(tokenHash(input.token)) as
+        | { user_id: string; expires_at: number }
+        | undefined;
+      if (!reset || reset.expires_at <= Date.now()) {
+        if (reset) {
+          db.prepare('DELETE FROM password_reset_tokens WHERE token_hash=?')
+            .run(tokenHash(input.token));
+        }
+        fail(400, 'This password reset link is invalid or has expired.');
+      }
+      const user = store.members().find((member) => member.id === reset.user_id);
+      if (!user || user.status !== 'active') {
+        fail(400, 'This password reset link is invalid or has expired.');
+      }
+      validatePassword(input.newPassword);
+      store.transaction(() => {
+        store.saveUser(user, hashPassword(input.newPassword));
+        db.prepare('DELETE FROM password_reset_tokens WHERE user_id=?').run(user.id);
+        db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+        db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(user.id);
+        db.prepare('DELETE FROM login_attempts WHERE email=?').run(user.email);
+      });
+      res.json({ success: true, message: 'Your password has been reset. You can now sign in.' });
+    }),
+  );
+
+  app.post(
+    '/api/auth/account/setup',
+    route((req: Request, res: Response) => {
+      const input = z
+        .object({
+          token: z.string().regex(/^[a-f0-9]{64}$/),
+          newPassword: z.string().max(128),
+        })
+        .strict()
+        .parse(req.body);
+      const setup = db
+        .prepare('SELECT user_id,expires_at FROM account_setup_tokens WHERE token_hash=?')
+        .get(tokenHash(input.token)) as
+        | { user_id: string; expires_at: number }
+        | undefined;
+      if (!setup || setup.expires_at <= Date.now()) {
+        if (setup) {
+          db.prepare('DELETE FROM account_setup_tokens WHERE token_hash=?')
+            .run(tokenHash(input.token));
+        }
+        fail(400, 'This account setup link is invalid or has expired.');
+      }
+      const user = store.members().find((member) => member.id === setup.user_id);
+      const bandId = user && store.bandsForUser(user.id)[0]?.id;
+      if (!user || user.status !== 'invited' || !bandId) {
+        fail(400, 'This account setup link is invalid or has expired.');
+      }
+      validatePassword(input.newPassword, store.read(bandId));
+      user.status = 'active';
+      store.transaction(() => {
+        store.saveUser(user, hashPassword(input.newPassword));
+        db.prepare('DELETE FROM account_setup_tokens WHERE user_id=?').run(user.id);
+        db.prepare('DELETE FROM password_reset_tokens WHERE user_id=?').run(user.id);
+        db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+        db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(user.id);
+        db.prepare('DELETE FROM login_attempts WHERE email=?').run(user.email);
+      });
+      res.json({ success: true, message: 'Your account is ready. You can now sign in.' });
+    }),
   );
 
   app.post(
@@ -1021,6 +1169,42 @@ export function createApplication(options: ApplicationOptions) {
   app.get(
     '/api/state',
     route((_req: Request, res: Response) => res.json(snapshot(res.locals.user)))
+  );
+
+  app.post(
+    '/api/users/password-reset',
+    route(async (req: Request, res: Response) => {
+      const user = res.locals.user as BandMember;
+      requireAdmin(user);
+      const state = store.read(user.activeBandId);
+      if (!state.smtpSettings.isEnabled) {
+        fail(400, 'SMTP is disabled. Set a temporary password manually instead.');
+      }
+      const userId = required.parse(req.body.userId);
+      const target = state.band.members.find((member) => member.id === userId) ||
+        fail(404, 'Member not found.');
+      if (target.status !== 'active') {
+        fail(400, 'Password reset links can only be sent to active users.');
+      }
+      if (target.isSuperAdmin && !user.isSuperAdmin) {
+        fail(403, 'Only a Super Admin can manage another Super Admin.');
+      }
+      if (!user.isSuperAdmin && target.id !== user.id && target.role === 'admin') {
+        fail(403, 'Band Admins can manage their own account and lower-level members only.');
+      }
+      const log = await issuePasswordReset(
+        target,
+        state,
+        `${memberDisplayName(user)} requested a password reset for your RehearsalHQ account. Use the button below to choose a new password.`,
+      );
+      res.json({
+        success: log.status === 'sent',
+        message: log.status === 'sent'
+          ? `Password reset email sent to ${target.email}.`
+          : `Password reset email was not sent to ${target.email}. ${log.errorMessage || 'Check Email Settings and try again.'}`,
+        state: snapshot(user),
+      });
+    }),
   );
 
   app.get(
@@ -1398,7 +1582,7 @@ export function createApplication(options: ApplicationOptions) {
               .object({
                 name: required,
                 email,
-                password: z.string().max(128),
+                password: z.string().max(128).optional(),
                 role: roleSchema,
                 instrument: short.default(''),
                 avatar: avatar.optional(),
@@ -1416,15 +1600,25 @@ export function createApplication(options: ApplicationOptions) {
               result = { memberId: existing.id };
               break;
             }
-            validatePassword(data.password, state);
+            const usesEmailSetup = state.smtpSettings.isEnabled;
+            if (!usesEmailSetup && !password) {
+              fail(400, 'An initial password is required while SMTP is disabled.');
+            }
+            if (!usesEmailSetup && password) validatePassword(password, state);
             const newMember: BandMember = {
               ...fields,
               id: randomUUID(),
               avatar: fields.avatar || DEFAULT_AVATAR,
-              status: 'active',
+              status: usesEmailSetup ? 'invited' : 'active',
               createdAt: now(),
             };
-            store.saveUser(newMember, hashPassword(password), state.band.id);
+            store.saveUser(
+              newMember,
+              hashPassword(
+                usesEmailSetup ? randomBytes(32).toString('hex') : password!,
+              ),
+              state.band.id,
+            );
             store.setMembership(state.band.id, newMember.id, newMember.role);
             invitationRecipient = newMember;
             result = { memberId: newMember.id };
@@ -1482,6 +1676,9 @@ export function createApplication(options: ApplicationOptions) {
           }
           case 'member.password': {
             requireAdmin(user);
+            if (state.smtpSettings.isEnabled) {
+              fail(400, 'SMTP is enabled. Send the user a password reset link instead.');
+            }
             const target = requireManageableMember(member());
             const password = z.string().max(128).parse(p.password);
             validatePassword(password, state);
@@ -2005,6 +2202,20 @@ export function createApplication(options: ApplicationOptions) {
         const recipient = invitationRecipient;
         const invitationState = store.read(user.activeBandId);
         const bandName = invitationState.band.name;
+        const requiresAccountSetup =
+          recipient.status === 'invited' && invitationState.smtpSettings.isEnabled;
+        let setupUrl: string | undefined;
+        if (requiresAccountSetup) {
+          const setupToken = randomBytes(32).toString('hex');
+          db.prepare('DELETE FROM account_setup_tokens WHERE expires_at<=? OR user_id=?')
+            .run(Date.now(), recipient.id);
+          db.prepare('INSERT INTO account_setup_tokens VALUES (?,?,?)').run(
+            tokenHash(setupToken),
+            recipient.id,
+            Date.now() + 7 * 24 * 60 * 60 * 1000,
+          );
+          setupUrl = `${origin}/?inviteToken=${encodeURIComponent(setupToken)}`;
+        }
         const invitationEmail = brandedEmail(
           {
             preheader: `${memberDisplayName(user)} invited you to join ${bandName}.`,
@@ -2018,9 +2229,12 @@ export function createApplication(options: ApplicationOptions) {
               { label: 'Role', value: roleDisplayName(recipient.role, recipient.isSuperAdmin) },
               { label: 'Instrument', value: recipient.instrument },
             ],
-            ctaLabel: `Sign in to ${bandName}`,
+            ctaLabel: requiresAccountSetup ? 'Set Up Your Account' : `Sign in to ${bandName}`,
+            ctaUrl: setupUrl,
             afterCta:
-              existingAccountInvitation
+              requiresAccountSetup
+                ? 'Choose your password using this one-time link within seven days. After setup, sign in with the email address shown above.'
+                : existingAccountInvitation
                 ? 'Sign in with your existing RehearsalHQ email and password, then use the band switcher to open this workspace.'
                 : 'Your Band Admin will share your initial password separately. After signing in, change it under Profile Management.',
           },
@@ -2034,6 +2248,7 @@ export function createApplication(options: ApplicationOptions) {
           'member_invite',
           true,
           user.activeBandId,
+          !requiresAccountSetup,
         );
         result = {
           memberId: recipient.id,
@@ -2043,7 +2258,7 @@ export function createApplication(options: ApplicationOptions) {
               log.status === 'sent'
                 ? `Invitation email sent to ${recipient.email}.`
                 : `Invitation email was not sent to ${recipient.email}. ${log.errorMessage || 'Check Email Settings and try again.'}`,
-            logId: log.id,
+            logId: requiresAccountSetup ? undefined : log.id,
           },
         };
       }
@@ -2097,6 +2312,7 @@ export function createApplication(options: ApplicationOptions) {
     type: EmailEventType,
     requireDelivery = false,
     bandId?: string,
+    record = true,
   ): Promise<EmailNotificationLog> {
     const targetBandId = bandId || store.defaultBandId();
     const settings = store.read(targetBandId).smtpSettings;
@@ -2141,10 +2357,12 @@ export function createApplication(options: ApplicationOptions) {
           error instanceof Error ? error.message : 'SMTP delivery failed.';
       }
     }
-    const state = store.read(targetBandId);
-    state.emailLogs.unshift(log);
-    state.emailLogs = state.emailLogs.slice(0, 1e3);
-    store.write(state, targetBandId);
+    if (record) {
+      const state = store.read(targetBandId);
+      state.emailLogs.unshift(log);
+      state.emailLogs = state.emailLogs.slice(0, 1e3);
+      store.write(state, targetBandId);
+    }
     return log;
   }
 

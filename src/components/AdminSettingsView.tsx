@@ -93,6 +93,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     currentUser,
     permissions,
     authSettings,
+    smtpSettings,
     auditLogs,
     appSettings,
     songs,
@@ -102,6 +103,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     updateSuperAdmin,
     updateUserProfile,
     resetUserTwoFactor,
+    sendUserPasswordReset,
     deleteUserAccount,
     updateAuthSettings,
     updateAppSettings,
@@ -164,6 +166,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   // Password reset modal state
   const [resettingUser, setResettingUser] = useState<BandMember | null>(null);
   const [newResetPassword, setNewResetPassword] = useState('');
+  const [passwordResettingUserId, setPasswordResettingUserId] = useState<string | null>(null);
   const [promotingUser, setPromotingUser] = useState<BandMember | null>(null);
   const [isUpdatingSuperAdmin, setIsUpdatingSuperAdmin] = useState(false);
 
@@ -301,7 +304,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       role: newUserRole,
       status: 'active',
       instrument: newUserInstrument.trim() || 'Vocals / Guitar',
-      password: newUserPassword,
+      password: smtpSettings.isEnabled ? undefined : newUserPassword,
       avatar: DEFAULT_AVATAR,
     });
 
@@ -359,6 +362,18 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     if (!await updateUserProfile(resettingUser.id, { password: newResetPassword })) return;
     setResettingUser(null);
     setNewResetPassword('');
+  };
+
+  const handleSendPasswordReset = async (member: BandMember) => {
+    if (passwordResettingUserId) return;
+    setPasswordResettingUserId(member.id);
+    setInvitationFeedback(null);
+    const result = await sendUserPasswordReset(member.id);
+    setPasswordResettingUserId(null);
+    setInvitationFeedback({
+      status: result.success ? 'sent' : 'failed',
+      message: result.message,
+    });
   };
 
   const filteredMembers = band.members.filter(m =>
@@ -1246,13 +1261,16 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                                 {invitingUserId === member.id ? 'Sending…' : 'Resend invite'}
                               </button>
                             )}
-                            {isAdmin && canManageMember && (
+                            {isAdmin && !isSelf && canManageMember && (!smtpSettings.isEnabled || member.status === 'active') && (
                               <button
-                                onClick={() => setResettingUser(member)}
-                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition"
-                                title="Reset Password"
+                                onClick={() => smtpSettings.isEnabled
+                                  ? void handleSendPasswordReset(member)
+                                  : setResettingUser(member)}
+                                disabled={passwordResettingUserId !== null}
+                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition disabled:opacity-50"
+                                title={smtpSettings.isEnabled ? 'Email a password reset link' : 'Set a temporary password'}
                               >
-                                Reset Pass
+                                {passwordResettingUserId === member.id ? 'Sending…' : 'Reset Pass'}
                               </button>
                             )}
 
@@ -1283,11 +1301,6 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
-                            )}
-                            {isAdmin && !currentUser.isSuperAdmin && !canManageMember && (
-                              <span className="inline-flex items-center gap-1 rounded bg-purple-500/10 px-2 py-1 text-[10px] font-semibold text-purple-300">
-                                <Lock className="h-3 w-3" /> Protected
-                              </span>
                             )}
                           </div>
                         </td>
@@ -1645,21 +1658,27 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
-                  Initial Password *
-                </label>
-                <input
-                  type="password"
-                  minLength={localAuthSettings.minPasswordLength}
-                  autoComplete="new-password"
-                  value={newUserPassword}
-                  onChange={e => setNewUserPassword(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-mono"
-                  required
-                />
-                <p className="mt-1.5 text-[11px] text-zinc-500">The invitation includes the sign-in link. Share this initial password separately.</p>
-              </div>
+              {smtpSettings.isEnabled ? (
+                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-[11px] leading-relaxed text-emerald-200">
+                  The invitation email will include a secure, one-time link for this user to choose their password.
+                </div>
+              ) : (
+                <div>
+                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
+                    Initial Password *
+                  </label>
+                  <input
+                    type="password"
+                    minLength={localAuthSettings.minPasswordLength}
+                    autoComplete="new-password"
+                    value={newUserPassword}
+                    onChange={e => setNewUserPassword(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-mono"
+                    required
+                  />
+                  <p className="mt-1.5 text-[11px] text-zinc-500">SMTP is disabled. Share this initial password with the user separately.</p>
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
@@ -1686,7 +1705,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isAddingMember || !newUserName.trim() || !newUserEmail.trim()}
+                  disabled={isAddingMember || !newUserName.trim() || !newUserEmail.trim() || (!smtpSettings.isEnabled && !newUserPassword)}
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold"
                 >
                   {isAddingMember ? 'Saving & Sending…' : 'Save & Invite'}
@@ -1819,7 +1838,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               <div>
                 <label className="block text-zinc-400 mb-1">New Temporary Password</label>
                 <input
-                  type="text"
+                  type="password"
+                  autoComplete="new-password"
                   value={newResetPassword}
                   onChange={e => setNewResetPassword(e.target.value)}
                   placeholder="e.g. newPass123!"

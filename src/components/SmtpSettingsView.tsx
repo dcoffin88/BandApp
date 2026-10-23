@@ -226,6 +226,8 @@ export const SmtpSettingsView: React.FC = () => {
     switch (type) {
       case 'member_invite':
         return { label: 'Invitation', bg: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' };
+      case 'password_reset':
+        return { label: 'Password Reset', bg: 'bg-blue-500/20 text-blue-300 border-blue-500/40' };
       case 'demo_archived':
         return { label: 'Archived', bg: 'bg-rose-500/20 text-rose-300 border-rose-500/40' };
       case 'new_demo':
@@ -666,6 +668,7 @@ export const SmtpSettingsView: React.FC = () => {
             >
               <option value="all">All Events</option>
               <option value="member_invite">Member Invitations</option>
+              <option value="password_reset">Password Resets</option>
               <option value="demo_archived">Archived Demos</option>
               <option value="new_demo">New Demos</option>
               <option value="new_version">New Takes</option>

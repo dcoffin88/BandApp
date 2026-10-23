@@ -144,11 +144,12 @@ Band Admins can create accounts through `User Management`.
 <img src=".github/assets/rehearsalhq-screen-users.png" alt="RehearsalHQ user management and role permissions" width="900" />
 
 When a member is created:
-1. RehearsalHQ sends an invitation using the saved SMTP configuration.
-2. The delivery result is recorded in the `Email Settings` outbox.
-3. Initial passwords are never included in invitation emails or email logs and must be communicated separately through a private channel.
+1. When SMTP is enabled, RehearsalHQ emails a one-time account setup link that expires after seven days.
+2. The invited user chooses their password before their first sign-in; setup tokens are stored hashed and omitted from email logs.
+3. When SMTP is disabled, the Band Admin sets an initial password and communicates it separately through a private channel.
 
 Band Members can change their passwords under `Profile Management`.
+When SMTP is enabled, the User Management **Reset Pass** action emails a one-time reset link. When SMTP is disabled, Band Admins can set a temporary password manually.
 
 `Account security notes`:
 - Public registration is disabled.
@@ -385,6 +386,7 @@ RehearsalHQ uses:
 - Request origin validation
 - Server-enforced role permissions
 - Session revocation following password changes
+- One-time account setup and password reset links
 - Optional admin-enforced TOTP two-factor authentication with one-time recovery codes and 30-day trusted devices
 
 Session lifetimes are absolute durations measured from sign-in.

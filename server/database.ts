@@ -108,6 +108,8 @@ export function openDatabase(filename: string) {
     CREATE TABLE IF NOT EXISTS user_two_factor (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, secret TEXT NOT NULL, recovery_hashes TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS two_factor_challenges (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, secret TEXT NOT NULL, recovery_hashes TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS trusted_devices (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS account_setup_tokens (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS uploads (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, mime TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL);
   `);
 
@@ -118,7 +120,7 @@ export function openDatabase(filename: string) {
   db.prepare('INSERT OR IGNORE INTO state (id,value) VALUES (1,?)').run(
     JSON.stringify(emptyState())
   );
-  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(schemaVersion)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(schemaVersion)) {
     throw new Error(
       'Unsupported database version; restore the matching application release.'
     );
@@ -248,6 +250,14 @@ export function openDatabase(filename: string) {
       db.exec('ROLLBACK');
       throw error;
     }
+  }
+  if (schemaVersion === 8) {
+    db.exec('UPDATE schema_version SET version=9');
+    schemaVersion = 9;
+  }
+  if (schemaVersion === 9) {
+    db.exec('UPDATE schema_version SET version=10');
+    schemaVersion = 10;
   }
 
   function defaultBandId(): string {

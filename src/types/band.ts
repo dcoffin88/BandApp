@@ -247,6 +247,7 @@ export interface SmtpSettings {
 
 export type EmailEventType =
   | 'member_invite'
+  | 'password_reset'
   | 'demo_archived'
   | 'new_demo'
   | 'new_version'

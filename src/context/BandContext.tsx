@@ -56,6 +56,7 @@ interface BandContextType {
   practices: PracticeSession[];
   isAudioInitialized: boolean;
   isAuthenticated: boolean;
+  passwordResetEnabled: boolean;
   authSettings: AuthSettings;
   auditLogs: LoginAuditEntry[];
   appSettings: AppSettings;
@@ -86,6 +87,9 @@ interface BandContextType {
     newPassword: string,
   ) => Promise<AuthResponse>;
   login: (email: string, password: string) => Promise<AuthResponse>;
+  forgotPassword: (email: string) => Promise<AuthResponse>;
+  resetPassword: (token: string, newPassword: string) => Promise<AuthResponse>;
+  setupAccount: (token: string, newPassword: string) => Promise<AuthResponse>;
   verifyTwoFactor: (
     challengeToken: string,
     code: string,
@@ -100,6 +104,9 @@ interface BandContextType {
     updates: Partial<BandMember>,
   ) => Promise<boolean>;
   resetUserTwoFactor: (userId: string) => Promise<boolean>;
+  sendUserPasswordReset: (
+    userId: string,
+  ) => Promise<{ success: boolean; message: string }>;
   deleteUserAccount: (userId: string) => Promise<boolean>;
   updateAuthSettings: (settings: AuthSettings) => Promise<boolean>;
   clearAuditLogs: () => Promise<boolean>;
@@ -231,6 +238,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
+  const [passwordResetEnabled, setPasswordResetEnabled] = useState(false);
   const epoch = useRef(0);
   const apply = useCallback((next: SessionState) => {
     setState((previous) =>
@@ -270,6 +278,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       if (data.currentUser) apply(data as SessionState);
       else {
         const branding = data as PublicSessionState;
+        setPasswordResetEnabled(branding.passwordResetEnabled);
         clear(branding.bandName, branding.appSettings);
       }
       setReady(true);
@@ -374,6 +383,52 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       return {
         success: false,
         message: err instanceof Error ? err.message : 'Verification failed.',
+      };
+    }
+  }
+  async function forgotPassword(email: string): Promise<AuthResponse> {
+    try {
+      const result = await api<AuthResponse>('/api/auth/password/forgot', {
+        email,
+      });
+      return result;
+    } catch (err) {
+      return {
+        success: false,
+        message:
+          err instanceof Error ? err.message : 'Unable to request a password reset.',
+      };
+    }
+  }
+  async function resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<AuthResponse> {
+    try {
+      return await api<AuthResponse>('/api/auth/password/reset', {
+        token,
+        newPassword,
+      });
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Unable to reset password.',
+      };
+    }
+  }
+  async function setupAccount(
+    token: string,
+    newPassword: string,
+  ): Promise<AuthResponse> {
+    try {
+      return await api<AuthResponse>('/api/auth/account/setup', {
+        token,
+        newPassword,
+      });
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Unable to set up account.',
       };
     }
   }
@@ -532,8 +587,12 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
   const value: BandContextType = {
     ...state,
     isAuthenticated: authenticated,
+    passwordResetEnabled,
     isAudioInitialized: true,
     login,
+    forgotPassword,
+    resetPassword,
+    setupAccount,
     verifyTwoFactor,
     changePassword,
     logout,
@@ -579,6 +638,8 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       if (saved && userId === state.currentUser.id) clear(state.band.name);
       return saved;
     },
+    sendUserPasswordReset: (userId) =>
+      mail('/api/users/password-reset', { userId }),
     deleteUserAccount: (userId) => save('member.delete', { userId }),
     updateAuthSettings: (settings) => save('auth.update', settings),
     clearAuditLogs: () => save('audit.clear', {}),

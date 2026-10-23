@@ -10,7 +10,7 @@ import {
   createApplication,
   type ApplicationOptions,
 } from '../server/app.ts';
-import { verifyPassword } from '../server/database.ts';
+import { tokenHash, verifyPassword } from '../server/database.ts';
 import { memberDisplayName, roleDisplayName } from '../src/shared/member.ts';
 import { formatClockTime } from '../src/shared/time.ts';
 import {
@@ -302,7 +302,10 @@ test('member invitations send through SMTP, report failures and can be resent wi
     assert.equal(second.result.invitation.status, 'failed');
     assert.match(second.result.invitation.message, /550/);
     assert.equal(second.state.band.members.length, 3);
-    assert.equal(second.state.emailLogs[0].status, 'failed');
+    assert.equal(
+      second.state.band.members.find((member: { id: string }) => member.id === second.result.memberId).status,
+      'invited',
+    );
     assert.equal(
       (await f.action(admin.cookie, 'member.add', memberData)).status,
       409,
@@ -315,9 +318,114 @@ test('member invitations send through SMTP, report failures and can be resent wi
     assert.equal(recoveredData.result.invitation.status, 'sent');
     assert.equal(recoveredData.state.band.members.length, 3);
     assert.equal(smtp.messages.length, 2);
+    const setupMessage = decodeEmail(smtp.messages[1]);
+    const setupToken = setupMessage.match(/inviteToken=([a-f0-9]{64})/)?.[1];
+    assert.ok(setupToken);
+    assert.match(setupMessage, /Set Up Your Account/);
+    assert.equal(
+      (await f.request('/api/auth/login', {
+        email: 'second@example.com',
+        password,
+      })).status,
+      401,
+    );
+    assert.equal(
+      (await f.request('/api/auth/account/setup', {
+        token: setupToken,
+        newPassword: 'Invited-Member-456!',
+      })).status,
+      200,
+    );
+    await f.login('second@example.com', 'Invited-Member-456!');
+    assert.equal(
+      (await f.action(admin.cookie, 'member.invite', { userId: second.result.memberId })).status,
+      400,
+    );
     assert.ok(
       !JSON.stringify(recoveredData.state.emailLogs).includes(password),
     );
+  } finally {
+    await smtp.close();
+    await f.close();
+  }
+});
+
+test('SMTP enables one-time self-service password resets without exposing account existence', async () => {
+  const f = await fixture();
+  const smtp = await localSmtp();
+  try {
+    const admin = await f.login();
+    const config = {
+      ...f.store.read().smtpSettings,
+      isEnabled: true,
+      host: '127.0.0.1',
+      port: smtp.port,
+      encryption: 'none' as const,
+      authRequired: false,
+      username: '',
+      password: '',
+      fromEmail: 'band@example.com',
+    };
+    assert.equal((await f.action(admin.cookie, 'smtp.update', config)).status, 200);
+
+    const publicSession = await (await f.request('/api/auth/session')).json();
+    assert.equal(publicSession.passwordResetEnabled, true);
+    const adminRequested = await f.request(
+      '/api/users/password-reset',
+      { userId: admin.state.currentUser.id },
+      admin.cookie,
+    );
+    assert.equal(adminRequested.status, 200);
+    assert.equal((await adminRequested.json()).success, true);
+    await waitForMessages(smtp.messages, 1);
+    const adminMessage = decodeEmail(smtp.messages[0]);
+    const supersededToken = adminMessage.match(/resetToken=([a-f0-9]{64})/)?.[1];
+    assert.ok(supersededToken);
+    assert.match(adminMessage, /requested a password reset for your RehearsalHQ account/i);
+
+    const unknown = await f.request('/api/auth/password/forgot', {
+      email: 'missing@example.com',
+    });
+    const requested = await f.request('/api/auth/password/forgot', {
+      email: 'admin@example.com',
+    });
+    assert.equal(unknown.status, 200);
+    assert.equal(requested.status, 200);
+    assert.equal((await unknown.json()).message, (await requested.json()).message);
+    await waitForMessages(smtp.messages, 2);
+    const message = decodeEmail(smtp.messages[1]);
+    const resetToken = message.match(/resetToken=([a-f0-9]{64})/)?.[1];
+    assert.ok(resetToken);
+    assert.match(message, /expires in 30 minutes/i);
+    assert.ok(!JSON.stringify(f.store.read().emailLogs).includes(resetToken));
+    assert.equal(
+      f.store.db.prepare('SELECT token_hash FROM password_reset_tokens').get()!.token_hash,
+      tokenHash(resetToken),
+    );
+    assert.equal((await f.request('/api/auth/password/reset', {
+      token: supersededToken,
+      newPassword: 'Superseded-Password-123!',
+    })).status, 400);
+    assert.equal((await f.action(admin.cookie, 'member.password', {
+      userId: admin.state.currentUser.id,
+      password: 'Manual-Password-123!',
+    })).status, 400);
+
+    const reset = await f.request('/api/auth/password/reset', {
+      token: resetToken,
+      newPassword: 'New-Secure-456!',
+    });
+    assert.equal(reset.status, 200, await reset.clone().text());
+    assert.equal((await f.request('/api/state', undefined, admin.cookie)).status, 401);
+    assert.equal((await f.request('/api/auth/login', {
+      email: 'admin@example.com',
+      password,
+    })).status, 401);
+    await f.login('admin@example.com', 'New-Secure-456!');
+    assert.equal((await f.request('/api/auth/password/reset', {
+      token: resetToken,
+      newPassword: 'Another-Secure-789!',
+    })).status, 400);
   } finally {
     await smtp.close();
     await f.close();
@@ -760,8 +868,10 @@ test('signed-out sessions expose saved branding without private workspace data',
       'appSettings',
       'bandName',
       'currentUser',
+      'passwordResetEnabled',
     ]);
     assert.equal(anonymous.currentUser, null);
+    assert.equal(anonymous.passwordResetEnabled, false);
     assert.equal(anonymous.appSettings.headerLogoUrl, logo);
     assert.equal(anonymous.appSettings.headerLogoShape, 'circle');
     assert.equal(anonymous.appSettings.primaryColor, 'amber');
@@ -991,7 +1101,7 @@ test('legacy Editor accounts migrate to Member with merged permissions', async (
       (f.store.db.prepare('SELECT version FROM schema_version').get() as {
         version: number;
       }).version,
-      8,
+      10,
     );
   } finally {
     await f.close();
