@@ -121,6 +121,7 @@ const profileSchema = z
     phone: short,
     avatar,
     notifications,
+    chordSelectorEnabled: z.boolean(),
   })
   .partial()
   .strict();

@@ -446,7 +446,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                       ) : (
                         <Copy className="h-3.5 w-3.5" />
                       )}
-                      <span>{copied ? 'Copied' : 'Copy'}</span>
+                      <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
                     </button>
                     <button
                       type="button"
@@ -454,7 +454,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                       className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-700"
                     >
                       <Download className="h-3.5 w-3.5" />
-                      <span>Download</span>
+                      <span className="hidden sm:inline">Download</span>
                     </button>
                     <button
                       type="button"
@@ -463,7 +463,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                       title="Print or save as a Letter-size PDF"
                     >
                       <Printer className="h-3.5 w-3.5" />
-                      <span>Print / PDF</span>
+                      <span className="hidden sm:inline">Print / PDF</span>
                     </button>
                     <button
                       type="button"
@@ -480,7 +480,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                       ) : (
                         <Maximize2 className="h-3.5 w-3.5" />
                       )}
-                      <span>{isFullscreen ? 'Close' : 'Full Screen'}</span>
+                      <span className="hidden sm:inline">{isFullscreen ? 'Close' : 'Full Screen'}</span>
                     </button>
                   </div>
                 </div>
@@ -517,8 +517,8 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
 
                 {canEdit && (
                   <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-800 pt-3">
-                    <span className="mr-1 text-[11px] text-zinc-500">Insert:</span>
-                    <div className="group relative">
+                    <span className="mr-1 hidden text-[11px] text-zinc-500 sm:inline">Insert:</span>
+                    <div className="group relative hidden sm:block">
                       <button
                         type="button"
                         aria-label="Show tab notation help"
@@ -556,13 +556,14 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                         onClick={() => insertSection(section)}
                         className="rounded bg-zinc-800 px-2 py-1 text-[11px] font-mono text-zinc-300 hover:bg-zinc-700"
                       >
-                        + {section}
+                        <span className="hidden sm:inline">+ {section}</span>
+                        <span className="sm:hidden">{section}</span>
                       </button>
                     ))}
                     <button
                       type="button"
                       onClick={() => insertAtCursor(guitarStaff(tuning))}
-                      className="rounded bg-zinc-800 px-2 py-1 text-[11px] font-mono text-zinc-300 hover:bg-zinc-700"
+                      className="hidden sm:rounded bg-zinc-800 px-2 py-1 text-[11px] font-mono text-zinc-300 hover:bg-zinc-700"
                     >
                       + 6-string staff
                     </button>
@@ -577,7 +578,8 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                       }
                       className="rounded bg-zinc-800 px-2 py-1 text-[11px] font-mono text-zinc-300 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-zinc-800"
                     >
-                      + Legend
+                      <span className="hidden sm:inline">+ Legend</span>
+                      <span className="sm:hidden">Legend</span>
                     </button>
                     <input
                       ref={fileInputRef}
@@ -589,7 +591,7 @@ export const TabsStudioView: React.FC<TabsStudioViewProps> = ({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="ml-auto flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-700"
+                      className="hidden sm:ml-auto flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-700"
                     >
                       <FileUp className="h-3.5 w-3.5" />
                       Import .txt

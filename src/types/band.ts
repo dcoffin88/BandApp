@@ -48,6 +48,7 @@ export interface BandMember {
   twoFactorEnabled?: boolean;
   notifications?: UserNotifications;
   appearanceSettings?: UserAppearance;
+  chordSelectorEnabled?: boolean;
   isCurrentUser?: boolean;
   createdAt?: string;
 }

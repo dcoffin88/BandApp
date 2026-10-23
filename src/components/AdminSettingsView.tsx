@@ -4,6 +4,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Check,
+  ChevronDown,
   Clock3,
   Crop,
   Crown,
@@ -335,7 +336,23 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       </div>
 
       {/* Sub-tab Navigation */}
-      <div className="flex items-center gap-2 p-1 bg-zinc-900/90 rounded-2xl border border-zinc-800 overflow-x-auto text-xs font-semibold">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-1 text-xs font-semibold">
+        <div className="relative lg:hidden">
+          <select
+            aria-label="Admin settings section"
+            value={activeSubTab}
+            onChange={(event) => setActiveSubTab(event.target.value as 'users' | 'auth' | 'app' | 'smtp')}
+            className="w-full appearance-none rounded-xl bg-zinc-900 py-2.5 pl-3 pr-9 font-semibold text-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="app">App Settings</option>
+            <option value="users">User Management ({band.members.length})</option>
+            <option value="auth">Authentication Management</option>
+            <option value="smtp">Email Settings</option>
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+        </div>
+
+        <div className="hidden items-center gap-2 lg:flex">
         {isAdmin && <>
         <button
           onClick={() => setActiveSubTab('app')}
@@ -375,6 +392,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </>}
 
         {isAdmin && <button onClick={() => setActiveSubTab('smtp')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${activeSubTab === 'smtp' ? 'bg-amber-500 text-zinc-950 shadow-md font-bold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}><Mail className="w-4 h-4"/><span>Email Settings</span></button>}
+        </div>
       </div>
 
       {isAdmin && activeSubTab === 'smtp' && <SmtpSettingsView />}
@@ -474,12 +492,13 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             </form>
           </div>
 
-          <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
-            <div className="flex items-center gap-2 pb-3 border-b border-zinc-800">
-              <Tags className="w-5 h-5 text-amber-400" />
-              <div>
-                <h3 className="font-bold text-white text-base">Demo Category Management</h3>
-            </div>
+          {/* Demo Category Management */}
+          <div className="min-w-0 space-y-4 rounded-3xl border border-zinc-800 bg-zinc-900/70 p-3 sm:p-6">
+          <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
+            <Tags className="h-5 w-5 shrink-0 text-amber-400" />
+            <h3 className="text-base font-bold text-white">
+              Demo Category Management
+            </h3>
           </div>
 
           {categoryError && (
@@ -488,23 +507,26 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-2">
             {localAppSettings.demoCategories.map((category) => {
               const assignedCount = songs.filter(
                 (song) => song.category === category.id,
               ).length;
+
               const selectableCount = localAppSettings.demoCategories.filter(
-                  (item) => item.id !== 'all' && item.id !== 'archived',
+                (item) => item.id !== 'all' && item.id !== 'archived',
               ).length;
+
               const cannotRemove =
-                  category.id === 'all' ||
-                  category.id === 'archived' ||
+                category.id === 'all' ||
+                category.id === 'archived' ||
                 assignedCount > 0 ||
                 selectableCount <= 1;
+
               return (
                 <div
                   key={category.id}
-                  className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-2"
+                  className="grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                 >
                   <input
                     type="text"
@@ -522,35 +544,38 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                         ),
                       });
                     }}
-                    className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                    className="w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
                     aria-label={`Category name for ${category.id}`}
                   />
-                  <div className="flex items-center justify-between gap-3 sm:justify-end">
-                    <span className="text-[10px] text-zinc-500">
-                        {category.id === 'all'
+
+                  <div className="flex shrink-0 items-center justify-end gap-2">
+                    <span className="w-40 shrink-0 text-right text-[10px] text-zinc-500">
+                      {category.id === 'all'
                         ? 'Required library filter'
-                          : category.id === 'archived'
-                            ? 'Required archive filter'
-                        : `${assignedCount} ${assignedCount === 1 ? 'demo' : 'demos'}`}
+                        : category.id === 'archived'
+                          ? 'Required archive filter'
+                          : `${assignedCount} ${
+                              assignedCount === 1 ? 'demo' : 'demos'
+                            }`}
                     </span>
+
                     <button
                       type="button"
                       onClick={() => {
                         setLocalAppSettings({
                           ...localAppSettings,
-                          demoCategories:
-                            localAppSettings.demoCategories.filter(
-                              (item) => item.id !== category.id,
-                            ),
+                          demoCategories: localAppSettings.demoCategories.filter(
+                            (item) => item.id !== category.id,
+                          ),
                         });
                         setCategoryError('');
                         setCategorySaveSuccess(false);
                       }}
                       disabled={cannotRemove}
-                      className="rounded-lg border border-zinc-700 p-2 text-zinc-400 transition hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-30"
+                      className="shrink-0 rounded-lg border border-zinc-700 p-2 text-zinc-400 transition hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-30"
                       title={
-                          category.id === 'all' || category.id === 'archived'
-                            ? `${category.label} is required`
+                        category.id === 'all' || category.id === 'archived'
+                          ? `${category.label} is required`
                           : assignedCount > 0
                             ? 'Move demos out of this category before removing it'
                             : selectableCount <= 1
@@ -582,33 +607,36 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               placeholder="New category name"
               className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none"
             />
+
             <button
               type="submit"
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-zinc-700"
+              className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-zinc-700"
             >
               <Plus className="h-4 w-4" />
               Add Category
             </button>
           </form>
 
-          <div className="flex items-center justify-end gap-3 border-t border-zinc-800 pt-3 text-xs">
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-zinc-800 pt-3 text-xs">
             {categorySaveSuccess && (
               <span className="flex items-center gap-1 font-medium text-emerald-400">
-                <Check className="h-4 w-4" /> Categories saved!
+                <Check className="h-4 w-4" />
+                Categories saved!
               </span>
             )}
+
             <button
               type="button"
               onClick={handleSaveCategories}
-              className="flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2 font-bold text-zinc-950 transition hover:bg-amber-400"
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-amber-500 px-5 py-2 font-bold text-zinc-950 transition hover:bg-amber-400"
             >
               <Save className="h-4 w-4" />
               Save Categories
             </button>
           </div>
-          </div>
+        </div>
 
-          {/* Header Logo & Name Area Live Mockup */}
+          {/* Header Logo & Name Area */}
           {isAdmin && (
           <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -618,7 +646,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               </div>
             </div>
 
-            {/* Live Header Preview Box */}
+            {/* Header Preview Box */}
             <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0">
                 {localAppSettings.headerLogoUrl ? (

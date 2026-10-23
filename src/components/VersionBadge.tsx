@@ -32,14 +32,16 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
         </span>
 
         <span className="font-mono font-medium text-[11px] text-zinc-300">
-          RehearsalHQ v{currentVersion}
+          <span className="hidden sm:inline">RehearsalHQ v{currentVersion}</span>
+          <span className="sm:hidden">v{currentVersion}</span>
         </span>
 
-        <span className="text-zinc-500 text-[10px]">•</span>
+        <span className="text-zinc-500 text-[10px]">
+          <span className="hidden sm:inline">•</span>
+        </span>
 
         <span className="flex items-center gap-1 text-[11px] text-amber-300 font-bold tracking-tight">
           <span className="hidden sm:inline">Update Available</span>
-          <span className="sm:hidden">Update</span>
         </span>
       </button>
     );
@@ -57,7 +59,8 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
       ) : (
         <Check className="w-3 h-3 text-emerald-400 shrink-0" />
       )}
-      <span>RehearsalHQ v{currentVersion}</span>
+      <span className="hidden sm:inline">RehearsalHQ v{currentVersion}</span>
+      <span className="sm:hidden">v{currentVersion}</span>
     </button>
   );
 };

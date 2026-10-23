@@ -179,7 +179,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                 </span>
               )}
 
-              {/* Version indicator as requested in prompt */}
+              {/* Version indicator */}
               <button
                 onClick={() => setShowVersionHistory(!showVersionHistory)}
                 className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition"
@@ -191,12 +191,12 @@ export const SongCard: React.FC<SongCardProps> = ({
               </button>
             </div>
 
-            {/* Song Title as sketched in Page 1 */}
+            {/* Song Title */}
             <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate">
               {song.title}
             </h3>
 
-            {/* Uploaded by info as sketched on Page 1: "uploaded by ..." */}
+            {/* Uploaded by */}
             <div className="flex items-center gap-2 mt-1 text-xs text-zinc-400">
               <img
                 src={song.createdBy.avatar}
@@ -257,7 +257,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                     aria-label={`Restore ${song.title}`}
                   >
                     <ArchiveRestore className="h-3.5 w-3.5" />
-                    <span>Restore</span>
+                    <span className="hidden sm:inline">Restore</span>
                   </button>
                   <button
                     onClick={() => {
@@ -298,10 +298,10 @@ export const SongCard: React.FC<SongCardProps> = ({
           </p>
         )}
 
-        {/* Audio Player Core Row (Page 2 sketch: Waveform, Play, Lyrics, Playback Speed, Download) */}
+        {/* Audio Player Core Row */}
         <div className="bg-zinc-950/70 p-3 sm:p-3.5 rounded-xl border border-zinc-800/80 mb-3">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Big Play / Pause button as sketched on Page 1 & Page 2 */}
+            {/* Big Play / Pause button */}
             <div className="flex items-center justify-between sm:justify-start gap-3">
               <button
                 onClick={handlePlayToggle}
@@ -373,25 +373,23 @@ export const SongCard: React.FC<SongCardProps> = ({
               </div>
             </div>
 
-            {/* Action buttons matching Page 2 sketch: [Lyrics], [Playback Speed], Download */}
+            {/* Action buttons */}
             <div className="flex items-center justify-end gap-1.5 pt-2 sm:pt-0 border-t border-zinc-800 sm:border-t-0">
-              {/* [Lyrics] button -> "will bring up a pop up to add/edit lyrics" */}
               <button
                 onClick={() => onOpenLyrics(song)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/80 transition"
                 title="Open lyrics draft"
               >
                 <FileText className="w-3.5 h-3.5 text-amber-400" />
-                <span>Lyrics</span>
+                <span className="hidden sm:inline">Lyrics</span>
               </button>
-
               <button
                 onClick={() => onOpenChords(song)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/80 transition"
                 title="Open the chord chart for this track"
               >
                 <Music2 className="w-3.5 h-3.5 text-amber-400" />
-                <span>Chords</span>
+                <span className="hidden sm:inline">Chords</span>
               </button>
 
               <button
@@ -400,7 +398,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                 title="Open the tab sheet for this track"
               >
                 <Guitar className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Tabs</span>
+                <span className="hidden sm:inline">Tabs</span>
               </button>
 
               {/* [Playback Speed] button -> "Playback speed button" */}
@@ -422,7 +420,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                 <span>{isCurrentPlaying ? `${playbackRate}x` : '1x'}</span>
               </button>
 
-              {/* Download button -> "maybe a download button? For each track" */}
+              {/* Download button */}
               <button
                 onClick={() => downloadTrack(song, activeVersion)}
                 className="p-2 text-zinc-400 hover:text-zinc-100 bg-zinc-800/90 hover:bg-zinc-700 rounded-lg border border-zinc-700/80 transition"
@@ -452,7 +450,7 @@ export const SongCard: React.FC<SongCardProps> = ({
           </div>
         </div>
 
-        {/* Version History Drawer (File versioning requested in prompt) */}
+        {/* Version History Drawer */}
         {showVersionHistory && (
           <div className="mt-3 p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs text-zinc-300 space-y-2.5">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-800">

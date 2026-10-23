@@ -3,7 +3,6 @@ import { AdminSettingsView } from './components/AdminSettingsView.tsx';
 import { AuthView } from './components/AuthView.tsx';
 import { ChordsStudioView } from './components/ChordsStudioView.tsx';
 import { GlobalAudioPlayer } from './components/GlobalAudioPlayer.tsx';
-import { LyricsModal } from './components/LyricsModal.tsx';
 import { LyricsStudioView } from './components/LyricsStudioView.tsx';
 import { Navbar } from './components/Navbar.tsx';
 import { NewVersionModal } from './components/NewVersionModal.tsx';
@@ -22,7 +21,6 @@ const AppContent: React.FC = () => {
   const [adminSubTab, setAdminSubTab] = useState<'users' | 'auth' | 'app' | 'smtp'>('app');
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [lyricsModalSong, setLyricsModalSong] = useState<SongIdea | null>(null);
   const [newVersionModalSong, setNewVersionModalSong] = useState<SongIdea | null>(null);
   const [lyricsStudioSongId, setLyricsStudioSongId] = useState('');
   const [tabsStudioSongId, setTabsStudioSongId] = useState('');
@@ -57,7 +55,10 @@ const AppContent: React.FC = () => {
         {activeTab === 'songs' && (
           <SongListMainView
             onOpenUploadModal={() => setIsUploadModalOpen(true)}
-            onOpenLyricsModal={(song) => setLyricsModalSong(song)}
+            onOpenLyricsStudio={(song) => {
+              setLyricsStudioSongId(song.id);
+              setActiveTab('lyrics');
+            }}
             onOpenTabsStudio={(song) => {
               setTabsStudioSongId(song.id);
               setActiveTab('tabs');
@@ -115,12 +116,6 @@ const AppContent: React.FC = () => {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
       />}
-
-      <LyricsModal
-        song={lyricsModalSong}
-        isOpen={!!lyricsModalSong}
-        onClose={() => setLyricsModalSong(null)}
-      />
 
       {newVersionModalSong && <NewVersionModal
         song={newVersionModalSong}

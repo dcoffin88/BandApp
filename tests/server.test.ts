@@ -1298,9 +1298,11 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       updates: {
         name: 'Updated Member',
         avatar: member.state.currentUser.avatar,
+        chordSelectorEnabled: false,
       },
     });
     assert.equal(profile.status, 200, await profile.clone().text());
+    assert.equal(f.store.members().find((user) => user.id === member.state.currentUser.id)?.chordSelectorEnabled, false);
     assert.equal(
       (await f.request('/api/state', undefined, guest.cookie)).status,
       200,

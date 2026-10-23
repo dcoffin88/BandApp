@@ -16,7 +16,7 @@ import { formatClockTime } from '../shared/time.ts';
 
 interface SongListMainViewProps {
   onOpenUploadModal: () => void;
-  onOpenLyricsModal: (song: SongIdea) => void;
+  onOpenLyricsStudio: (song: SongIdea) => void;
   onOpenChordsStudio: (song: SongIdea) => void;
   onOpenTabsStudio: (song: SongIdea) => void;
   onOpenNewVersionModal: (song: SongIdea) => void;
@@ -24,7 +24,7 @@ interface SongListMainViewProps {
 
 export const SongListMainView: React.FC<SongListMainViewProps> = ({
   onOpenUploadModal,
-  onOpenLyricsModal,
+  onOpenLyricsStudio,
   onOpenChordsStudio,
   onOpenTabsStudio,
   onOpenNewVersionModal,
@@ -108,9 +108,22 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        {/* Category Filters (matching Page 1 tracks: Song Idea, Chorus Idea, Riff, Bass Idea) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        {/* Category Filters */}
+        <div className="relative md:hidden">
+          <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-400" />
+          <select
+            aria-label="Filter demos by category"
+            value={activeCategory}
+            onChange={(event) => setSelectedCategory(event.target.value)}
+            className="w-full appearance-none rounded-xl border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-9 text-xs font-semibold text-zinc-200 focus:border-amber-500 focus:outline-none"
+          >
+            {appSettings.demoCategories.map((category) => (
+              <option key={category.id} value={category.id}>{category.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="hidden flex-wrap items-center gap-1.5 md:flex">
           {appSettings.demoCategories.map(cat => (
             <button
               key={cat.id}
@@ -128,7 +141,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
         </div>
 
         {/* Search */}
-        <div className="relative sm:w-64">
+        <div className="relative md:w-64 md:shrink-0">
           <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
           <input
             type="text"
@@ -140,7 +153,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
         </div>
       </div>
 
-      {/* Main Track List Container as sketched on Page 1 */}
+      {/* Main Track List Container */}
       <div className="rounded-3xl border border-zinc-800 bg-zinc-950/40 p-3 sm:p-5 shadow-2xl">
         <div className="flex items-center justify-between px-2 pb-3 mb-2 border-b border-zinc-800/80">
           <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400">
@@ -171,7 +184,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
               <SongCard
                 key={song.id}
                 song={song}
-                onOpenLyrics={onOpenLyricsModal}
+                onOpenLyrics={onOpenLyricsStudio}
                 onOpenChords={onOpenChordsStudio}
                 onOpenTabs={onOpenTabsStudio}
                 onOpenNewVersion={onOpenNewVersionModal}
@@ -180,7 +193,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
           </div>
         )}
 
-        {/* Bottom Upload Section as sketched on Page 1: "upload new demo (see page 2)" */}
+        {/* Bottom Upload Section */}
         {activeCategory !== 'archived' && (
         <div className="mt-6 pt-5 border-t border-zinc-800/90 text-center">
           {permissions.canUploadDemo ? (
