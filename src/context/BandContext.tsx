@@ -24,6 +24,8 @@ import type {
   UserStatus,
   AddMemberResult,
   MemberInvitationResult,
+  BandAccess,
+  ExistingUserOption,
 } from '../types/band.ts';
 import {
   emptyState,
@@ -59,6 +61,11 @@ interface BandContextType {
   appSettings: AppSettings;
   smtpSettings: SmtpSettings;
   emailLogs: EmailNotificationLog[];
+  availableBands: BandAccess[];
+  switchBand: (bandId: string) => Promise<boolean>;
+  createBand: (name: string) => Promise<boolean>;
+  getAvailableUsers: () => Promise<ExistingUserOption[]>;
+  addExistingBandMember: (userId: string, role: Role) => Promise<AddMemberResult>;
   updateAppSettings: (newSettings: Partial<AppSettings>) => Promise<boolean>;
   updateAppearance: (settings: UserAppearance) => Promise<boolean>;
   updateSmtpSettings: (settings: SmtpSettings) => Promise<boolean>;
@@ -87,6 +94,7 @@ interface BandContextType {
   logout: () => Promise<boolean>;
   updateUserRole: (memberId: string, newRole: Role) => Promise<boolean>;
   updateUserStatus: (memberId: string, status: UserStatus) => Promise<boolean>;
+  updateSuperAdmin: (memberId: string, enabled: boolean) => Promise<boolean>;
   updateUserProfile: (
     userId: string,
     updates: Partial<BandMember>,
@@ -218,6 +226,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     ...emptyState(),
     currentUser: anonymousUser,
     permissions: ROLE_PERMISSIONS.guest,
+    availableBands: [],
   }));
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
@@ -242,6 +251,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       },
       currentUser: anonymousUser,
       permissions: ROLE_PERMISSIONS.guest,
+      availableBands: [],
     }));
   }, []);
   const report = (err: unknown) => {
@@ -392,6 +402,18 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       return false;
     }
   }
+  async function switchBand(bandId: string) {
+    try {
+      const next = await api<SessionState>('/api/auth/band', { bandId });
+      epoch.current++;
+      setState(next);
+      setError('');
+      return true;
+    } catch (err) {
+      report(err);
+      return false;
+    }
+  }
   async function upload(
     file: File | Blob,
     category: string,
@@ -515,6 +537,28 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     verifyTwoFactor,
     changePassword,
     logout,
+    switchBand,
+    createBand: (name) => save('band.create', { name }),
+    getAvailableUsers: async () => {
+      try {
+        return await api<ExistingUserOption[]>('/api/users/available');
+      } catch (err) {
+        report(err);
+        return [];
+      }
+    },
+    addExistingBandMember: async (userId, role) => {
+      try {
+        const result = await mutate<Omit<AddMemberResult, 'success'>>(
+          'member.existing.add',
+          { userId, role },
+        );
+        return { success: true, ...result };
+      } catch (error) {
+        report(error);
+        return { success: false };
+      }
+    },
     updateAppSettings: (settings) => save('app.update', settings),
     updateAppearance: (settings) => save('appearance.update', settings),
     updateSmtpSettings: (settings) => save('smtp.update', settings),
@@ -524,6 +568,8 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     updateUserRole: (userId, role) => save('member.role', { userId, role }),
     updateUserStatus: (userId, status) =>
       save('member.status', { userId, status }),
+    updateSuperAdmin: (userId, enabled) =>
+      save('member.superadmin', { userId, enabled }),
     updateUserProfile: (userId, updates) =>
       updates.password !== undefined
         ? save('member.password', { userId, password: updates.password })

@@ -26,7 +26,7 @@ import { useAppVersion } from '../hooks/useAppVersion.ts';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionBadge } from './VersionBadge.tsx';
 import { VersionModal } from './VersionModal.tsx';
-import { memberDisplayName } from '../shared/member.ts';
+import { memberDisplayName, roleDisplayName } from '../shared/member.ts';
 
 interface NavbarProps {
   activeTab: AppTab;
@@ -41,7 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenUploadModal,
   onSelectAdminSubTab,
 }) => {
-  const { band, currentUser, permissions, updateBandName, logout, appSettings } = useBand();
+  const { band, currentUser, permissions, updateBandName, logout, appSettings, availableBands, switchBand } = useBand();
   const {
     versionInfo,
     isLoading: isCheckingVersion,
@@ -65,16 +65,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   const getRoleBadge = (role: Role) => {
     switch (role) {
       case 'admin':
-        return { label: 'Admin', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
+        return { label: 'Band Admin', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
       case 'member':
-        return { label: 'Member', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
+        return { label: 'Band Member', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
       case 'guest':
       default:
-        return { label: 'Guest', color: 'bg-zinc-700/50 text-zinc-300 border-zinc-600' };
+        return { label: 'Band Guest', color: 'bg-zinc-700/50 text-zinc-300 border-zinc-600' };
     }
   };
 
-  const roleBadge = getRoleBadge(currentUser.role);
+  const roleBadge = currentUser.isSuperAdmin
+    ? { label: 'Super Admin', color: 'bg-purple-500/20 text-purple-300 border-purple-500/40' }
+    : getRoleBadge(currentUser.role);
 
   const getLogoShapeClass = () => {
     switch (appSettings?.headerLogoShape) {
@@ -194,6 +196,29 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </span>
                       </div>
                     </div>
+
+                    {availableBands.length > 1 && (
+                      <div className="border-b border-zinc-800 px-1 py-2">
+                        <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                          Switch band
+                        </p>
+                        {availableBands.map((availableBand) => (
+                          <button
+                            key={availableBand.id}
+                            type="button"
+                            onClick={async () => {
+                              if (availableBand.id !== band.id) await switchBand(availableBand.id);
+                              setActiveTab('songs');
+                              setShowUserDropdown(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition ${availableBand.id === band.id ? 'bg-amber-500/10 text-amber-300' : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'}`}
+                          >
+                            <span className="truncate">{availableBand.name}</span>
+                            <span className="ml-2 text-[9px] uppercase text-zinc-500">{roleDisplayName(availableBand.role)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Navigation Links inside Dropdown */}
                     <div className="py-1 border-b border-zinc-800 space-y-0.5 text-xs">

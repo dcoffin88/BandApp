@@ -36,7 +36,7 @@ import type {
   Role,
   SmtpSettings,
 } from '../src/types/band.ts';
-import { memberDisplayName } from '../src/shared/member.ts';
+import { memberDisplayName, roleDisplayName } from '../src/shared/member.ts';
 import { formatClockTime, localDateValue } from '../src/shared/time.ts';
 import { DEFAULT_TAB_TUNING } from '../src/shared/tabs.ts';
 import { categoryLabel } from '../src/shared/songMetadata.ts';
@@ -293,7 +293,7 @@ const safeArchiveName = (value: string, fallback: string) =>
     .slice(0, 120) || fallback;
 
 const requireAdmin = (user: BandMember) => {
-  if (user.role !== 'admin') fail(403, 'Admin permission required.');
+  if (user.role !== 'admin') fail(403, 'Band Admin permission required.');
 };
 
 const now = () => new Date().toISOString();
@@ -475,6 +475,7 @@ export function createApplication(options: ApplicationOptions) {
           name: options.adminName || 'Band Admin',
           email: adminEmail,
           role: 'admin',
+          isSuperAdmin: true,
           status: 'active',
           instrument: '',
           avatar: DEFAULT_AVATAR,
@@ -667,26 +668,33 @@ export function createApplication(options: ApplicationOptions) {
 
   function authenticate(req: Request): BandMember {
     const session = db
-      .prepare('SELECT user_id,expires_at FROM sessions WHERE token_hash=?')
-      .get(tokenHash(token(req))) as { user_id: string; expires_at: number } | undefined;
+      .prepare('SELECT user_id,band_id,expires_at FROM sessions WHERE token_hash=?')
+      .get(tokenHash(token(req))) as { user_id: string; band_id: string; expires_at: number } | undefined;
     if (!session || Number(session.expires_at) <= Date.now()) {
       fail(401, 'Please sign in.');
     }
-    const user = store.members().find((u) => u.id === session.user_id);
+    const bandId = session.band_id || store.bandsForUser(session.user_id)[0]?.id;
+    const user = bandId && store.members(bandId).find((u) => u.id === session.user_id);
     if (!user || user.status !== 'active') {
       fail(401, 'Please sign in with an active account.');
     }
-    return user;
+    return { ...user, activeBandId: bandId };
   }
 
-  function createSession(user: BandMember, res: Response) {
+  function createSession(user: BandMember, res: Response, requestedBandId?: string) {
     const value = randomBytes(32).toString('hex');
-    const maxAge = store.read().authSettings.sessionTimeoutMinutes * 6e4;
+    const bands = store.bandsForUser(user.id);
+    const bandId = requestedBandId || user.activeBandId || bands[0]?.id;
+    if (!bandId || !bands.some((band) => band.id === bandId)) {
+      fail(403, 'This account does not have access to a band.');
+    }
+    const maxAge = store.read(bandId).authSettings.sessionTimeoutMinutes * 6e4;
     db.prepare('DELETE FROM sessions WHERE expires_at<=?').run(Date.now());
-    db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(
+    db.prepare('INSERT INTO sessions (token_hash,user_id,expires_at,band_id) VALUES (?,?,?,?)').run(
       tokenHash(value),
       user.id,
-      Date.now() + maxAge
+      Date.now() + maxAge,
+      bandId,
     );
     res.cookie(cookieName, value, {
       httpOnly: true,
@@ -757,17 +765,20 @@ export function createApplication(options: ApplicationOptions) {
   }
 
   function snapshot(user: BandMember) {
-    const state = store.read();
-    const isAdmin = user.role === 'admin';
+    const bandId = user.activeBandId || store.bandsForUser(user.id)[0]?.id;
+    if (!bandId) fail(403, 'This account does not have access to a band.');
+    const state = store.read(bandId);
+    const effectiveUser = state.band.members.find((member) => member.id === user.id) || user;
+    const isAdmin = effectiveUser.role === 'admin';
     return {
       ...state,
       appSettings: {
         ...state.appSettings,
         ...DEFAULT_APPEARANCE,
-        ...user.appearanceSettings,
+        ...effectiveUser.appearanceSettings,
         accentGlow: state.appSettings.accentGlow,
       },
-      smtpSettings: isAdmin
+      smtpSettings: effectiveUser.isSuperAdmin
         ? { ...state.smtpSettings, password: '' }
         : {
             ...state.smtpSettings,
@@ -778,11 +789,11 @@ export function createApplication(options: ApplicationOptions) {
             replyTo: '',
           },
       auditLogs: isAdmin ? state.auditLogs : [],
-      emailLogs: isAdmin ? state.emailLogs : [],
+      emailLogs: effectiveUser.isSuperAdmin ? state.emailLogs : [],
       band: {
         ...state.band,
         members: state.band.members.map((m) =>
-          m.id === user.id || isAdmin
+          m.id === effectiveUser.id || isAdmin
             ? m
             : {
                 ...m,
@@ -793,8 +804,9 @@ export function createApplication(options: ApplicationOptions) {
               }
         ),
       },
-      currentUser: user,
-      permissions: ROLE_PERMISSIONS[user.role],
+      currentUser: { ...effectiveUser, activeBandId: bandId },
+      permissions: ROLE_PERMISSIONS[effectiveUser.role],
+      availableBands: store.bandsForUser(user.id),
     };
   }
 
@@ -862,7 +874,7 @@ export function createApplication(options: ApplicationOptions) {
         input.password,
         row ? String(row.password_hash) : dummyHash
       );
-      const user = row && state.band.members.find((u) => u.id === row.id);
+      const user = row && store.members().find((u) => u.id === row.id);
       if (!correct || !user || user.status === 'suspended') {
         const failures =
           attempts && Number(attempts.locked_until) === 0
@@ -1011,6 +1023,44 @@ export function createApplication(options: ApplicationOptions) {
     route((_req: Request, res: Response) => res.json(snapshot(res.locals.user)))
   );
 
+  app.get(
+    '/api/users/available',
+    route((_req: Request, res: Response) => {
+      const user = res.locals.user as BandMember;
+      requireAdmin(user);
+      const currentIds = new Set(store.members(user.activeBandId).map((member) => member.id));
+      res.json(
+        store.members()
+          .filter((member) => !currentIds.has(member.id) && member.status !== 'suspended')
+          .map(({ id, name, stageName, email: address, instrument, avatar, role }) => ({
+            id,
+            name,
+            stageName,
+            email: address,
+            instrument,
+            avatar,
+            role,
+          })),
+      );
+    }),
+  );
+
+  app.post(
+    '/api/auth/band',
+    route((req: Request, res: Response) => {
+      const user = res.locals.user as BandMember;
+      const bandId = z.string().uuid().or(z.literal('band')).parse(req.body.bandId);
+      if (!store.bandsForUser(user.id).some((band) => band.id === bandId)) {
+        fail(403, 'You do not have access to that band.');
+      }
+      db.prepare('UPDATE sessions SET band_id=? WHERE token_hash=?').run(
+        bandId,
+        tokenHash(token(req)),
+      );
+      res.json(snapshot({ ...user, activeBandId: bandId }));
+    }),
+  );
+
   app.post(
     '/api/auth/password',
     route((req: Request, res: Response) => {
@@ -1059,13 +1109,14 @@ export function createApplication(options: ApplicationOptions) {
       }
       const id = randomUUID();
       const category = categoryIdSchema.parse(req.query.category || 'idea');
-      requireAvailableCategory(store.read(), category);
-      const relative = media.location(user.name, category, id, mime);
+      const state = store.read(user.activeBandId);
+      requireAvailableCategory(state, category);
+      const relative = media.location(user.name, state.band.name, category, id, mime);
       media.write(relative, req.body);
       try {
         db.prepare(
-          "INSERT INTO uploads (id,owner_id,mime,data,created_at,relative_path) VALUES (?,?,?,X'',?,?)"
-        ).run(id, user.id, mime, Date.now(), relative);
+          "INSERT INTO uploads (id,owner_id,mime,data,created_at,relative_path,band_id) VALUES (?,?,?,X'',?,?,?)"
+        ).run(id, user.id, mime, Date.now(), relative, state.band.id);
       } catch (error) {
         media.remove(relative);
         throw error;
@@ -1077,7 +1128,8 @@ export function createApplication(options: ApplicationOptions) {
   app.get(
     '/api/demos/:songId/export',
     route((req: Request, res: Response) => {
-      const state = store.read();
+      const user = res.locals.user as BandMember;
+      const state = store.read(user.activeBandId);
       const song = state.songs.find(
         (candidate) => candidate.id === String(req.params.songId),
       );
@@ -1135,11 +1187,13 @@ export function createApplication(options: ApplicationOptions) {
     '/api/uploads/:id',
     route((req: Request, res: Response) => {
       const row = db
-        .prepare('SELECT mime,relative_path FROM uploads WHERE id=?')
+        .prepare('SELECT mime,relative_path,band_id FROM uploads WHERE id=?')
         .get(String(req.params.id)) as
-        | { mime: string; relative_path: string }
+        | { mime: string; relative_path: string; band_id: string }
         | undefined;
       if (!row) fail(404, 'Audio not found.');
+      const user = res.locals.user as BandMember;
+      if (row.band_id !== user.activeBandId) fail(404, 'Audio not found.');
       const relative = String(row.relative_path);
       if (!media.exists(relative)) {
         fail(404, 'Audio file is missing from the media mount.');
@@ -1189,14 +1243,14 @@ export function createApplication(options: ApplicationOptions) {
   function ensureVersion(url2: string, user: BandMember) {
     const uploadId = url2.split('/').pop() || '';
     const row = db
-      .prepare('SELECT owner_id FROM uploads WHERE id=?')
-      .get(uploadId) as { owner_id: string } | undefined;
-    if (!row || row.owner_id !== user.id) {
+      .prepare('SELECT owner_id,band_id FROM uploads WHERE id=?')
+      .get(uploadId) as { owner_id: string; band_id: string } | undefined;
+    if (!row || row.owner_id !== user.id || row.band_id !== user.activeBandId) {
       fail(400, 'Upload this audio file before saving the take.');
     }
     if (
       store
-        .read()
+        .read(user.activeBandId)
         .songs.some((song) =>
           song.versions.some((version) => version.audioUrl === url2)
         )
@@ -1213,10 +1267,10 @@ export function createApplication(options: ApplicationOptions) {
         replacement.role !== 'admin' ||
         replacement.status !== 'active') &&
       store
-        .members()
+        .members(user.activeBandId)
         .filter((u) => u.role === 'admin' && u.status === 'active').length <= 1
     ) {
-      fail(400, 'Keep at least one active Admin account.');
+      fail(400, 'Keep at least one active Band Admin account.');
     }
   }
 
@@ -1232,15 +1286,29 @@ export function createApplication(options: ApplicationOptions) {
         .parse(req.body);
       let result: any;
       let invitationRecipient: BandMember | undefined;
+      let existingAccountInvitation = false;
       const deletedMedia: string[] = [];
       let event: AppNotification | undefined;
 
       store.transaction(() => {
-        const state = store.read();
+        const state = store.read(user.activeBandId);
         const permissions = ROLE_PERMISSIONS[user.role];
         const member = () =>
           state.band.members.find((u) => u.id === (p.userId as string)) ||
           fail(404, 'Member not found.');
+        const requireManageableMember = (target: BandMember) => {
+          if (target.isSuperAdmin && !user.isSuperAdmin) {
+            fail(403, 'Only a Super Admin can manage another Super Admin.');
+          }
+          if (
+            !user.isSuperAdmin &&
+            target.id !== user.id &&
+            target.role === 'admin'
+          ) {
+            fail(403, 'Band Admins can manage their own role and lower-level members only.');
+          }
+          return target;
+        };
         const song = () =>
           state.songs.find((s) => s.id === (p.songId as string)) ||
           fail(404, 'Song not found.');
@@ -1254,6 +1322,15 @@ export function createApplication(options: ApplicationOptions) {
           fail(404, 'Practice not found.');
 
         switch (action) {
+          case 'band.create': {
+            if (!user.isSuperAdmin) {
+              fail(403, 'Super Admin permission required.');
+            }
+            const name = required.parse(p.name);
+            const created = store.createBand(name, user.id);
+            result = { id: created.band.id, name: created.band.name };
+            break;
+          }
           case 'band.update': {
             requireAdmin(user);
             const data = z
@@ -1287,19 +1364,24 @@ export function createApplication(options: ApplicationOptions) {
             store.saveUser({ ...user, appearanceSettings });
             break;
           }
-          case 'auth.update':
-            requireAdmin(user);
-            state.authSettings = authSchema.parse(p);
+          case 'auth.update': {
+            if (!user.isSuperAdmin) fail(403, 'Super Admin permission required.');
+            const authSettings = authSchema.parse(p);
+            store.saveAuthSettings(authSettings);
+            state.authSettings = authSettings;
             break;
+          }
           case 'smtp.update': {
-            requireAdmin(user);
+            if (!user.isSuperAdmin) fail(403, 'Super Admin permission required.');
             const data = smtpSchema.parse(p);
-            state.smtpSettings = {
+            const smtpSettings = {
               ...data,
               password: data.password
                 ? encrypt(data.password)
                 : state.smtpSettings.password,
             };
+            store.saveSmtpSettings(smtpSettings);
+            state.smtpSettings = smtpSettings;
             break;
           }
           case 'audit.clear':
@@ -1307,7 +1389,7 @@ export function createApplication(options: ApplicationOptions) {
             state.auditLogs = [];
             break;
           case 'email.clear':
-            requireAdmin(user);
+            if (!user.isSuperAdmin) fail(403, 'Super Admin permission required.');
             state.emailLogs = [];
             break;
           case 'member.add': {
@@ -1322,11 +1404,19 @@ export function createApplication(options: ApplicationOptions) {
                 avatar: avatar.optional(),
               })
               .parse(p);
-            validatePassword(data.password, state);
             if (state.band.members.some((u) => u.email === data.email)) {
               fail(409, 'Email address already exists.');
             }
             const { password, ...fields } = data;
+            const existing = store.members().find((candidate) => candidate.email === data.email);
+            if (existing) {
+              store.setMembership(state.band.id, existing.id, data.role);
+              invitationRecipient = { ...existing, role: data.role };
+              existingAccountInvitation = true;
+              result = { memberId: existing.id };
+              break;
+            }
+            validatePassword(data.password, state);
             const newMember: BandMember = {
               ...fields,
               id: randomUUID(),
@@ -1334,24 +1424,50 @@ export function createApplication(options: ApplicationOptions) {
               status: 'active',
               createdAt: now(),
             };
-            store.saveUser(newMember, hashPassword(password));
+            store.saveUser(newMember, hashPassword(password), state.band.id);
+            store.setMembership(state.band.id, newMember.id, newMember.role);
             invitationRecipient = newMember;
             result = { memberId: newMember.id };
             break;
           }
+          case 'member.existing.add': {
+            requireAdmin(user);
+            const data = z.object({ userId: required, role: roleSchema }).strict().parse(p);
+            if (state.band.members.some((member) => member.id === data.userId)) {
+              fail(409, 'This account already belongs to the band.');
+            }
+            const existing = store.members().find((member) => member.id === data.userId) ||
+              fail(404, 'Existing account not found.');
+            if (existing.status === 'suspended') {
+              fail(400, 'Activate this account before adding it to a band.');
+            }
+            if (existing.isSuperAdmin && !user.isSuperAdmin) {
+              fail(403, 'Only a Super Admin can manage another Super Admin.');
+            }
+            store.setMembership(state.band.id, existing.id, data.role);
+            invitationRecipient = { ...existing, role: data.role };
+            existingAccountInvitation = true;
+            result = { memberId: existing.id };
+            break;
+          }
           case 'member.invite': {
             requireAdmin(user);
-            const target = member();
+            const target = requireManageableMember(member());
             if (target.status === 'suspended') {
               fail(400, 'Activate this account before sending an invitation.');
+            }
+            if (target.lastLogin) {
+              fail(400, 'This user has already signed in.');
             }
             invitationRecipient = target;
             result = { memberId: target.id };
             break;
           }
           case 'member.profile': {
-            const target = member();
-            if (target.id !== user.id) requireAdmin(user);
+            const target = requireManageableMember(member());
+            if (target.id !== user.id && !user.isSuperAdmin) {
+              fail(403, 'Super Admin permission required.');
+            }
             const updates = profileSchema.parse(p.updates);
             if (
               updates.email &&
@@ -1366,17 +1482,24 @@ export function createApplication(options: ApplicationOptions) {
           }
           case 'member.password': {
             requireAdmin(user);
-            const target = member();
+            const target = requireManageableMember(member());
             const password = z.string().max(128).parse(p.password);
             validatePassword(password, state);
             store.saveUser(target, hashPassword(password));
-            db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+            if (target.id === user.id) {
+              db.prepare('DELETE FROM sessions WHERE user_id=? AND token_hash<>?').run(
+                target.id,
+                tokenHash(token(req)),
+              );
+            } else {
+              db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+            }
             db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(target.id);
             break;
           }
           case 'member.2fa.reset': {
             requireAdmin(user);
-            const target = member();
+            const target = requireManageableMember(member());
             db.prepare('DELETE FROM user_two_factor WHERE user_id=?').run(target.id);
             db.prepare('DELETE FROM two_factor_challenges WHERE user_id=?').run(target.id);
             db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
@@ -1385,29 +1508,52 @@ export function createApplication(options: ApplicationOptions) {
             if (target.id === user.id) user.twoFactorEnabled = false;
             break;
           }
+          case 'member.superadmin': {
+            if (!user.isSuperAdmin) fail(403, 'Super Admin permission required.');
+            const target = member();
+            const enabled = z.boolean().parse(p.enabled);
+            if (
+              !enabled &&
+              target.isSuperAdmin &&
+              store.members().filter((candidate) => candidate.isSuperAdmin).length <= 1
+            ) {
+              fail(400, 'Keep at least one Super Admin account.');
+            }
+            store.saveUser({ ...target, isSuperAdmin: enabled });
+            break;
+          }
           case 'member.role':
           case 'member.status': {
             requireAdmin(user);
-            const target = member();
+            if (action === 'member.status' && !user.isSuperAdmin) {
+              fail(403, 'Super Admin permission required.');
+            }
+            const target = requireManageableMember(member());
             const updated = { ...target };
             if (action === 'member.role') {
               updated.role = roleSchema.parse(p.role);
+              store.setMembership(state.band.id, target.id, updated.role);
             } else {
               updated.status = z
                 .enum(['active', 'suspended', 'invited'])
                 .parse(p.status);
             }
             protectLastAdmin(target, updated);
-            store.saveUser(updated);
-            db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
-            db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(target.id);
+            store.saveUser({ ...updated, role: target.role });
+            if (action === 'member.status') {
+              db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+              db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(target.id);
+            }
             break;
           }
           case 'member.delete': {
             requireAdmin(user);
-            const target = member();
+            const target = requireManageableMember(member());
             protectLastAdmin(target);
-            db.prepare('DELETE FROM users WHERE id=?').run(target.id);
+            store.removeMembership(state.band.id, target.id);
+            if (store.bandsForUser(target.id).length === 0) {
+              db.prepare('DELETE FROM users WHERE id=?').run(target.id);
+            }
             break;
           }
           case 'song.add': {
@@ -1850,14 +1996,14 @@ export function createApplication(options: ApplicationOptions) {
           default:
             fail(400, 'Unknown action.');
         }
-        store.write(state);
+        store.write(state, user.activeBandId);
       });
 
       removeMediaFiles(deletedMedia);
 
       if (invitationRecipient) {
         const recipient = invitationRecipient;
-        const invitationState = store.read();
+        const invitationState = store.read(user.activeBandId);
         const bandName = invitationState.band.name;
         const invitationEmail = brandedEmail(
           {
@@ -1869,12 +2015,14 @@ export function createApplication(options: ApplicationOptions) {
             details: [
               { label: 'Workspace', value: bandName },
               { label: 'Sign-in email', value: recipient.email },
-              { label: 'Role', value: recipient.role },
+              { label: 'Role', value: roleDisplayName(recipient.role, recipient.isSuperAdmin) },
               { label: 'Instrument', value: recipient.instrument },
             ],
             ctaLabel: `Sign in to ${bandName}`,
             afterCta:
-              'Your Band Admin will share your initial password separately. After signing in, change it under Profile Management.',
+              existingAccountInvitation
+                ? 'Sign in with your existing RehearsalHQ email and password, then use the band switcher to open this workspace.'
+                : 'Your Band Admin will share your initial password separately. After signing in, change it under Profile Management.',
           },
           invitationState,
         );
@@ -1884,7 +2032,8 @@ export function createApplication(options: ApplicationOptions) {
           `[${bandName}] You're invited to the band workspace`,
           invitationEmail,
           'member_invite',
-          true
+          true,
+          user.activeBandId,
         );
         result = {
           memberId: recipient.id,
@@ -1901,7 +2050,10 @@ export function createApplication(options: ApplicationOptions) {
 
       res.json({
         state: snapshot(
-          store.members().find((u) => u.id === user.id) || user
+          {
+            ...(store.members(user.activeBandId).find((u) => u.id === user.id) || user),
+            activeBandId: user.activeBandId,
+          }
         ),
         result,
       });
@@ -1943,9 +2095,11 @@ export function createApplication(options: ApplicationOptions) {
     subject: string,
     emailContent: RenderedEmail,
     type: EmailEventType,
-    requireDelivery = false
+    requireDelivery = false,
+    bandId?: string,
   ): Promise<EmailNotificationLog> {
-    const settings = store.read().smtpSettings;
+    const targetBandId = bandId || store.defaultBandId();
+    const settings = store.read(targetBandId).smtpSettings;
     const log: EmailNotificationLog = {
       id: randomUUID(),
       recipientEmail: to,
@@ -1987,15 +2141,15 @@ export function createApplication(options: ApplicationOptions) {
           error instanceof Error ? error.message : 'SMTP delivery failed.';
       }
     }
-    const state = store.read();
+    const state = store.read(targetBandId);
     state.emailLogs.unshift(log);
     state.emailLogs = state.emailLogs.slice(0, 1e3);
-    store.write(state);
+    store.write(state, targetBandId);
     return log;
   }
 
   async function notify(user: BandMember, event: AppNotification) {
-    const state = store.read();
+    const state = store.read(user.activeBandId);
     if (!state.smtpSettings.isEnabled) return;
     const preference: Record<string, string> = {
       demo_archived: 'demoArchived',
@@ -2027,7 +2181,9 @@ export function createApplication(options: ApplicationOptions) {
         memberDisplayName(recipient),
         `[${state.band.name}] ${event.subject}`,
         email,
-        event.type
+        event.type,
+        false,
+        state.band.id,
       );
     }
   }
@@ -2035,8 +2191,8 @@ export function createApplication(options: ApplicationOptions) {
   function cleanupArchivedDemos(referenceTime = new Date()): number {
     const deletedMedia: string[] = [];
     let deletedCount = 0;
-    store.transaction(() => {
-      const state = store.read();
+    for (const bandId of store.bandIds()) store.transaction(() => {
+      const state = store.read(bandId);
       if (!state.appSettings.autoDeleteArchivedDemos) return;
 
       const referenceIso = referenceTime.toISOString();
@@ -2056,7 +2212,7 @@ export function createApplication(options: ApplicationOptions) {
           changed = true;
         }
       }
-      if (changed) store.write(state);
+      if (changed) store.write(state, bandId);
     });
     removeMediaFiles(deletedMedia);
     return deletedCount;
@@ -2064,8 +2220,8 @@ export function createApplication(options: ApplicationOptions) {
 
   function cleanupPastPractices(referenceTime = new Date()): number {
     let deletedCount = 0;
-    store.transaction(() => {
-      const state = store.read();
+    for (const bandId of store.bandIds()) store.transaction(() => {
+      const state = store.read(bandId);
       const cutoff = referenceTime.getTime() - 30 * 24 * 60 * 60 * 1000;
       const retainedPractices = state.practices.filter((practice) => {
         const endTime = practiceEndTimestamp(practice);
@@ -2075,16 +2231,22 @@ export function createApplication(options: ApplicationOptions) {
       });
       if (deletedCount > 0) {
         state.practices = retainedPractices;
-        store.write(state);
+        store.write(state, bandId);
       }
     });
     return deletedCount;
   }
 
   async function sendPracticeReminders(
-    referenceTime = new Date()
+    referenceTime = new Date(),
+    bandId?: string,
   ): Promise<number> {
-    const state = store.read();
+    if (!bandId) {
+      let total = 0;
+      for (const id of store.bandIds()) total += await sendPracticeReminders(referenceTime, id);
+      return total;
+    }
+    const state = store.read(bandId);
     if (!state.smtpSettings.isEnabled) {
       return 0;
     }
@@ -2185,7 +2347,7 @@ export function createApplication(options: ApplicationOptions) {
       if (delivered.size !== deliveredBefore) reminderStateChanged = true;
     }
 
-    if (reminderStateChanged) store.write(state);
+    if (reminderStateChanged) store.write(state, bandId);
 
     for (const { recipient, practice, type, timing } of pending) {
       const needsRsvp = type === 'practice_reminder';
@@ -2220,7 +2382,9 @@ export function createApplication(options: ApplicationOptions) {
           ? `[${state.band.name}] RSVP needed: ${practice.title}`
           : `[${state.band.name}] Practice reminder (${timing}): ${practice.title}`,
         email,
-        type
+        type,
+        false,
+        state.band.id,
       );
     }
 
@@ -2230,7 +2394,8 @@ export function createApplication(options: ApplicationOptions) {
   app.post(
     '/api/smtp/verify',
     route(async (req: Request, res: Response) => {
-      requireAdmin(res.locals.user);
+      const user = res.locals.user as BandMember;
+      if (!user.isSuperAdmin) fail(403, 'Super Admin permission required.');
       const fields = z
         .object({
           host: smtpSchema.shape.host,
@@ -2242,12 +2407,12 @@ export function createApplication(options: ApplicationOptions) {
         })
         .parse(req.body);
       const settings = {
-        ...store.read().smtpSettings,
+        ...store.read(user.activeBandId).smtpSettings,
         ...fields,
         authRequired: fields.authRequired ?? Boolean(fields.username),
       };
       if (!fields.password) {
-        settings.password = store.read().smtpSettings.password;
+        settings.password = store.read(user.activeBandId).smtpSettings.password;
       }
       await transport(settings, fields.password || undefined).verify();
       res.json({ success: true, message: 'SMTP connection verified.' });
@@ -2258,9 +2423,9 @@ export function createApplication(options: ApplicationOptions) {
     '/api/smtp/test',
     route(async (req: Request, res: Response) => {
       const user = res.locals.user as BandMember;
-      requireAdmin(user);
+      if (!user.isSuperAdmin) fail(403, 'Super Admin permission required.');
       const to = email.parse(req.body.to);
-      const state = store.read();
+      const state = store.read(user.activeBandId);
       const log = await deliver(
         to,
         memberDisplayName(user),
@@ -2285,7 +2450,9 @@ export function createApplication(options: ApplicationOptions) {
           },
           state,
         ),
-        'test_probe'
+        'test_probe',
+        false,
+        state.band.id,
       );
       res.json({
         success: log.status !== 'failed',
@@ -2304,9 +2471,9 @@ export function createApplication(options: ApplicationOptions) {
     '/api/smtp/resend',
     route(async (req: Request, res: Response) => {
       const user = res.locals.user as BandMember;
-      requireAdmin(user);
+      if (!user.isSuperAdmin) fail(403, 'Super Admin permission required.');
       const old =
-        store.read().emailLogs.find((l) => l.id === req.body.logId) ||
+        store.read(user.activeBandId).emailLogs.find((l) => l.id === req.body.logId) ||
         fail(404, 'Email log not found.');
       const log = await deliver(
         old.recipientEmail,
@@ -2319,7 +2486,8 @@ export function createApplication(options: ApplicationOptions) {
             'Open RehearsalHQ to view this notification: ' + origin,
         },
         old.eventType,
-        old.eventType === 'member_invite'
+        old.eventType === 'member_invite',
+        user.activeBandId,
       );
       res.json({
         success: log.status !== 'failed',

@@ -11,7 +11,7 @@ import {
   type ApplicationOptions,
 } from '../server/app.ts';
 import { verifyPassword } from '../server/database.ts';
-import { memberDisplayName } from '../src/shared/member.ts';
+import { memberDisplayName, roleDisplayName } from '../src/shared/member.ts';
 import { formatClockTime } from '../src/shared/time.ts';
 import {
   prepareEmailForDelivery,
@@ -37,6 +37,13 @@ test('member display names prefer a trimmed stage name with full-name fallback',
     memberDisplayName({ name: 'Alex Smith', stageName: '  Ace  ' }),
     'Ace',
   );
+});
+
+test('role display names distinguish app-wide and band roles', () => {
+  assert.equal(roleDisplayName('admin'), 'Band Admin');
+  assert.equal(roleDisplayName('member'), 'Band Member');
+  assert.equal(roleDisplayName('guest'), 'Band Guest');
+  assert.equal(roleDisplayName('admin', true), 'Super Admin');
 });
 
 test('clock times support 12-hour and 24-hour display', () => {
@@ -274,6 +281,10 @@ test('member invitations send through SMTP, report failures and can be resent wi
     assert.match(message, /share your initial password separately/);
     assert.ok(!message.includes(password));
     const member = await f.login(memberData.email);
+    assert.equal(
+      (await f.action(admin.cookie, 'member.invite', { userId })).status,
+      400,
+    );
     assert.equal(
       (await f.action(member.cookie, 'member.invite', { userId })).status,
       403,
@@ -980,7 +991,7 @@ test('legacy Editor accounts migrate to Member with merged permissions', async (
       (f.store.db.prepare('SELECT version FROM schema_version').get() as {
         version: number;
       }).version,
-      5,
+      8,
     );
   } finally {
     await f.close();
@@ -1526,7 +1537,7 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       .get()!;
     assert.match(
       String(uploadRow.relative_path),
-      /^Band_Admin\/riff\/[a-f0-9-]+\.wav$/,
+      /^Band_Admin\/Test_Band\/riff\/[a-f0-9-]+\.wav$/,
     );
     assert.equal(uploadRow.bytes, 0);
     const audioPath = path.join(
@@ -1799,6 +1810,179 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
   }
 });
 
+test('Super Admin creates isolated bands, switches between them, and stores media under the band', async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.login();
+    assert.equal(admin.state.currentUser.isSuperAdmin, true);
+    const originalBandId = admin.state.band.id;
+    const createdResponse = await f.action(admin.cookie, 'band.create', {
+      name: 'Second Band',
+    });
+    assert.equal(createdResponse.status, 200, await createdResponse.clone().text());
+    const createdBody = await createdResponse.json();
+    const secondBandId = createdBody.result.id;
+    assert.equal(createdBody.state.availableBands.length, 2);
+    const smtpUpdate = await f.action(admin.cookie, 'smtp.update', {
+      ...admin.state.smtpSettings,
+      fromName: 'Global RehearsalHQ Mail',
+    });
+    assert.equal(smtpUpdate.status, 200, await smtpUpdate.clone().text());
+    const authUpdate = await f.action(admin.cookie, 'auth.update', {
+      ...admin.state.authSettings,
+      sessionTimeoutMinutes: 180,
+    });
+    assert.equal(authUpdate.status, 200, await authUpdate.clone().text());
+
+    const memberResponse = await f.action(admin.cookie, 'member.add', {
+      name: 'All Bands Admin',
+      email: 'all-bands@example.com',
+      password,
+      role: 'member',
+      instrument: 'Keys',
+    });
+    assert.equal(memberResponse.status, 200, await memberResponse.clone().text());
+    const memberId = (await memberResponse.json()).result.memberId;
+    const promotion = await f.action(admin.cookie, 'member.superadmin', {
+      userId: memberId,
+      enabled: true,
+    });
+    assert.equal(promotion.status, 200, await promotion.clone().text());
+    assert.deepEqual(
+      f.store.bandsForUser(memberId).map((entry) => entry.role),
+      ['admin', 'admin'],
+    );
+    const bandAdminResponse = await f.action(admin.cookie, 'member.add', {
+      name: 'Band Admin Only',
+      email: 'band-admin-only@example.com',
+      password,
+      role: 'admin',
+      instrument: 'Drums',
+    });
+    assert.equal(bandAdminResponse.status, 200, await bandAdminResponse.clone().text());
+    const lowerMemberResponse = await f.action(admin.cookie, 'member.add', {
+      name: 'Lower Level Member',
+      email: 'lower-member@example.com',
+      password,
+      role: 'member',
+      instrument: 'Bass',
+    });
+    assert.equal(lowerMemberResponse.status, 200, await lowerMemberResponse.clone().text());
+    const lowerMemberId = (await lowerMemberResponse.json()).result.memberId;
+    const bandAdmin = await f.login('band-admin-only@example.com');
+    assert.equal(
+      (await f.action(bandAdmin.cookie, 'member.role', { userId: lowerMemberId, role: 'guest' })).status,
+      200,
+    );
+    assert.equal(
+      (await f.action(bandAdmin.cookie, 'member.password', {
+        userId: lowerMemberId,
+        password: 'LowerMemberPassword!456',
+      })).status,
+      200,
+    );
+    assert.equal(
+      (await f.action(bandAdmin.cookie, 'member.2fa.reset', { userId: lowerMemberId })).status,
+      200,
+    );
+    assert.equal(
+      (await f.action(bandAdmin.cookie, 'member.password', {
+        userId: bandAdmin.state.currentUser.id,
+        password: 'BandAdminPassword!456',
+      })).status,
+      200,
+    );
+    assert.equal((await f.request('/api/state', undefined, bandAdmin.cookie)).status, 200);
+    assert.equal(
+      (await f.action(bandAdmin.cookie, 'member.role', { userId: memberId, role: 'guest' })).status,
+      403,
+    );
+    assert.equal(
+      (await f.action(bandAdmin.cookie, 'member.invite', { userId: memberId })).status,
+      403,
+    );
+    assert.equal(
+      (await f.action(bandAdmin.cookie, 'member.delete', { userId: memberId })).status,
+      403,
+    );
+    assert.equal(
+      (await f.action(bandAdmin.cookie, 'member.role', {
+        userId: bandAdmin.state.currentUser.id,
+        role: 'member',
+      })).status,
+      200,
+    );
+
+    const switchedResponse = await f.request(
+      '/api/auth/band',
+      { bandId: secondBandId },
+      admin.cookie,
+    );
+    assert.equal(switchedResponse.status, 200, await switchedResponse.clone().text());
+    const switched = await switchedResponse.json();
+    assert.equal(switched.band.name, 'Second Band');
+    assert.deepEqual(switched.songs, []);
+    assert.equal(switched.smtpSettings.fromName, 'Global RehearsalHQ Mail');
+    assert.equal(switched.authSettings.sessionTimeoutMinutes, 180);
+    const availableResponse = await f.request(
+      '/api/users/available',
+      undefined,
+      admin.cookie,
+    );
+    assert.equal(availableResponse.status, 200);
+    const availableUsers = await availableResponse.json();
+    assert.equal(
+      availableUsers.some((candidate: { id: string }) => candidate.id === lowerMemberId),
+      true,
+    );
+    const addExistingResponse = await f.action(admin.cookie, 'member.existing.add', {
+      userId: lowerMemberId,
+      role: 'member',
+    });
+    assert.equal(addExistingResponse.status, 200, await addExistingResponse.clone().text());
+    assert.equal(f.store.bandsForUser(lowerMemberId).length, 2);
+
+    const thirdBandResponse = await f.action(admin.cookie, 'band.create', {
+      name: 'Third Band',
+    });
+    assert.equal(thirdBandResponse.status, 200, await thirdBandResponse.clone().text());
+    const thirdBandId = (await thirdBandResponse.json()).result.id;
+    assert.equal(
+      f.store.bandsForUser(memberId).some((entry) => entry.id === thirdBandId && entry.role === 'admin'),
+      true,
+    );
+
+    const upload = await f.request(
+      '/api/uploads?category=idea',
+      undefined,
+      admin.cookie,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'audio/wav' },
+        body: Buffer.from('second-band-audio'),
+      },
+    );
+    assert.equal(upload.status, 201, await upload.clone().text());
+    const { audioUrl } = await upload.json();
+    const uploadRow = f.store.db
+      .prepare('SELECT relative_path,band_id FROM uploads WHERE id=?')
+      .get(audioUrl.split('/').pop()) as { relative_path: string; band_id: string };
+    assert.match(uploadRow.relative_path, /^Band_Admin\/Second_Band\/idea\//);
+    assert.equal(uploadRow.band_id, secondBandId);
+
+    const switchedBack = await f.request(
+      '/api/auth/band',
+      { bandId: originalBandId },
+      admin.cookie,
+    );
+    assert.equal(switchedBack.status, 200);
+    assert.equal((await switchedBack.json()).band.name, 'Test Band');
+    assert.equal((await f.request(audioUrl, undefined, admin.cookie)).status, 404);
+  } finally {
+    await f.close();
+  }
+});
+
 test('legacy SQLite audio migrates safely and keeps its playback URL', async () => {
   const f = await fixture();
   try {
@@ -1806,7 +1990,7 @@ test('legacy SQLite audio migrates safely and keeps its playback URL', async () 
     const id = '11111111-1111-4111-8111-111111111111';
     // Recreate the v1 uploads table to exercise an existing deployment upgrade.
     f.store.db.exec(
-      'ALTER TABLE uploads DROP COLUMN relative_path; UPDATE schema_version SET version=1;',
+      'ALTER TABLE uploads DROP COLUMN relative_path; ALTER TABLE uploads DROP COLUMN band_id; UPDATE schema_version SET version=1;',
     );
     f.store.db
       .prepare('INSERT INTO uploads VALUES (?,?,?,?,?)')
@@ -1860,7 +2044,7 @@ test('legacy SQLite audio migrates safely and keeps its playback URL', async () 
         'SELECT relative_path,length(data) AS bytes FROM uploads WHERE id=?',
       )
       .get(id)!;
-    assert.equal(row.relative_path, `Band_Admin/bass/${id}.mp3`);
+    assert.equal(row.relative_path, `Band_Admin/Test_Band/bass/${id}.mp3`);
     assert.equal(row.bytes, 0);
     assert.equal(
       readFileSync(

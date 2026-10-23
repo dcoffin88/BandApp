@@ -15,7 +15,9 @@ RehearsalHQ provides a centralized, self-hosted environment for band collaborati
 - **Audio Management** - Upload, organize, and access recordings through an authenticated API.
 - **Lyrics & Rehearsals** - Collaborate on lyrics and manage rehearsal activities.
 - **Member Management** - Manage accounts, permissions, and invitations.
-- **Role-Based Access** - Admin, Member, and Guest permissions.
+- **Multiple Bands** - Keep each band's recordings, schedules, settings, and memberships isolated; switch bands from the account menu.
+- **Super Admins** - Create band instances and grant Super Admin access while Band Admins manage their own members.
+- **Role-Based Access** - Super Admin, Band Admin, Band Member, and Band Guest permissions.
 - **Personalized Appearance** - Individual theme preferences.
 - **Email Notifications** - SMTP invitations, delivery tracking, and resend capabilities.
 - **Docker Deployment** - Prebuilt production image with persistent bind mounts, health checks, and resource limits.
@@ -28,7 +30,7 @@ Each member can customize their appearance under **Profile & Settings → Appear
 
 Existing accounts inherit the previous shared appearance settings once during an upgrade.
 
-Band-wide branding, including the logo, logo shape, name, and subtitle—is managed exclusively by Admins under **App Settings**.
+Band-wide branding, including the logo, logo shape, name, and subtitle—is managed exclusively by Band Admins under **App Settings**.
 
 <img src=".github/assets/rehearsalhq-screen-settings.png" alt="RehearsalHQ administrator settings" width="900" />
 
@@ -133,12 +135,12 @@ docker inspect --format '{{.State.Health.Status}}' rehearsalhq
 ```
 
 ### 4. Sign in
-Open the URL specified in `APP_URL` and sign in with the configured initial Admin credentials. Changing `INITIAL_ADMIN_PASSWORD` later does **not** reset an existing account; these settings are used only when provisioning a new database.
+Open the URL specified in `APP_URL` and sign in with the configured initial Super Admin credentials. Changing `INITIAL_ADMIN_PASSWORD` later does **not** reset an existing account; these settings are used only when provisioning a new database.
 
 For a public deployment, use HTTPS behind a reverse proxy. The example Compose mapping publishes the app on host interfaces; restrict it with firewall rules, or configure a shared Docker network with your reverse proxy and remove the published host port.
 
-### 5. Invite Members
-Admins can create accounts through `User Management`.
+### 5. Invite Band Members
+Band Admins can create accounts through `User Management`.
 <img src=".github/assets/rehearsalhq-screen-users.png" alt="RehearsalHQ user management and role permissions" width="900" />
 
 When a member is created:
@@ -146,12 +148,12 @@ When a member is created:
 2. The delivery result is recorded in the `Email Settings` outbox.
 3. Initial passwords are never included in invitation emails or email logs and must be communicated separately through a private channel.
 
-Members can change their passwords under `Profile Management`.
+Band Members can change their passwords under `Profile Management`.
 
 `Account security notes`:
 - Public registration is disabled.
-- Initial Admin environment variables only provision a new database.
-- Changing the initial Admin password in .env does not reset an existing password.
+- Initial Super Admin environment variables only provision a new database.
+- Changing the initial Super Admin password in `.env` does not reset an existing password.
 
 ---
 
@@ -202,7 +204,7 @@ The `./data` host directory is bind-mounted at `/app/data` and stores the SQLite
 /app/data/rehearsalhq.sqlite
 ```
 
-The database contains band data, audio metadata, password hashes, user preferences, and sessions.
+The database contains isolated band workspaces, per-band memberships and roles, audio metadata, password hashes, user preferences, and sessions.
 
 ### Audio Files
 
@@ -211,26 +213,25 @@ Uploaded audio is stored in the `./media` host directory, bind-mounted at `/medi
 Directory structure:
 
 ```text
-/media/<userName>/<category>/<unique-file-id>.<extension>
+/media/<userName>/<band>/<category>/<unique-file-id>.<extension>
 ```
 
 Example:
 
 ```text
-/media/Jordan_Smith/riff/12345678-1234-4234-8234-123456789abc.wav
+/media/Jordan_Smith/The_Band/riff/12345678-1234-4234-8234-123456789abc.wav
 ```
 
 **Storage behavior:**
 
 - `userName` is derived from the uploader's name at upload time.
+- `band` is derived from the active band name, keeping each band's files separated.
 - Spaces and unsafe folder characters are replaced with underscores.
 - Existing directories remain unchanged when a member changes their name.
 - Unique file IDs prevent filename collisions.
 - Audio is served through the authenticated API, not a public static directory.
 
-Supported categories:
-
-`idea`, `chorus`, `riff`, `bass`, `full`, `verse`, `bridge`
+Categories are configured independently by each band's Band Admins.
 
 ### Custom Media Directory
 
@@ -365,7 +366,7 @@ Features include:
 
 - Server-side encryption of SMTP passwords using `APP_SECRET`
 - Password omission from API responses
-- Admin-only SMTP connection testing and invitation resends
+- Super Admin-only SMTP connection testing and invitation resends
 - TLS certificate validation
 - Shared outbox with delivery results and failures
 

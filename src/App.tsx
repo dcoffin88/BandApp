@@ -128,7 +128,7 @@ const AppContent: React.FC = () => {
 
 const SessionContent: React.FC = () => {
   const { currentUser, isAuthenticated } = useBand();
-  return <AudioPlayerProvider key={isAuthenticated ? currentUser.id : 'signed-out'}><AppContent /></AudioPlayerProvider>;
+  return <AudioPlayerProvider key={isAuthenticated ? `${currentUser.id}:${currentUser.activeBandId || ''}` : 'signed-out'}><AppContent /></AudioPlayerProvider>;
 };
 export default function App() {
   return (

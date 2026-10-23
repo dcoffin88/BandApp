@@ -75,7 +75,7 @@ export const SmtpSettingsView: React.FC = () => {
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [resendingId, setResendingId] = useState<string | null>(null);
 
-  const isAdmin = currentUser.role === 'admin';
+  const isAdmin = currentUser.isSuperAdmin === true;
 
   // Common SMTP Presets
   const SMTP_PRESETS = [
@@ -365,7 +365,7 @@ export const SmtpSettingsView: React.FC = () => {
             </div>
             {!isAdmin && (
               <span className="text-[11px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
-                Admin Edit Only
+                Super Admin Edit Only
               </span>
             )}
           </div>

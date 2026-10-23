@@ -12,6 +12,7 @@ import type {
   UserRolePermissions,
   UserAppearance,
   UserNotifications,
+  BandAccess,
 } from '../types/band.ts';
 import { DEFAULT_DEMO_CATEGORIES } from './songMetadata.ts';
 
@@ -101,6 +102,7 @@ export interface SharedState {
 export interface SessionState extends SharedState {
   currentUser: BandMember;
   permissions: UserRolePermissions;
+  availableBands: BandAccess[];
 }
 export interface PublicSessionState {
   currentUser: null;

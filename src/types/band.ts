@@ -51,7 +51,20 @@ export interface BandMember {
   chordSelectorEnabled?: boolean;
   isCurrentUser?: boolean;
   createdAt?: string;
+  isSuperAdmin?: boolean;
+  activeBandId?: string;
 }
+
+export interface BandAccess {
+  id: string;
+  name: string;
+  role: Role;
+}
+
+export type ExistingUserOption = Pick<
+  BandMember,
+  'id' | 'name' | 'stageName' | 'email' | 'instrument' | 'avatar' | 'role'
+>;
 
 export interface AudioVersion {
   id: string;

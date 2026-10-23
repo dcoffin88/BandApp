@@ -14,6 +14,7 @@ import type { UserAppearance, UserNotifications } from '../types/band.ts';
 import { appearanceFrom, notificationsFrom } from '../shared/defaults.ts';
 import { AppearanceSettings } from './AppearanceSettings.tsx';
 import { ImageCropModal } from './ImageCropModal.tsx';
+import { roleDisplayName } from '../shared/member.ts';
 
 const NOTIFICATION_OPTIONS: Array<{
   id: keyof UserNotifications;
@@ -403,7 +404,7 @@ export const ProfileSettingsView: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-zinc-500">Current Role:</span>
                 <span className="font-semibold uppercase text-amber-400">
-                  {currentUser.role}
+                  {roleDisplayName(currentUser.role, currentUser.isSuperAdmin)}
                 </span>
               </div>
               <div className="flex justify-between">
