@@ -6,6 +6,7 @@ import {
   scryptSync,
   timingSafeEqual,
   createHash,
+  randomUUID,
 } from 'node:crypto';
 import {
   DEFAULT_APPEARANCE,
@@ -107,6 +108,8 @@ export function openDatabase(filename: string) {
     CREATE TABLE IF NOT EXISTS user_two_factor (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, secret TEXT NOT NULL, recovery_hashes TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS two_factor_challenges (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, secret TEXT NOT NULL, recovery_hashes TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS trusted_devices (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS account_setup_tokens (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS uploads (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, mime TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL);
   `);
 
@@ -114,7 +117,10 @@ export function openDatabase(filename: string) {
     version: number;
   };
   let schemaVersion = versionRow.version;
-  if (![1, 2, 3, 4, 5].includes(schemaVersion)) {
+  db.prepare('INSERT OR IGNORE INTO state (id,value) VALUES (1,?)').run(
+    JSON.stringify(emptyState())
+  );
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(schemaVersion)) {
     throw new Error(
       'Unsupported database version; restore the matching application release.'
     );
@@ -161,18 +167,112 @@ export function openDatabase(filename: string) {
     db.exec('UPDATE schema_version SET version=5');
     schemaVersion = 5;
   }
+  if (schemaVersion === 5) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS band_states (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS band_memberships (
+          band_id TEXT NOT NULL REFERENCES band_states(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK(role IN ('admin','member','guest')),
+          PRIMARY KEY (band_id,user_id)
+        );
+      `);
+      const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
+      if (!sessionColumns.some((column) => column.name === 'band_id')) {
+        db.exec('ALTER TABLE sessions ADD COLUMN band_id TEXT');
+      }
+      const uploadColumns = db.prepare('PRAGMA table_info(uploads)').all() as Array<{ name: string }>;
+      if (!uploadColumns.some((column) => column.name === 'band_id')) {
+        db.exec('ALTER TABLE uploads ADD COLUMN band_id TEXT');
+      }
+      const legacyRow = db.prepare('SELECT value FROM state WHERE id=1').get() as { value: string };
+      const legacy = JSON.parse(String(legacyRow.value)) as SharedState;
+      const bandId = legacy.band.id || randomUUID();
+      legacy.band.id = bandId;
+      db.prepare('INSERT OR IGNORE INTO band_states (id,value) VALUES (?,?)').run(
+        bandId,
+        JSON.stringify({ ...legacy, band: { ...legacy.band, members: [] } }),
+      );
+      const users = db.prepare('SELECT id,profile FROM users ORDER BY rowid').all() as Array<{ id: string; profile: string }>;
+      const addMembership = db.prepare('INSERT OR IGNORE INTO band_memberships VALUES (?,?,?)');
+      let promoted = false;
+      const updateProfile = db.prepare('UPDATE users SET profile=? WHERE id=?');
+      for (const row of users) {
+        const profile = JSON.parse(String(row.profile)) as BandMember;
+        const role = ['admin', 'member', 'guest'].includes(profile.role) ? profile.role : 'guest';
+        addMembership.run(bandId, row.id, role);
+        if (!promoted && role === 'admin' && profile.status === 'active') {
+          profile.isSuperAdmin = true;
+          updateProfile.run(JSON.stringify(profile), row.id);
+          promoted = true;
+        }
+      }
+      db.prepare('UPDATE sessions SET band_id=? WHERE band_id IS NULL').run(bandId);
+      db.prepare('UPDATE uploads SET band_id=? WHERE band_id IS NULL').run(bandId);
+      db.exec('UPDATE schema_version SET version=6; COMMIT;');
+      schemaVersion = 6;
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  if (schemaVersion === 6) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec('CREATE TABLE IF NOT EXISTS global_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+      const firstBand = db.prepare('SELECT value FROM band_states ORDER BY rowid LIMIT 1').get() as { value: string };
+      const firstState = JSON.parse(String(firstBand.value)) as SharedState;
+      db.prepare('INSERT OR IGNORE INTO global_settings (key,value) VALUES (?,?)').run(
+        'smtp',
+        JSON.stringify(firstState.smtpSettings),
+      );
+      db.exec('UPDATE schema_version SET version=7; COMMIT;');
+      schemaVersion = 7;
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  if (schemaVersion === 7) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const firstBand = db.prepare('SELECT value FROM band_states ORDER BY rowid LIMIT 1').get() as { value: string };
+      const firstState = JSON.parse(String(firstBand.value)) as SharedState;
+      db.prepare('INSERT OR IGNORE INTO global_settings (key,value) VALUES (?,?)').run(
+        'auth',
+        JSON.stringify(firstState.authSettings),
+      );
+      db.exec('UPDATE schema_version SET version=8; COMMIT;');
+      schemaVersion = 8;
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  if (schemaVersion === 8) {
+    db.exec('UPDATE schema_version SET version=9');
+    schemaVersion = 9;
+  }
+  if (schemaVersion === 9) {
+    db.exec('UPDATE schema_version SET version=10');
+    schemaVersion = 10;
+  }
 
-  db.prepare('INSERT OR IGNORE INTO state (id,value) VALUES (1,?)').run(
-    JSON.stringify(emptyState())
-  );
+  function defaultBandId(): string {
+    const row = db.prepare('SELECT id FROM band_states ORDER BY rowid LIMIT 1').get() as { id: string } | undefined;
+    if (!row) throw new Error('No band is configured.');
+    return row.id;
+  }
 
-  function members(): BandMember[] {
-    return (
-      db.prepare('SELECT profile FROM users ORDER BY rowid').all() as Array<{
-        profile: string;
-      }>
-    ).map((row) => {
+  function members(bandId?: string): BandMember[] {
+    const rows = bandId
+      ? db.prepare(`SELECT u.profile,m.role FROM users u JOIN band_memberships m ON m.user_id=u.id WHERE m.band_id=? ORDER BY u.rowid`).all(bandId) as Array<{ profile: string; role: string }>
+      : db.prepare('SELECT profile,NULL AS role FROM users ORDER BY rowid').all() as Array<{ profile: string; role: string | null }>;
+    return rows.map((row) => {
       const member = JSON.parse(String(row.profile)) as BandMember;
+      if (row.role) member.role = row.role as BandMember['role'];
       member.twoFactorEnabled = Boolean(
         db.prepare('SELECT 1 FROM user_two_factor WHERE user_id=?').get(member.id),
       );
@@ -180,12 +280,17 @@ export function openDatabase(filename: string) {
     });
   }
 
-  function read(): SharedState {
-    const row = db.prepare('SELECT value FROM state WHERE id=1').get() as {
+  function read(bandId = defaultBandId()): SharedState {
+    const row = db.prepare('SELECT value FROM band_states WHERE id=?').get(bandId) as {
       value: string;
-    };
+    } | undefined;
+    if (!row) throw new Error('Band not found.');
     const state = JSON.parse(String(row.value)) as SharedState;
-    state.band.members = members();
+    const globalSmtp = db.prepare("SELECT value FROM global_settings WHERE key='smtp'").get() as { value: string } | undefined;
+    if (globalSmtp) state.smtpSettings = JSON.parse(String(globalSmtp.value));
+    const globalAuth = db.prepare("SELECT value FROM global_settings WHERE key='auth'").get() as { value: string } | undefined;
+    if (globalAuth) state.authSettings = JSON.parse(String(globalAuth.value));
+    state.band.members = members(bandId);
     state.appSettings.timeFormat ??= '12';
     state.appSettings.autoDeleteArchivedDemos ??= true;
     state.appSettings.demoCategories ??= DEFAULT_DEMO_CATEGORIES.map(
@@ -218,15 +323,64 @@ export function openDatabase(filename: string) {
     return state;
   }
 
-  function write(state: SharedState): void {
+  function write(state: SharedState, bandId = state.band.id): void {
     state.revision++;
-    db.prepare('UPDATE state SET value=? WHERE id=1').run(
-      JSON.stringify({ ...state, band: { ...state.band, members: [] } })
+    db.prepare('UPDATE band_states SET value=? WHERE id=?').run(
+      JSON.stringify({ ...state, band: { ...state.band, id: bandId, members: [] } }),
+      bandId,
     );
   }
 
-  function saveUser(user: BandMember, passwordHash?: string): void {
-    const { password: _password, twoFactorEnabled: _twoFactorEnabled, ...profile } = {
+  function bandsForUser(userId: string) {
+    return db.prepare(`SELECT b.id,b.value,m.role FROM band_states b JOIN band_memberships m ON m.band_id=b.id WHERE m.user_id=? ORDER BY b.rowid`).all(userId).map((row: any) => ({
+      id: String(row.id),
+      name: (JSON.parse(String(row.value)) as SharedState).band.name,
+      role: row.role as BandMember['role'],
+    }));
+  }
+
+  function bandIds(): string[] {
+    return (db.prepare('SELECT id FROM band_states ORDER BY rowid').all() as Array<{ id: string }>).map((row) => row.id);
+  }
+
+  function createBand(name: string, creatorId: string): SharedState {
+    const state = emptyState();
+    state.band.id = randomUUID();
+    state.band.name = name;
+    db.prepare('INSERT INTO band_states (id,value) VALUES (?,?)').run(
+      state.band.id,
+      JSON.stringify(state),
+    );
+    setMembership(state.band.id, creatorId, 'admin');
+    for (const superAdmin of members().filter((member) => member.isSuperAdmin)) {
+      setMembership(state.band.id, superAdmin.id, 'admin');
+    }
+    return read(state.band.id);
+  }
+
+  function setMembership(bandId: string, userId: string, role: BandMember['role']) {
+    db.prepare('INSERT INTO band_memberships VALUES (?,?,?) ON CONFLICT(band_id,user_id) DO UPDATE SET role=excluded.role').run(bandId, userId, role);
+  }
+
+  function removeMembership(bandId: string, userId: string) {
+    db.prepare('DELETE FROM band_memberships WHERE band_id=? AND user_id=?').run(bandId, userId);
+  }
+
+  function saveSmtpSettings(settings: SharedState['smtpSettings']) {
+    db.prepare("INSERT INTO global_settings (key,value) VALUES ('smtp',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(
+      JSON.stringify(settings),
+    );
+  }
+
+  function saveAuthSettings(settings: SharedState['authSettings']) {
+    db.prepare("INSERT INTO global_settings (key,value) VALUES ('auth',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(
+      JSON.stringify(settings),
+    );
+  }
+
+  function saveUser(user: BandMember, passwordHash?: string, initialBandId?: string): void {
+    const existed = Boolean(db.prepare('SELECT 1 FROM users WHERE id=?').get(user.id));
+    const { password: _password, twoFactorEnabled: _twoFactorEnabled, activeBandId: _activeBandId, ...profile } = {
       ...user,
       notifications: notificationsFrom(user.notifications),
       appearanceSettings: appearanceFrom(
@@ -248,6 +402,12 @@ export function openDatabase(filename: string) {
         JSON.stringify(profile),
         user.id
       );
+    }
+    if (!existed && passwordHash) {
+      setMembership(initialBandId || defaultBandId(), user.id, user.role);
+    }
+    if (user.isSuperAdmin) {
+      for (const bandId of bandIds()) setMembership(bandId, user.id, 'admin');
     }
   }
 
@@ -277,7 +437,7 @@ export function openDatabase(filename: string) {
     }
   });
 
-  return { db, read, write, members, saveUser, transaction };
+  return { db, read, write, members, saveUser, transaction, defaultBandId, bandIds, bandsForUser, createBand, setMembership, removeMembership, saveSmtpSettings, saveAuthSettings };
 }
 
 export type DatabaseStore = ReturnType<typeof openDatabase>;

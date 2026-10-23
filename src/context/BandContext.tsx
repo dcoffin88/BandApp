@@ -24,6 +24,8 @@ import type {
   UserStatus,
   AddMemberResult,
   MemberInvitationResult,
+  BandAccess,
+  ExistingUserOption,
 } from '../types/band.ts';
 import {
   emptyState,
@@ -54,11 +56,17 @@ interface BandContextType {
   practices: PracticeSession[];
   isAudioInitialized: boolean;
   isAuthenticated: boolean;
+  passwordResetEnabled: boolean;
   authSettings: AuthSettings;
   auditLogs: LoginAuditEntry[];
   appSettings: AppSettings;
   smtpSettings: SmtpSettings;
   emailLogs: EmailNotificationLog[];
+  availableBands: BandAccess[];
+  switchBand: (bandId: string) => Promise<boolean>;
+  createBand: (name: string) => Promise<boolean>;
+  getAvailableUsers: () => Promise<ExistingUserOption[]>;
+  addExistingBandMember: (userId: string, role: Role) => Promise<AddMemberResult>;
   updateAppSettings: (newSettings: Partial<AppSettings>) => Promise<boolean>;
   updateAppearance: (settings: UserAppearance) => Promise<boolean>;
   updateSmtpSettings: (settings: SmtpSettings) => Promise<boolean>;
@@ -79,6 +87,9 @@ interface BandContextType {
     newPassword: string,
   ) => Promise<AuthResponse>;
   login: (email: string, password: string) => Promise<AuthResponse>;
+  forgotPassword: (email: string) => Promise<AuthResponse>;
+  resetPassword: (token: string, newPassword: string) => Promise<AuthResponse>;
+  setupAccount: (token: string, newPassword: string) => Promise<AuthResponse>;
   verifyTwoFactor: (
     challengeToken: string,
     code: string,
@@ -87,11 +98,15 @@ interface BandContextType {
   logout: () => Promise<boolean>;
   updateUserRole: (memberId: string, newRole: Role) => Promise<boolean>;
   updateUserStatus: (memberId: string, status: UserStatus) => Promise<boolean>;
+  updateSuperAdmin: (memberId: string, enabled: boolean) => Promise<boolean>;
   updateUserProfile: (
     userId: string,
     updates: Partial<BandMember>,
   ) => Promise<boolean>;
   resetUserTwoFactor: (userId: string) => Promise<boolean>;
+  sendUserPasswordReset: (
+    userId: string,
+  ) => Promise<{ success: boolean; message: string }>;
   deleteUserAccount: (userId: string) => Promise<boolean>;
   updateAuthSettings: (settings: AuthSettings) => Promise<boolean>;
   clearAuditLogs: () => Promise<boolean>;
@@ -218,10 +233,12 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     ...emptyState(),
     currentUser: anonymousUser,
     permissions: ROLE_PERMISSIONS.guest,
+    availableBands: [],
   }));
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
+  const [passwordResetEnabled, setPasswordResetEnabled] = useState(false);
   const epoch = useRef(0);
   const apply = useCallback((next: SessionState) => {
     setState((previous) =>
@@ -242,6 +259,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       },
       currentUser: anonymousUser,
       permissions: ROLE_PERMISSIONS.guest,
+      availableBands: [],
     }));
   }, []);
   const report = (err: unknown) => {
@@ -260,6 +278,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       if (data.currentUser) apply(data as SessionState);
       else {
         const branding = data as PublicSessionState;
+        setPasswordResetEnabled(branding.passwordResetEnabled);
         clear(branding.bandName, branding.appSettings);
       }
       setReady(true);
@@ -367,6 +386,52 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       };
     }
   }
+  async function forgotPassword(email: string): Promise<AuthResponse> {
+    try {
+      const result = await api<AuthResponse>('/api/auth/password/forgot', {
+        email,
+      });
+      return result;
+    } catch (err) {
+      return {
+        success: false,
+        message:
+          err instanceof Error ? err.message : 'Unable to request a password reset.',
+      };
+    }
+  }
+  async function resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<AuthResponse> {
+    try {
+      return await api<AuthResponse>('/api/auth/password/reset', {
+        token,
+        newPassword,
+      });
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Unable to reset password.',
+      };
+    }
+  }
+  async function setupAccount(
+    token: string,
+    newPassword: string,
+  ): Promise<AuthResponse> {
+    try {
+      return await api<AuthResponse>('/api/auth/account/setup', {
+        token,
+        newPassword,
+      });
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Unable to set up account.',
+      };
+    }
+  }
   async function changePassword(
     currentPassword: string,
     newPassword: string,
@@ -386,6 +451,18 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       await api('/api/auth/logout', {});
       clear(state.band.name);
+      return true;
+    } catch (err) {
+      report(err);
+      return false;
+    }
+  }
+  async function switchBand(bandId: string) {
+    try {
+      const next = await api<SessionState>('/api/auth/band', { bandId });
+      epoch.current++;
+      setState(next);
+      setError('');
       return true;
     } catch (err) {
       report(err);
@@ -510,11 +587,37 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
   const value: BandContextType = {
     ...state,
     isAuthenticated: authenticated,
+    passwordResetEnabled,
     isAudioInitialized: true,
     login,
+    forgotPassword,
+    resetPassword,
+    setupAccount,
     verifyTwoFactor,
     changePassword,
     logout,
+    switchBand,
+    createBand: (name) => save('band.create', { name }),
+    getAvailableUsers: async () => {
+      try {
+        return await api<ExistingUserOption[]>('/api/users/available');
+      } catch (err) {
+        report(err);
+        return [];
+      }
+    },
+    addExistingBandMember: async (userId, role) => {
+      try {
+        const result = await mutate<Omit<AddMemberResult, 'success'>>(
+          'member.existing.add',
+          { userId, role },
+        );
+        return { success: true, ...result };
+      } catch (error) {
+        report(error);
+        return { success: false };
+      }
+    },
     updateAppSettings: (settings) => save('app.update', settings),
     updateAppearance: (settings) => save('appearance.update', settings),
     updateSmtpSettings: (settings) => save('smtp.update', settings),
@@ -524,6 +627,8 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     updateUserRole: (userId, role) => save('member.role', { userId, role }),
     updateUserStatus: (userId, status) =>
       save('member.status', { userId, status }),
+    updateSuperAdmin: (userId, enabled) =>
+      save('member.superadmin', { userId, enabled }),
     updateUserProfile: (userId, updates) =>
       updates.password !== undefined
         ? save('member.password', { userId, password: updates.password })
@@ -533,6 +638,8 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       if (saved && userId === state.currentUser.id) clear(state.band.name);
       return saved;
     },
+    sendUserPasswordReset: (userId) =>
+      mail('/api/users/password-reset', { userId }),
     deleteUserAccount: (userId) => save('member.delete', { userId }),
     updateAuthSettings: (settings) => save('auth.update', settings),
     clearAuditLogs: () => save('audit.clear', {}),

@@ -40,14 +40,14 @@ import {
   X,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
-import { AppSettings, AuthSettings, BandMember, Role, UserStatus, MemberInvitationResult, UserRolePermissions } from '../types/band.ts';
+import { AppSettings, AuthSettings, BandMember, ExistingUserOption, Role, UserStatus, MemberInvitationResult, UserRolePermissions } from '../types/band.ts';
 import { ImageCropModal } from './ImageCropModal.tsx';
 import { SmtpSettingsView } from './SmtpSettingsView.tsx';
 import { DEFAULT_AVATAR, ROLE_PERMISSIONS } from '../shared/defaults.ts';
 import { useAppVersion } from '../hooks/useAppVersion.ts';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionModal } from './VersionModal.tsx';
-import { memberDisplayName } from '../shared/member.ts';
+import { memberDisplayName, roleDisplayName } from '../shared/member.ts';
 import { timeFormatOptions } from '../shared/time.ts';
 
 interface AdminSettingsViewProps {
@@ -55,21 +55,34 @@ interface AdminSettingsViewProps {
 }
 
 const ROLE_OPTIONS: Array<{ value: Role; label: string; matrixLabel: string }> = [
-  { value: 'admin', label: 'Admin', matrixLabel: 'Admin' },
-  { value: 'member', label: 'Member', matrixLabel: 'Member' },
-  { value: 'guest', label: 'Guest', matrixLabel: 'Guest' },
+  { value: 'admin', label: 'Band Admin', matrixLabel: 'Band Admin' },
+  { value: 'member', label: 'Band Member', matrixLabel: 'Band Member' },
+  { value: 'guest', label: 'Band Guest', matrixLabel: 'Band Guest' },
+];
+
+const PERMISSION_MATRIX_ROLES: Array<{
+  value: Role | 'super_admin';
+  matrixLabel: string;
+}> = [
+  { value: 'super_admin', matrixLabel: 'Super Admin' },
+  ...ROLE_OPTIONS.map(({ value, matrixLabel }) => ({ value, matrixLabel })),
 ];
 
 const PERMISSION_ROWS: Array<{
   label: string;
-  permission: keyof UserRolePermissions;
+  permission?: keyof UserRolePermissions;
+  superAdminOnly?: boolean;
 }> = [
   { label: 'Upload Audio Demo Tracks', permission: 'canUploadDemo' },
   { label: 'Upload Multi-Take Versions (v1, v2...)', permission: 'canUploadVersion' },
   { label: 'Edit Lyrics, Chords & Tabs', permission: 'canEditLyrics' },
   { label: 'Schedule Practices & Rehearsals', permission: 'canSchedulePractice' },
   { label: 'Archive Song Ideas from Vault', permission: 'canDeleteTracks' },
-  { label: 'Manage Member Roles & Security Settings', permission: 'canManageMembers' },
+  { label: 'Manage Band Members & Roles', permission: 'canManageMembers' },
+  { label: 'Create Band Instances', superAdminOnly: true },
+  { label: 'Grant or Remove Super Admin Access', superAdminOnly: true },
+  { label: 'Manage Global Application Settings', superAdminOnly: true },
+  { label: 'Manage Global Application Security', superAdminOnly: true },
 ];
 
 export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
@@ -80,20 +93,26 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     currentUser,
     permissions,
     authSettings,
+    smtpSettings,
     auditLogs,
     appSettings,
     songs,
     updateBandName,
     updateUserRole,
     updateUserStatus,
+    updateSuperAdmin,
     updateUserProfile,
     resetUserTwoFactor,
+    sendUserPasswordReset,
     deleteUserAccount,
     updateAuthSettings,
     updateAppSettings,
     clearAuditLogs,
     addBandMember,
+    addExistingBandMember,
+    getAvailableUsers,
     sendMemberInvite,
+    createBand,
     logout,
   } = useBand();
 
@@ -113,6 +132,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [bandGenre, setBandGenre] = useState(band.genre);
   const [bandYear, setBandYear] = useState(band.foundedYear);
   const [bandSaveSuccess, setBandSaveSuccess] = useState(false);
+  const [newBandName, setNewBandName] = useState('');
+  const [bandCreateSuccess, setBandCreateSuccess] = useState(false);
 
   // App Settings & Header Logo State
   const [localAppSettings, setLocalAppSettings] = useState<AppSettings>(appSettings);
@@ -133,19 +154,30 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [newUserInstrument, setNewUserInstrument] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [isAddingMember, setIsAddingMember] = useState(false);
+  const [isExistingUserModalOpen, setIsExistingUserModalOpen] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<ExistingUserOption[]>([]);
+  const [selectedExistingUserId, setSelectedExistingUserId] = useState('');
+  const [existingUserRole, setExistingUserRole] = useState<Role>('member');
+  const [isLoadingExistingUsers, setIsLoadingExistingUsers] = useState(false);
+  const [isAddingExistingUser, setIsAddingExistingUser] = useState(false);
   const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
   const [invitationFeedback, setInvitationFeedback] = useState<MemberInvitationResult | null>(null);
 
   // Password reset modal state
   const [resettingUser, setResettingUser] = useState<BandMember | null>(null);
   const [newResetPassword, setNewResetPassword] = useState('');
+  const [passwordResettingUserId, setPasswordResettingUserId] = useState<string | null>(null);
+  const [promotingUser, setPromotingUser] = useState<BandMember | null>(null);
+  const [isUpdatingSuperAdmin, setIsUpdatingSuperAdmin] = useState(false);
 
   // Auth Settings Form State
   const [localAuthSettings, setLocalAuthSettings] = useState<AuthSettings>(authSettings);
   const [authSaveSuccess, setAuthSaveSuccess] = useState(false);
 
   const isAdmin = currentUser.role === 'admin';
-  const activeSubTab = selectedSubTab;
+  const activeSubTab = ['auth', 'smtp'].includes(selectedSubTab) && !currentUser.isSuperAdmin
+    ? 'app'
+    : selectedSubTab;
 
   // Handlers
   const handleSaveBandSettings = async (e: React.FormEvent) => {
@@ -154,6 +186,15 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     if (!await updateBandName(bandName, bandMotto, bandGenre, bandYear)) return;
     setBandSaveSuccess(true);
     setTimeout(() => setBandSaveSuccess(false), 2500);
+  };
+
+  const handleCreateBand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newBandName.trim();
+    if (!name || !(await createBand(name))) return;
+    setNewBandName('');
+    setBandCreateSuccess(true);
+    setTimeout(() => setBandCreateSuccess(false), 2500);
   };
 
   const handleSaveAppSettings = async (e: React.FormEvent) => {
@@ -263,7 +304,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       role: newUserRole,
       status: 'active',
       instrument: newUserInstrument.trim() || 'Vocals / Guitar',
-      password: newUserPassword,
+      password: smtpSettings.isEnabled ? undefined : newUserPassword,
       avatar: DEFAULT_AVATAR,
     });
 
@@ -275,6 +316,35 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     setNewUserEmail('');
     setNewUserInstrument('');
     setNewUserPassword('');
+  };
+
+  const openExistingUserModal = async () => {
+    setIsExistingUserModalOpen(true);
+    setIsLoadingExistingUsers(true);
+    const users = await getAvailableUsers();
+    setAvailableUsers(users);
+    setSelectedExistingUserId(users[0]?.id || '');
+    setIsLoadingExistingUsers(false);
+  };
+
+  const handleAddExistingUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedExistingUserId || isAddingExistingUser) return;
+    setIsAddingExistingUser(true);
+    setInvitationFeedback(null);
+    const saved = await addExistingBandMember(selectedExistingUserId, existingUserRole);
+    setIsAddingExistingUser(false);
+    if (!saved.success) return;
+    if (saved.invitation) {
+      setInvitationFeedback({
+        ...saved.invitation,
+        message: `Existing user added to ${band.name}. ${saved.invitation.message}`,
+      });
+    }
+    setIsExistingUserModalOpen(false);
+    setAvailableUsers([]);
+    setSelectedExistingUserId('');
+    setExistingUserRole('member');
   };
 
   const handleResendInvite = async (member: BandMember) => {
@@ -294,12 +364,24 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     setNewResetPassword('');
   };
 
+  const handleSendPasswordReset = async (member: BandMember) => {
+    if (passwordResettingUserId) return;
+    setPasswordResettingUserId(member.id);
+    setInvitationFeedback(null);
+    const result = await sendUserPasswordReset(member.id);
+    setPasswordResettingUserId(null);
+    setInvitationFeedback({
+      status: result.success ? 'sent' : 'failed',
+      message: result.message,
+    });
+  };
+
   const filteredMembers = band.members.filter(m =>
     m.name.toLowerCase().includes(userSearch.toLowerCase()) ||
     memberDisplayName(m).toLowerCase().includes(userSearch.toLowerCase()) ||
     m.email.toLowerCase().includes(userSearch.toLowerCase()) ||
     m.instrument.toLowerCase().includes(userSearch.toLowerCase()) ||
-    m.role.toLowerCase().includes(userSearch.toLowerCase())
+    roleDisplayName(m.role, m.isSuperAdmin).toLowerCase().includes(userSearch.toLowerCase())
   );
 
   if (!isAdmin) return null;
@@ -347,8 +429,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           >
             <option value="app">App Settings</option>
             <option value="users">User Management ({band.members.length})</option>
-            <option value="auth">Authentication Management</option>
-            <option value="smtp">Email Settings</option>
+            {currentUser.isSuperAdmin && <option value="auth">Authentication Management</option>}
+            {currentUser.isSuperAdmin && <option value="smtp">Email Settings</option>}
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
         </div>
@@ -379,7 +461,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           <span>User Management ({band.members.length})</span>
         </button>
 
-        <button
+        {currentUser.isSuperAdmin && <button
           onClick={() => setActiveSubTab('auth')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${
             activeSubTab === 'auth'
@@ -389,20 +471,45 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         >
           <KeyRound className="w-4 h-4" />
           <span>Authentication Management</span>
-        </button>
+        </button>}
         </>}
 
-        {isAdmin && <button onClick={() => setActiveSubTab('smtp')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${activeSubTab === 'smtp' ? 'bg-amber-500 text-zinc-950 shadow-md font-bold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}><Mail className="w-4 h-4"/><span>Email Settings</span></button>}
+        {currentUser.isSuperAdmin && <button onClick={() => setActiveSubTab('smtp')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${activeSubTab === 'smtp' ? 'bg-amber-500 text-zinc-950 shadow-md font-bold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}><Mail className="w-4 h-4"/><span>Email Settings</span></button>}
         </div>
       </div>
 
-      {isAdmin && activeSubTab === 'smtp' && <SmtpSettingsView />}
+      {currentUser.isSuperAdmin && activeSubTab === 'smtp' && <SmtpSettingsView />}
 
       {/* ========================================================================= */}
       {/* APP SETTINGS (BAND IDENTITY & HEADER LOGO / NAME AREA EDITOR) */}
       {/* ========================================================================= */}
       {isAdmin && activeSubTab === 'app' && (
         <div className="space-y-6">
+          {currentUser.isSuperAdmin && (
+            <div className="rounded-2xl border border-amber-500/30 bg-zinc-900/60 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Crown className="h-4 w-4 text-amber-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Band Instances</h3>
+                  <p className="text-xs text-zinc-400">Create a separate workspace for your band or another band. Invite new users or add existing accounts through User Management.</p>
+                </div>
+              </div>
+              <form onSubmit={handleCreateBand} className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={newBandName}
+                  onChange={(event) => setNewBandName(event.target.value)}
+                  placeholder="New band name"
+                  maxLength={200}
+                  required
+                  className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+                />
+                <button type="submit" className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-zinc-950 hover:bg-amber-400">
+                  Create Band
+                </button>
+              </form>
+              {bandCreateSuccess && <p className="mt-2 text-xs text-emerald-400">Band created. Use the band switcher in your account menu to open it.</p>}
+            </div>
+          )}
           {/* Band Profile Editor Form */}
           <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -412,7 +519,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               </div>
               {!isAdmin && (
                 <span className="text-xs px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 font-mono">
-                  Admin Edit Only
+                  Band Admin Edit Only
                 </span>
               )}
             </div>
@@ -995,13 +1102,22 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             </div>
 
             {isAdmin && (
-              <button
-                onClick={() => setIsInviteModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition shadow-md self-start sm:self-auto"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Add / Invite User</span>
-              </button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  onClick={() => void openExistingUserModal()}
+                  className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-200 shadow-md transition hover:border-amber-500/50 hover:text-white"
+                >
+                  <UserCheck className="w-4 h-4 text-amber-400" />
+                  <span>Add / Invite Existing User</span>
+                </button>
+                <button
+                  onClick={() => setIsInviteModalOpen(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-zinc-950 shadow-md transition hover:bg-amber-400"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Add / Invite New User</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -1009,7 +1125,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           {invitationFeedback && (
             <div role="status" className={`rounded-xl border p-4 text-sm ${invitationFeedback.status === 'sent' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' : 'border-amber-500/40 bg-amber-500/10 text-zinc-200'}`}>
               <p>{invitationFeedback.message}</p>
-              {invitationFeedback.status === 'failed' && <button type="button" onClick={() => setActiveSubTab('smtp')} className="mt-2 underline font-semibold">Open Email Settings</button>}
+              {invitationFeedback.status === 'failed' && currentUser.isSuperAdmin && <button type="button" onClick={() => setActiveSubTab('smtp')} className="mt-2 underline font-semibold">Open Email Settings</button>}
             </div>
           )}
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 overflow-hidden shadow-xl">
@@ -1029,6 +1145,11 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   {filteredMembers.map(member => {
                     const isSelf = member.id === currentUser.id;
                     const displayName = memberDisplayName(member);
+                    const canManageMember = Boolean(
+                      currentUser.isSuperAdmin ||
+                      isSelf ||
+                      (!member.isSuperAdmin && member.role !== 'admin'),
+                    );
 
                     return (
                       <tr key={member.id} className="hover:bg-zinc-800/40 transition">
@@ -1047,6 +1168,11 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                                     YOU
                                   </span>
                                 )}
+                                {member.isSuperAdmin && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">
+                                    SUPER ADMIN
+                                  </span>
+                                )}
                               </div>
                               <span className="text-[11px] text-zinc-500 font-mono">{member.email}</span>
                             </div>
@@ -1058,7 +1184,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                         </td>
 
                         <td className="py-3 px-4">
-                          {isAdmin && !isSelf ? (
+                          {isAdmin && canManageMember ? (
                             <select
                               value={member.role}
                               onChange={e => updateUserRole(member.id, e.target.value as Role)}
@@ -1070,13 +1196,13 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                             </select>
                           ) : (
                             <span className="font-semibold uppercase tracking-wider text-[11px] px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
-                              {member.role}
+                              {roleDisplayName(member.role, member.isSuperAdmin)}
                             </span>
                           )}
                         </td>
 
                         <td className="py-3 px-4">
-                          {isAdmin && !isSelf ? (
+                          {currentUser.isSuperAdmin && !isSelf ? (
                             <select
                               value={member.status || 'active'}
                               onChange={e => updateUserStatus(member.id, e.target.value as UserStatus)}
@@ -1109,7 +1235,21 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {isAdmin && !isSelf && member.status !== 'suspended' && (
+                            {currentUser.isSuperAdmin && !isSelf && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const enabling = !member.isSuperAdmin;
+                                  if (enabling) setPromotingUser(member);
+                                  else void updateSuperAdmin(member.id, false);
+                                }}
+                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-purple-500/20 text-zinc-300 hover:text-purple-300 text-[11px] transition"
+                                title={member.isSuperAdmin ? 'Remove Super Admin access' : 'Grant Super Admin access and add this user to every band'}
+                              >
+                                {member.isSuperAdmin ? 'Remove Super Admin' : 'Make Super Admin'}
+                              </button>
+                            )}
+                            {isAdmin && !isSelf && canManageMember && member.status !== 'suspended' && !member.lastLogin && (
                               <button
                                 type="button"
                                 onClick={() => handleResendInvite(member)}
@@ -1121,17 +1261,20 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                                 {invitingUserId === member.id ? 'Sending…' : 'Resend invite'}
                               </button>
                             )}
-                            {isAdmin && (
+                            {isAdmin && !isSelf && canManageMember && (!smtpSettings.isEnabled || member.status === 'active') && (
                               <button
-                                onClick={() => setResettingUser(member)}
-                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition"
-                                title="Reset Password"
+                                onClick={() => smtpSettings.isEnabled
+                                  ? void handleSendPasswordReset(member)
+                                  : setResettingUser(member)}
+                                disabled={passwordResettingUserId !== null}
+                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition disabled:opacity-50"
+                                title={smtpSettings.isEnabled ? 'Email a password reset link' : 'Set a temporary password'}
                               >
-                                Reset Pass
+                                {passwordResettingUserId === member.id ? 'Sending…' : 'Reset Pass'}
                               </button>
                             )}
 
-                            {isAdmin && member.twoFactorEnabled && (
+                            {isAdmin && canManageMember && member.twoFactorEnabled && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1146,15 +1289,15 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                               </button>
                             )}
 
-                            {isAdmin && !isSelf && (
+                            {isAdmin && !isSelf && canManageMember && (
                               <button
                                 onClick={() => {
-                                  if (confirm(`Are you sure you want to delete user account "${displayName}"?`)) {
+                                  if (confirm(`Remove "${displayName}" from ${band.name}? Their account and access to other bands will remain.`)) {
                                     deleteUserAccount(member.id);
                                   }
                                 }}
                                 className="p-1.5 text-zinc-500 hover:text-rose-400 rounded hover:bg-rose-500/10 transition"
-                                title="Delete user account"
+                                title="Remove user from this band"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1175,23 +1318,30 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               <ShieldCheck className="w-5 h-5 text-amber-400" />
               <span>Role Permissions Breakdown</span>
             </h3>
+            <p className="text-xs text-zinc-500">
+              Super Admin is an account-level capability. Band Admin, Band Member, and Band Guest permissions apply separately within each band.
+            </p>
 
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-400 font-mono uppercase tracking-wider">
                     <th className="py-2.5 px-3">Capability</th>
-                    {ROLE_OPTIONS.map(role => (
+                    {PERMISSION_MATRIX_ROLES.map(role => (
                       <th key={role.value} className="py-2.5 px-3 text-center">{role.matrixLabel}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
                   {PERMISSION_ROWS.map(row => (
-                    <tr key={row.permission}>
+                    <tr key={row.permission || row.label}>
                       <td className="py-2.5 px-3 font-medium">{row.label}</td>
-                      {ROLE_OPTIONS.map(role => {
-                        const allowed = ROLE_PERMISSIONS[role.value][row.permission];
+                      {PERMISSION_MATRIX_ROLES.map(role => {
+                        const allowed = role.value === 'super_admin'
+                          ? true
+                          : !row.superAdminOnly && Boolean(
+                              row.permission && ROLE_PERMISSIONS[role.value][row.permission],
+                            );
                         return (
                           <td key={role.value} className="text-center py-2.5 px-3">
                             {allowed ? (
@@ -1211,10 +1361,76 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </div>
       )}
 
+      {currentUser.isSuperAdmin && promotingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-sm animate-in fade-in">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="super-admin-confirmation-title"
+            className="w-full max-w-md space-y-5 rounded-2xl border border-purple-500/40 bg-zinc-900 p-6 text-sm shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/15 text-purple-300">
+                <Crown className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 id="super-admin-confirmation-title" className="font-bold text-white">
+                  Make {memberDisplayName(promotingUser)} a Super Admin?
+                </h3>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                  This gives the user full access to manage the application and full Band Admin access to every existing and future band.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPromotingUser(null)}
+                disabled={isUpdatingSuperAdmin}
+                aria-label="Close Super Admin confirmation"
+                className="text-zinc-500 transition hover:text-white disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-relaxed text-rose-100">
+              Super Admins can create band instances, manage global account security, grant Super Admin access, and manage every band as a Band Admin.
+            </div>
+
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100">
+              Are you sure you want to continue?
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-zinc-800 pt-4">
+              <button
+                type="button"
+                onClick={() => setPromotingUser(null)}
+                disabled={isUpdatingSuperAdmin}
+                className="rounded-lg px-4 py-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isUpdatingSuperAdmin}
+                onClick={async () => {
+                  setIsUpdatingSuperAdmin(true);
+                  const saved = await updateSuperAdmin(promotingUser.id, true);
+                  setIsUpdatingSuperAdmin(false);
+                  if (saved) setPromotingUser(null);
+                }}
+                className="rounded-lg bg-purple-500 px-4 py-2 font-bold text-white transition hover:bg-purple-400 disabled:cursor-wait disabled:opacity-60"
+              >
+                {isUpdatingSuperAdmin ? 'Granting Access…' : 'Make Super Admin'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* 3. AUTHENTICATION MANAGEMENT TAB */}
       {/* ========================================================================= */}
-      {isAdmin && activeSubTab === 'auth' && (
+      {currentUser.isSuperAdmin && activeSubTab === 'auth' && (
         <div className="space-y-6">
           {/* Security & Authentication Policies */}
           <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-5">
@@ -1225,7 +1441,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               </div>
               {!isAdmin && (
                 <span className="text-xs px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 font-mono">
-                  Admin Only
+                  Super Admin Only
                 </span>
               )}
             </div>
@@ -1393,7 +1609,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-amber-400" />
-                <span>Add / Invite Band Member</span>
+                <span>Add / Invite New User</span>
               </h3>
               <button onClick={() => setIsInviteModalOpen(false)} className="text-zinc-400 hover:text-white">
                 <X className="w-4 h-4" />
@@ -1442,21 +1658,27 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
-                  Initial Password
-                </label>
-                <input
-                  type="password"
-                  minLength={localAuthSettings.minPasswordLength}
-                  autoComplete="new-password"
-                  value={newUserPassword}
-                  onChange={e => setNewUserPassword(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-mono"
-                  required
-                />
-                <p className="mt-1.5 text-[11px] text-zinc-500">The invitation includes the sign-in link. Share this initial password separately.</p>
-              </div>
+              {smtpSettings.isEnabled ? (
+                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-[11px] leading-relaxed text-emerald-200">
+                  The invitation email will include a secure, one-time link for this user to choose their password.
+                </div>
+              ) : (
+                <div>
+                  <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
+                    Initial Password *
+                  </label>
+                  <input
+                    type="password"
+                    minLength={localAuthSettings.minPasswordLength}
+                    autoComplete="new-password"
+                    value={newUserPassword}
+                    onChange={e => setNewUserPassword(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-mono"
+                    required
+                  />
+                  <p className="mt-1.5 text-[11px] text-zinc-500">SMTP is disabled. Share this initial password with the user separately.</p>
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-zinc-300 uppercase tracking-wider mb-1">
@@ -1483,13 +1705,115 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isAddingMember || !newUserName.trim() || !newUserEmail.trim()}
+                  disabled={isAddingMember || !newUserName.trim() || !newUserEmail.trim() || (!smtpSettings.isEnabled && !newUserPassword)}
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold"
                 >
                   {isAddingMember ? 'Saving & Sending…' : 'Save & Invite'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && isExistingUserModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-sm animate-in fade-in">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="existing-user-modal-title"
+            className="w-full max-w-md space-y-4 rounded-2xl border border-zinc-700 bg-zinc-900 p-6 text-xs shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div>
+                <h3 id="existing-user-modal-title" className="flex items-center gap-2 text-base font-bold text-white">
+                  <UserCheck className="h-4 w-4 text-amber-400" />
+                  <span>Add / Invite Existing User</span>
+                </h3>
+                <p className="mt-1 text-[11px] text-zinc-500">Add an existing RehearsalHQ account to {band.name}.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExistingUserModalOpen(false)}
+                disabled={isAddingExistingUser}
+                aria-label="Close existing user dialog"
+                className="text-zinc-400 hover:text-white disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {isLoadingExistingUsers ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6 text-center text-zinc-400">
+                Loading available users…
+              </div>
+            ) : availableUsers.length === 0 ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-5 text-center">
+                <p className="font-semibold text-zinc-200">No existing users are available.</p>
+                <p className="mt-1 text-zinc-500">Every account already belongs to this band, or a new account needs to be created.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleAddExistingUser} className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block font-semibold uppercase tracking-wider text-zinc-300">
+                    Existing Account
+                  </label>
+                  <select
+                    value={selectedExistingUserId}
+                    onChange={(event) => setSelectedExistingUserId(event.target.value)}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+                    required
+                  >
+                    {availableUsers.map((availableUser) => (
+                      <option key={availableUser.id} value={availableUser.id}>
+                        {availableUser.stageName?.trim() || availableUser.name} — {availableUser.email}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedExistingUserId && (() => {
+                    const selected = availableUsers.find((availableUser) => availableUser.id === selectedExistingUserId);
+                    return selected ? (
+                      <p className="mt-1.5 text-[11px] text-zinc-500">
+                        {selected.instrument || 'No instrument listed'} · Existing account credentials will be preserved.
+                      </p>
+                    ) : null;
+                  })()}
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block font-semibold uppercase tracking-wider text-zinc-300">
+                    Role in {band.name}
+                  </label>
+                  <select
+                    value={existingUserRole}
+                    onChange={(event) => setExistingUserRole(event.target.value as Role)}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-medium text-white"
+                  >
+                    {ROLE_OPTIONS.map((role) => (
+                      <option key={role.value} value={role.value}>{role.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-2 border-t border-zinc-800 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsExistingUserModalOpen(false)}
+                    disabled={isAddingExistingUser}
+                    className="px-4 py-2 text-zinc-400 hover:text-white disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isAddingExistingUser || !selectedExistingUserId}
+                    className="rounded-xl bg-amber-500 px-5 py-2 font-bold text-zinc-950 hover:bg-amber-400 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {isAddingExistingUser ? 'Adding User…' : 'Add & Send Invite'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -1514,7 +1838,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               <div>
                 <label className="block text-zinc-400 mb-1">New Temporary Password</label>
                 <input
-                  type="text"
+                  type="password"
+                  autoComplete="new-password"
                   value={newResetPassword}
                   onChange={e => setNewResetPassword(e.target.value)}
                   placeholder="e.g. newPass123!"

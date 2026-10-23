@@ -17,6 +17,7 @@ export interface EmailContent {
     text: string;
   };
   ctaLabel: string;
+  ctaUrl?: string;
   afterCta?: string;
 }
 
@@ -116,6 +117,7 @@ export function renderBrandedEmail(
   content: EmailContent,
 ): RenderedEmail {
   const accent = accentFor(brand.appSettings);
+  const ctaUrl = content.ctaUrl || brand.appUrl;
   const logoUrl = brand.appSettings.headerLogoUrl || DEFAULT_LOGO_DATA_URL;
   const logoShape = brand.appSettings.headerLogoShape || 'rounded';
   const logoRadius =
@@ -193,7 +195,7 @@ export function renderBrandedEmail(
               <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;">
                 <tr>
                   <td style="border-radius:10px;background:${accent};">
-                    <a href="${escapeEmailHtml(brand.appUrl)}" style="display:inline-block;padding:12px 20px;color:#09090b;font-size:14px;font-weight:800;text-decoration:none;">${escapeEmailHtml(content.ctaLabel)}</a>
+                    <a href="${escapeEmailHtml(ctaUrl)}" style="display:inline-block;padding:12px 20px;color:#09090b;font-size:14px;font-weight:800;text-decoration:none;">${escapeEmailHtml(content.ctaLabel)}</a>
                   </td>
                 </tr>
               </table>
@@ -228,7 +230,7 @@ export function renderBrandedEmail(
     content.callout?.text
       ? `${content.callout.label}:\n${content.callout.text}\n`
       : '',
-    `${content.ctaLabel}: ${brand.appUrl}`,
+    `${content.ctaLabel}: ${ctaUrl}`,
     content.afterCta || '',
     '',
     `Sent by ${brand.bandName} through RehearsalHQ.`,

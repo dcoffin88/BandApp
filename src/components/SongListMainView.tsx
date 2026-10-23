@@ -206,7 +206,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
             </button>
           ) : (
             <div className="p-3 text-xs text-zinc-500 italic">
-              Guest role: Uploading demos is reserved for Admins and Members.
+              Band Guest role: Uploading demos is reserved for Band Admins and Band Members.
             </div>
           )}
         </div>
