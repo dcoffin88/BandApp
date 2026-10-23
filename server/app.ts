@@ -47,6 +47,13 @@ import {
   type EmailDetail,
   type RenderedEmail,
 } from './emailTemplates.ts';
+import {
+  generateRecoveryCodes,
+  generateTotpSecret,
+  hashRecoveryCode,
+  totpUri,
+  verifyTotp,
+} from './totp.ts';
 
 const text = z.string().max(1e4);
 const tabText = z.string().max(1e5);
@@ -131,7 +138,7 @@ const authSchema = z
     sessionTimeoutMinutes: z.number().int().min(5).max(1440),
     allowEmailPassword: z.literal(true),
     allowGoogleAuth: z.literal(false),
-    requireTwoFactor: z.literal(false),
+    requireTwoFactor: z.boolean(),
     minPasswordLength: z.number().int().min(12).max(128),
     maxFailedLogins: z.number().int().min(3).max(10),
     requireSpecialChar: z.boolean(),
@@ -643,6 +650,8 @@ export function createApplication(options: ApplicationOptions) {
   app.use(express.json({ limit: '2mb' }));
 
   const cookieName = 'rehearsalhq_session';
+  const trustedDeviceCookieName = 'rehearsalhq_trusted_device';
+  const trustedDeviceMaxAge = 30 * 24 * 60 * 60 * 1000;
   const cookies = (req: Request): Record<string, string> =>
     Object.fromEntries(
       (req.get('cookie') || '')
@@ -686,6 +695,65 @@ export function createApplication(options: ApplicationOptions) {
       path: '/',
       maxAge,
     });
+  }
+
+  function isTrustedDevice(req: Request, userId: string): boolean {
+    const value = cookies(req)[trustedDeviceCookieName] || '';
+    if (!value) return false;
+    db.prepare('DELETE FROM trusted_devices WHERE expires_at<=?').run(Date.now());
+    const device = db
+      .prepare('SELECT user_id FROM trusted_devices WHERE token_hash=? AND expires_at>?')
+      .get(tokenHash(value), Date.now()) as { user_id: string } | undefined;
+    return device?.user_id === userId;
+  }
+
+  function rememberTrustedDevice(user: BandMember, res: Response) {
+    const value = randomBytes(32).toString('hex');
+    const expiresAt = Date.now() + trustedDeviceMaxAge;
+    db.prepare('DELETE FROM trusted_devices WHERE expires_at<=?').run(Date.now());
+    db.prepare('INSERT INTO trusted_devices VALUES (?,?,?)').run(
+      tokenHash(value),
+      user.id,
+      expiresAt,
+    );
+    res.cookie(trustedDeviceCookieName, value, {
+      httpOnly: true,
+      secure: options.secureCookies,
+      sameSite: 'strict',
+      path: '/',
+      maxAge: trustedDeviceMaxAge,
+    });
+  }
+
+  function createTwoFactorChallenge(user: BandMember) {
+    const enrolled = db
+      .prepare('SELECT 1 FROM user_two_factor WHERE user_id=?')
+      .get(user.id);
+    const setupRequired = !enrolled;
+    const secret = setupRequired ? generateTotpSecret() : '';
+    const recoveryCodes = setupRequired ? generateRecoveryCodes() : [];
+    const challengeToken = randomBytes(32).toString('hex');
+    db.prepare('DELETE FROM two_factor_challenges WHERE expires_at<=? OR user_id=?')
+      .run(Date.now(), user.id);
+    db.prepare(
+      'INSERT INTO two_factor_challenges VALUES (?,?,?,?,?,0)',
+    ).run(
+      tokenHash(challengeToken),
+      user.id,
+      encrypt(secret),
+      JSON.stringify(recoveryCodes.map(hashRecoveryCode)),
+      Date.now() + 5 * 60 * 1000,
+    );
+    return {
+      twoFactorRequired: true as const,
+      setupRequired,
+      challengeToken,
+      manualKey: setupRequired ? secret : undefined,
+      otpauthUrl: setupRequired
+        ? totpUri(secret, user.email, 'RehearsalHQ')
+        : undefined,
+      recoveryCodes: setupRequired ? recoveryCodes : undefined,
+    };
   }
 
   function snapshot(user: BandMember) {
@@ -810,14 +878,107 @@ export function createApplication(options: ApplicationOptions) {
         audit(req, input.email, false);
         fail(401, 'Invalid email or password.');
       }
+      db.prepare('DELETE FROM login_attempts WHERE email=?').run(input.email);
+      if (
+        state.authSettings.requireTwoFactor &&
+        !(user.twoFactorEnabled && isTrustedDevice(req, user.id))
+      ) {
+        return res.json(createTwoFactorChallenge(user));
+      }
       user.status = 'active';
       user.lastLogin = now();
       store.saveUser(user);
-      db.prepare('DELETE FROM login_attempts WHERE email=?').run(input.email);
       audit(req, memberDisplayName(user), true, user.id);
       createSession(user, res);
       res.json(snapshot(user));
     })
+  );
+
+  app.post(
+    '/api/auth/2fa/verify',
+    route((req: Request, res: Response) => {
+      const input = z
+        .object({
+          challengeToken: z.string().regex(/^[a-f0-9]{64}$/),
+          code: z.string().trim().min(6).max(20),
+          rememberDevice: z.boolean().default(false),
+        })
+        .strict()
+        .parse(req.body);
+      const challenge = db
+        .prepare('SELECT * FROM two_factor_challenges WHERE token_hash=?')
+        .get(tokenHash(input.challengeToken)) as
+        | {
+            token_hash: string;
+            user_id: string;
+            secret: string;
+            recovery_hashes: string;
+            expires_at: number;
+            attempts: number;
+          }
+        | undefined;
+      if (!challenge || challenge.expires_at <= Date.now()) {
+        if (challenge) {
+          db.prepare('DELETE FROM two_factor_challenges WHERE token_hash=?')
+            .run(challenge.token_hash);
+        }
+        fail(401, 'Your verification session expired. Sign in again.');
+      }
+      if (challenge.attempts >= 5) {
+        db.prepare('DELETE FROM two_factor_challenges WHERE token_hash=?')
+          .run(challenge.token_hash);
+        fail(429, 'Too many verification attempts. Sign in again.');
+      }
+      const user = store.members().find((member) => member.id === challenge.user_id);
+      if (!user || user.status === 'suspended') {
+        fail(401, 'Please sign in with an active account.');
+      }
+      const enrolled = db
+        .prepare('SELECT secret,recovery_hashes FROM user_two_factor WHERE user_id=?')
+        .get(user.id) as
+        | { secret: string; recovery_hashes: string }
+        | undefined;
+      const setupSecret = decrypt(challenge.secret);
+      const secret = setupSecret || (enrolled ? decrypt(enrolled.secret) : '');
+      let valid = Boolean(secret) && verifyTotp(secret, input.code);
+      let usedRecoveryIndex = -1;
+      let recoveryHashes: string[] = enrolled
+        ? JSON.parse(enrolled.recovery_hashes)
+        : [];
+      if (!valid && enrolled) {
+        const recoveryHash = hashRecoveryCode(input.code);
+        usedRecoveryIndex = recoveryHashes.indexOf(recoveryHash);
+        valid = usedRecoveryIndex >= 0;
+      }
+      if (!valid) {
+        db.prepare(
+          'UPDATE two_factor_challenges SET attempts=attempts+1 WHERE token_hash=?',
+        ).run(challenge.token_hash);
+        audit(req, memberDisplayName(user), false, user.id);
+        fail(401, 'Invalid authentication code.');
+      }
+      store.transaction(() => {
+        if (setupSecret) {
+          db.prepare(
+            'INSERT OR REPLACE INTO user_two_factor VALUES (?,?,?)',
+          ).run(user.id, encrypt(setupSecret), challenge.recovery_hashes);
+          user.twoFactorEnabled = true;
+        } else if (usedRecoveryIndex >= 0 && enrolled) {
+          recoveryHashes = recoveryHashes.filter((_, index) => index !== usedRecoveryIndex);
+          db.prepare(
+            'UPDATE user_two_factor SET recovery_hashes=? WHERE user_id=?',
+          ).run(JSON.stringify(recoveryHashes), user.id);
+        }
+        db.prepare('DELETE FROM two_factor_challenges WHERE user_id=?').run(user.id);
+        user.status = 'active';
+        user.lastLogin = now();
+        store.saveUser(user);
+      });
+      audit(req, memberDisplayName(user), true, user.id);
+      createSession(user, res);
+      if (input.rememberDevice) rememberTrustedDevice(user, res);
+      res.json(snapshot({ ...user, twoFactorEnabled: true }));
+    }),
   );
 
   app.post(
@@ -870,6 +1031,7 @@ export function createApplication(options: ApplicationOptions) {
       store.transaction(() => {
         store.saveUser(user, hashPassword(input.newPassword));
         db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+        db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(user.id);
       });
       createSession(user, res);
       res.json({ success: true });
@@ -1209,6 +1371,18 @@ export function createApplication(options: ApplicationOptions) {
             validatePassword(password, state);
             store.saveUser(target, hashPassword(password));
             db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(target.id);
+            break;
+          }
+          case 'member.2fa.reset': {
+            requireAdmin(user);
+            const target = member();
+            db.prepare('DELETE FROM user_two_factor WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM two_factor_challenges WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(target.id);
+            target.twoFactorEnabled = false;
+            if (target.id === user.id) user.twoFactorEnabled = false;
             break;
           }
           case 'member.role':
@@ -1226,6 +1400,7 @@ export function createApplication(options: ApplicationOptions) {
             protectLastAdmin(target, updated);
             store.saveUser(updated);
             db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(target.id);
             break;
           }
           case 'member.delete': {

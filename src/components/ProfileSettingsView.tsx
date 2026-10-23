@@ -57,9 +57,7 @@ export const ProfileSettingsView: React.FC = () => {
   const [profilePhone, setProfilePhone] = useState(currentUser.phone || '');
   const [profileAvatar, setProfileAvatar] = useState(currentUser.avatar);
   const [isProfileCropModalOpen, setIsProfileCropModalOpen] = useState(false);
-  const [profile2FA, setProfile2FA] = useState(
-    currentUser.twoFactorEnabled || false,
-  );
+  const profile2FA = currentUser.twoFactorEnabled || false;
   const [profileNotifs, setProfileNotifs] = useState(() =>
     notificationsFrom(currentUser.notifications),
   );

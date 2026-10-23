@@ -23,6 +23,7 @@ import {
   practiceCalendarIcs,
   yahooCalendarUrl,
 } from '../src/shared/calendar.ts';
+import { encodeBase32, totpCode } from '../server/totp.ts';
 
 const password = 'Correct-Horse-123!';
 
@@ -42,6 +43,12 @@ test('clock times support 12-hour and 24-hour display', () => {
   assert.equal(formatClockTime('00:05', '12'), '12:05 AM');
   assert.equal(formatClockTime('15:30', '12'), '3:30 PM');
   assert.equal(formatClockTime('15:30', '24'), '15:30');
+});
+
+test('TOTP generation follows the RFC 6238 SHA-1 vectors', () => {
+  const secret = encodeBase32(Buffer.from('12345678901234567890'));
+  assert.equal(totpCode(secret, 59_000, 8), '94287082');
+  assert.equal(totpCode(secret, 1_111_111_109_000, 8), '07081804');
 });
 
 test('notification emails use branded, escaped HTML with a useful text alternative', () => {
@@ -973,7 +980,7 @@ test('legacy Editor accounts migrate to Member with merged permissions', async (
       (f.store.db.prepare('SELECT version FROM schema_version').get() as {
         version: number;
       }).version,
-      3,
+      5,
     );
   } finally {
     await f.close();
@@ -1072,6 +1079,136 @@ test('server login, session protection, secret isolation and password rotation',
     );
     assert.equal(
       (await f.request('/api/state', undefined, newCookie)).status,
+      401,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test('admin-enforced TOTP requires enrollment, accepts codes, and consumes recovery codes', async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.login();
+    const authSettings = f.store.read().authSettings;
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'auth.update', {
+          ...authSettings,
+          requireTwoFactor: true,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await f.request('/api/auth/logout', {}, admin.cookie)).status,
+      200,
+    );
+
+    const beginSetup = await f.request('/api/auth/login', {
+      email: 'admin@example.com',
+      password,
+    });
+    assert.equal(beginSetup.status, 200);
+    assert.equal(beginSetup.headers.get('set-cookie'), null);
+    const setup = await beginSetup.json();
+    assert.equal(setup.twoFactorRequired, true);
+    assert.equal(setup.setupRequired, true);
+    assert.match(setup.manualKey, /^[A-Z2-7]{32}$/);
+    assert.equal(setup.recoveryCodes.length, 8);
+
+    const currentCode = totpCode(setup.manualKey);
+    const wrongCode = await f.request('/api/auth/2fa/verify', {
+      challengeToken: setup.challengeToken,
+      code: currentCode === '000000' ? '111111' : '000000',
+    });
+    assert.equal(wrongCode.status, 401);
+
+    const verification = await f.request('/api/auth/2fa/verify', {
+      challengeToken: setup.challengeToken,
+      code: currentCode,
+    });
+    assert.equal(verification.status, 200, await verification.clone().text());
+    const verifiedState = await verification.json();
+    assert.equal(verifiedState.currentUser.twoFactorEnabled, true);
+    assert.ok(!JSON.stringify(verifiedState).includes(setup.manualKey));
+    const encryptedSecret = String(
+      f.store.db.prepare('SELECT secret FROM user_two_factor').get()!.secret,
+    );
+    assert.ok(!encryptedSecret.includes(setup.manualKey));
+
+    const enrolledCookie = verification.headers.get('set-cookie')!.split(';')[0];
+    await f.request('/api/auth/logout', {}, enrolledCookie);
+    const beginRecovery = await f.request('/api/auth/login', {
+      email: 'admin@example.com',
+      password,
+    });
+    const recoveryChallenge = await beginRecovery.json();
+    assert.equal(recoveryChallenge.setupRequired, false);
+    assert.equal(recoveryChallenge.manualKey, undefined);
+    const recovery = await f.request('/api/auth/2fa/verify', {
+      challengeToken: recoveryChallenge.challengeToken,
+      code: setup.recoveryCodes[0],
+    });
+    assert.equal(recovery.status, 200, await recovery.clone().text());
+
+    const recoveryCookie = recovery.headers.get('set-cookie')!.split(';')[0];
+    await f.request('/api/auth/logout', {}, recoveryCookie);
+    const beginReuse = await f.request('/api/auth/login', {
+      email: 'admin@example.com',
+      password,
+    });
+    const reuseChallenge = await beginReuse.json();
+    assert.equal(
+      (
+        await f.request('/api/auth/2fa/verify', {
+          challengeToken: reuseChallenge.challengeToken,
+          code: setup.recoveryCodes[0],
+        })
+      ).status,
+      401,
+    );
+    const finalVerification = await f.request('/api/auth/2fa/verify', {
+      challengeToken: reuseChallenge.challengeToken,
+      code: totpCode(setup.manualKey),
+      rememberDevice: true,
+    });
+    assert.equal(finalVerification.status, 200);
+    const rememberedCookieHeader = finalVerification.headers
+      .getSetCookie()
+      .map((cookie) => cookie.split(';')[0])
+      .join('; ');
+    assert.match(rememberedCookieHeader, /rehearsalhq_trusted_device=/);
+    assert.equal(
+      f.store.db.prepare('SELECT count(*) AS total FROM trusted_devices').get()!.total,
+      1,
+    );
+    await f.request('/api/auth/logout', {}, rememberedCookieHeader);
+    const trustedLogin = await f.request(
+      '/api/auth/login',
+      { email: 'admin@example.com', password },
+      rememberedCookieHeader,
+    );
+    assert.equal(trustedLogin.status, 200);
+    const trustedState = await trustedLogin.clone().json();
+    assert.equal(trustedState.twoFactorRequired, undefined);
+    assert.equal(trustedState.currentUser.twoFactorEnabled, true);
+    const trustedSessionCookie = trustedLogin.headers.get('set-cookie')!.split(';')[0];
+    const reset = await f.action(trustedSessionCookie, 'member.2fa.reset', {
+      userId: verifiedState.currentUser.id,
+    });
+    assert.equal(reset.status, 200);
+    assert.equal(
+      f.store.db.prepare('SELECT 1 FROM user_two_factor').get(),
+      undefined,
+    );
+    assert.equal(
+      f.store.db.prepare('SELECT 1 FROM trusted_devices').get(),
+      undefined,
+    );
+    assert.equal((await reset.json()).state.currentUser.twoFactorEnabled, false);
+    assert.equal(
+      (await f.request('/api/state', undefined, trustedSessionCookie)).status,
       401,
     );
   } finally {

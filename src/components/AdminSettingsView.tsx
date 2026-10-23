@@ -87,6 +87,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     updateUserRole,
     updateUserStatus,
     updateUserProfile,
+    resetUserTwoFactor,
     deleteUserAccount,
     updateAuthSettings,
     updateAppSettings,
@@ -1130,6 +1131,21 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                               </button>
                             )}
 
+                            {isAdmin && member.twoFactorEnabled && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`Reset two-factor authentication for ${displayName}? They will need to enroll again at their next sign-in.`)) {
+                                    void resetUserTwoFactor(member.id);
+                                  }
+                                }}
+                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-amber-500/20 text-zinc-300 hover:text-amber-300 text-[11px] transition"
+                                title="Reset two-factor authentication"
+                              >
+                                Reset 2FA
+                              </button>
+                            )}
+
                             {isAdmin && !isSelf && (
                               <button
                                 onClick={() => {
@@ -1270,14 +1286,14 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <label className="flex items-center gap-3 p-3 rounded-xl bg-zinc-950/60 border border-zinc-800 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={false}
-                    disabled
+                    checked={localAuthSettings.requireTwoFactor}
+                    disabled={!isAdmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, requireTwoFactor: e.target.checked })}
                     className="rounded accent-amber-500 w-4 h-4"
                   />
                   <div>
                     <p className="font-semibold text-zinc-200">Enforce Two-Factor Authentication (2FA)</p>
-                    <p className="text-[11px] text-zinc-500">Future Feature</p>
+                    <p className="text-[11px] text-zinc-500">Members enroll an authenticator app at their next sign-in</p>
                   </div>
                 </label>
 

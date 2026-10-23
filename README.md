@@ -384,6 +384,7 @@ RehearsalHQ uses:
 - Request origin validation
 - Server-enforced role permissions
 - Session revocation following password changes
+- Optional admin-enforced TOTP two-factor authentication with one-time recovery codes and 30-day trusted devices
 
 Session lifetimes are absolute durations measured from sign-in.
 
@@ -394,9 +395,6 @@ Changes made from other devices are refreshed every 15 seconds or when the brows
 **Planned Features:**
 
 - Google authentication
-- TOTP / two-factor authentication (2FA)
-
-The 2FA settings control is disabled until the feature is implemented.
 
 ---
 

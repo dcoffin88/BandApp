@@ -38,6 +38,12 @@ import { applyTheme } from '../shared/theme.ts';
 interface AuthResponse {
   success: boolean;
   message?: string;
+  twoFactorRequired?: boolean;
+  setupRequired?: boolean;
+  challengeToken?: string;
+  manualKey?: string;
+  otpauthUrl?: string;
+  recoveryCodes?: string[];
 }
 
 interface BandContextType {
@@ -73,6 +79,11 @@ interface BandContextType {
     newPassword: string,
   ) => Promise<AuthResponse>;
   login: (email: string, password: string) => Promise<AuthResponse>;
+  verifyTwoFactor: (
+    challengeToken: string,
+    code: string,
+    rememberDevice?: boolean,
+  ) => Promise<AuthResponse>;
   logout: () => Promise<boolean>;
   updateUserRole: (memberId: string, newRole: Role) => Promise<boolean>;
   updateUserStatus: (memberId: string, status: UserStatus) => Promise<boolean>;
@@ -80,6 +91,7 @@ interface BandContextType {
     userId: string,
     updates: Partial<BandMember>,
   ) => Promise<boolean>;
+  resetUserTwoFactor: (userId: string) => Promise<boolean>;
   deleteUserAccount: (userId: string) => Promise<boolean>;
   updateAuthSettings: (settings: AuthSettings) => Promise<boolean>;
   clearAuditLogs: () => Promise<boolean>;
@@ -313,9 +325,35 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
   }
   async function login(email: string, password: string): Promise<AuthResponse> {
     try {
-      const data = await api<SessionState>('/api/auth/login', {
+      const data = await api<SessionState | Omit<AuthResponse, 'success'>>('/api/auth/login', {
         email,
         password,
+      });
+      if ('twoFactorRequired' in data && data.twoFactorRequired) {
+        return { success: true, ...data };
+      }
+      epoch.current++;
+      setState(data as SessionState);
+      setAuthenticated(true);
+      setError('');
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Unable to sign in.',
+      };
+    }
+  }
+  async function verifyTwoFactor(
+    challengeToken: string,
+    code: string,
+    rememberDevice = false,
+  ): Promise<AuthResponse> {
+    try {
+      const data = await api<SessionState>('/api/auth/2fa/verify', {
+        challengeToken,
+        code,
+        rememberDevice,
       });
       epoch.current++;
       setState(data);
@@ -325,7 +363,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (err) {
       return {
         success: false,
-        message: err instanceof Error ? err.message : 'Unable to sign in.',
+        message: err instanceof Error ? err.message : 'Verification failed.',
       };
     }
   }
@@ -474,6 +512,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     isAuthenticated: authenticated,
     isAudioInitialized: true,
     login,
+    verifyTwoFactor,
     changePassword,
     logout,
     updateAppSettings: (settings) => save('app.update', settings),
@@ -489,6 +528,11 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       updates.password !== undefined
         ? save('member.password', { userId, password: updates.password })
         : save('member.profile', { userId, updates }),
+    resetUserTwoFactor: async (userId) => {
+      const saved = await save('member.2fa.reset', { userId });
+      if (saved && userId === state.currentUser.id) clear(state.band.name);
+      return saved;
+    },
     deleteUserAccount: (userId) => save('member.delete', { userId }),
     updateAuthSettings: (settings) => save('auth.update', settings),
     clearAuditLogs: () => save('audit.clear', {}),

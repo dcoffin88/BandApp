@@ -21,6 +21,7 @@
     "express-rate-limit": "^8.7.1",
     "helmet": "^8.3.0",
     "nodemailer": "^10.1.2",
+    "qrcode.react": "^4.2.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
