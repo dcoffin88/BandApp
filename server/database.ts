@@ -10,10 +10,15 @@ import {
 import {
   DEFAULT_APPEARANCE,
   appearanceFrom,
+  notificationsFrom,
   emptyState,
   type SharedState,
 } from '../src/shared/defaults.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
+import {
+  DEFAULT_DEMO_CATEGORIES,
+  categoryLabel,
+} from '../src/shared/songMetadata.ts';
 import type { BandMember } from '../src/types/band.ts';
 
 function refreshMemberIdentities(state: SharedState): void {
@@ -99,6 +104,9 @@ export function openDatabase(filename: string) {
     CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, profile TEXT NOT NULL, password_hash TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS login_attempts (email TEXT PRIMARY KEY, failures INTEGER NOT NULL, locked_until INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS user_two_factor (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, secret TEXT NOT NULL, recovery_hashes TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS two_factor_challenges (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, secret TEXT NOT NULL, recovery_hashes TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS trusted_devices (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS uploads (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, mime TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL);
   `);
 
@@ -106,7 +114,7 @@ export function openDatabase(filename: string) {
     version: number;
   };
   let schemaVersion = versionRow.version;
-  if (![1, 2, 3].includes(schemaVersion)) {
+  if (![1, 2, 3, 4, 5].includes(schemaVersion)) {
     throw new Error(
       'Unsupported database version; restore the matching application release.'
     );
@@ -145,6 +153,14 @@ export function openDatabase(filename: string) {
       throw error;
     }
   }
+  if (schemaVersion === 3) {
+    db.exec('UPDATE schema_version SET version=4');
+    schemaVersion = 4;
+  }
+  if (schemaVersion === 4) {
+    db.exec('UPDATE schema_version SET version=5');
+    schemaVersion = 5;
+  }
 
   db.prepare('INSERT OR IGNORE INTO state (id,value) VALUES (1,?)').run(
     JSON.stringify(emptyState())
@@ -155,7 +171,13 @@ export function openDatabase(filename: string) {
       db.prepare('SELECT profile FROM users ORDER BY rowid').all() as Array<{
         profile: string;
       }>
-    ).map((row) => JSON.parse(String(row.profile)) as BandMember);
+    ).map((row) => {
+      const member = JSON.parse(String(row.profile)) as BandMember;
+      member.twoFactorEnabled = Boolean(
+        db.prepare('SELECT 1 FROM user_two_factor WHERE user_id=?').get(member.id),
+      );
+      return member;
+    });
   }
 
   function read(): SharedState {
@@ -165,6 +187,32 @@ export function openDatabase(filename: string) {
     const state = JSON.parse(String(row.value)) as SharedState;
     state.band.members = members();
     state.appSettings.timeFormat ??= '12';
+    state.appSettings.autoDeleteArchivedDemos ??= true;
+    state.appSettings.demoCategories ??= DEFAULT_DEMO_CATEGORIES.map(
+      (category) => ({ ...category }),
+    );
+    if (
+      !state.appSettings.demoCategories.some(
+        (category) => category.id === 'archived',
+      )
+    ) {
+      state.appSettings.demoCategories.push({
+        id: 'archived',
+        label: 'Archived',
+      });
+    }
+    for (const song of state.songs) {
+      if (
+        !state.appSettings.demoCategories.some(
+          (category) => category.id === song.category,
+        )
+      ) {
+        state.appSettings.demoCategories.push({
+          id: song.category,
+          label: categoryLabel([], song.category),
+        });
+      }
+    }
     state.smtpSettings.notificationTriggers.practiceEventReminder ??= true;
     refreshMemberIdentities(state);
     return state;
@@ -178,8 +226,9 @@ export function openDatabase(filename: string) {
   }
 
   function saveUser(user: BandMember, passwordHash?: string): void {
-    const { password: _password, ...profile } = {
+    const { password: _password, twoFactorEnabled: _twoFactorEnabled, ...profile } = {
       ...user,
+      notifications: notificationsFrom(user.notifications),
       appearanceSettings: appearanceFrom(
         user.appearanceSettings ?? DEFAULT_APPEARANCE,
       ),
@@ -220,9 +269,11 @@ export function openDatabase(filename: string) {
       ...read().appSettings,
     });
     for (const user of members()) {
-      if (!user.appearanceSettings) {
-        saveUser({ ...user, appearanceSettings: legacyAppearance });
-      }
+      saveUser({
+        ...user,
+        notifications: notificationsFrom(user.notifications),
+        appearanceSettings: user.appearanceSettings ?? legacyAppearance,
+      });
     }
   });
 

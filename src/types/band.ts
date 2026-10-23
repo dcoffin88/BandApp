@@ -1,5 +1,14 @@
 export type Role = 'admin' | 'member' | 'guest';
 
+export type AppTab =
+  | 'songs'
+  | 'lyrics'
+  | 'chords'
+  | 'tabs'
+  | 'practice'
+  | 'admin'
+  | 'profile';
+
 export type UserStatus = 'active' | 'suspended' | 'invited';
 
 export interface UserRolePermissions {
@@ -15,8 +24,11 @@ export interface UserNotifications {
   newDemos: boolean;
   newVersions: boolean;
   lyricEdits: boolean;
-  practiceReminders: boolean;
+  practiceSchedule: boolean;
+  practiceRsvpReminders: boolean;
+  practiceEventReminders: boolean;
   comments: boolean;
+  demoArchived: boolean;
 }
 
 export interface BandMember {
@@ -36,6 +48,7 @@ export interface BandMember {
   twoFactorEnabled?: boolean;
   notifications?: UserNotifications;
   appearanceSettings?: UserAppearance;
+  chordSelectorEnabled?: boolean;
   isCurrentUser?: boolean;
   createdAt?: string;
 }
@@ -76,10 +89,20 @@ export interface SongLyrics {
   versionNumber: number;
 }
 
+export interface SongTabs {
+  tuning: string;
+  content: string;
+  lastEditedBy: string;
+  lastEditedAt: string;
+  versionNumber: number;
+}
+
 export interface SongIdea {
   id: string;
   title: string;
-  category: 'idea' | 'chorus' | 'riff' | 'bass' | 'full' | 'verse' | 'bridge';
+  category: string;
+  archivedFromCategory?: string;
+  archivedAt?: string;
   bpm?: number;
   musicalKey?: string;
   description?: string;
@@ -87,6 +110,7 @@ export interface SongIdea {
   activeVersionId: string;
   versions: AudioVersion[];
   lyrics: SongLyrics;
+  tabs?: SongTabs;
   comments: SongComment[];
   createdAt: string;
   createdBy: {
@@ -169,12 +193,19 @@ export interface UserAppearance {
   customColor?: string;
 }
 
+export interface DemoCategory {
+  id: string;
+  label: string;
+}
+
 export interface AppSettings extends UserAppearance {
   headerLogoUrl: string;
   headerLogoShape: 'circle' | 'rounded' | 'square';
   headerSubtitle: string;
   accentGlow: boolean;
   timeFormat: '12' | '24';
+  autoDeleteArchivedDemos: boolean;
+  demoCategories: DemoCategory[];
 }
 
 export interface SmtpNotificationTriggers {
@@ -203,6 +234,7 @@ export interface SmtpSettings {
 
 export type EmailEventType =
   | 'member_invite'
+  | 'demo_archived'
   | 'new_demo'
   | 'new_version'
   | 'lyric_edit'

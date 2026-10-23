@@ -4,6 +4,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Check,
+  ChevronDown,
   Clock3,
   Crop,
   Crown,
@@ -29,6 +30,7 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Tags,
   Trash2,
   Upload,
   UserCheck,
@@ -64,9 +66,9 @@ const PERMISSION_ROWS: Array<{
 }> = [
   { label: 'Upload Audio Demo Tracks', permission: 'canUploadDemo' },
   { label: 'Upload Multi-Take Versions (v1, v2...)', permission: 'canUploadVersion' },
-  { label: 'Edit Lyrics Drafts & Chords', permission: 'canEditLyrics' },
+  { label: 'Edit Lyrics, Chords & Tabs', permission: 'canEditLyrics' },
   { label: 'Schedule Practices & Rehearsals', permission: 'canSchedulePractice' },
-  { label: 'Delete Song Ideas from Vault', permission: 'canDeleteTracks' },
+  { label: 'Archive Song Ideas from Vault', permission: 'canDeleteTracks' },
   { label: 'Manage Member Roles & Security Settings', permission: 'canManageMembers' },
 ];
 
@@ -80,10 +82,12 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     authSettings,
     auditLogs,
     appSettings,
+    songs,
     updateBandName,
     updateUserRole,
     updateUserStatus,
     updateUserProfile,
+    resetUserTwoFactor,
     deleteUserAccount,
     updateAuthSettings,
     updateAppSettings,
@@ -115,6 +119,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [appSettingsSaveSuccess, setAppSettingsSaveSuccess] = useState(false);
   const [timeSettingsSaveSuccess, setTimeSettingsSaveSuccess] = useState(false);
+  const [archiveSettingsSaveSuccess, setArchiveSettingsSaveSuccess] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
+  const [categorySaveSuccess, setCategorySaveSuccess] = useState(false);
 
   // User Management State
   const [userSearch, setUserSearch] = useState('');
@@ -162,6 +170,77 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     if (!(await updateAppSettings({ timeFormat: localAppSettings.timeFormat }))) return;
     setTimeSettingsSaveSuccess(true);
     setTimeout(() => setTimeSettingsSaveSuccess(false), 2500);
+  };
+
+  const handleSaveArchiveSettings = async () => {
+    if (!isAdmin) return;
+    if (!(await updateAppSettings({
+      autoDeleteArchivedDemos: localAppSettings.autoDeleteArchivedDemos,
+    }))) return;
+    setArchiveSettingsSaveSuccess(true);
+    setTimeout(() => setArchiveSettingsSaveSuccess(false), 2500);
+  };
+
+  const handleAddCategory = () => {
+    const label = newCategoryName.trim();
+    if (!label) {
+      setCategoryError('Enter a category name.');
+      return;
+    }
+    if (
+      localAppSettings.demoCategories.some(
+        (category) => category.label.toLowerCase() === label.toLowerCase(),
+      )
+    ) {
+      setCategoryError('Category names must be unique.');
+      return;
+    }
+    const baseId =
+      label
+        .normalize('NFKD')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 42) || 'category';
+    const existingIds = new Set(
+      localAppSettings.demoCategories.map((category) => category.id),
+    );
+    let id = baseId;
+    let suffix = 2;
+    while (existingIds.has(id)) id = `${baseId}-${suffix++}`;
+    setLocalAppSettings({
+      ...localAppSettings,
+      demoCategories: [...localAppSettings.demoCategories, { id, label }],
+    });
+    setNewCategoryName('');
+    setCategoryError('');
+    setCategorySaveSuccess(false);
+  };
+
+  const handleSaveCategories = async () => {
+    const categories = localAppSettings.demoCategories.map((category) => ({
+      ...category,
+      label: category.label.trim(),
+    }));
+    if (categories.some((category) => !category.label)) {
+      setCategoryError('Category names cannot be blank.');
+      return;
+    }
+    if (
+      new Set(categories.map((category) => category.label.toLowerCase())).size !==
+      categories.length
+    ) {
+      setCategoryError('Category names must be unique.');
+      return;
+    }
+    if (!(await updateAppSettings({ demoCategories: categories }))) {
+      setCategoryError('Unable to save demo categories.');
+      return;
+    }
+    setLocalAppSettings({ ...localAppSettings, demoCategories: categories });
+    setCategoryError('');
+    setCategorySaveSuccess(true);
+    setTimeout(() => setCategorySaveSuccess(false), 2500);
   };
 
   const handleSaveAuthSettings = async (e: React.FormEvent) => {
@@ -258,7 +337,23 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
       </div>
 
       {/* Sub-tab Navigation */}
-      <div className="flex items-center gap-2 p-1 bg-zinc-900/90 rounded-2xl border border-zinc-800 overflow-x-auto text-xs font-semibold">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-1 text-xs font-semibold">
+        <div className="relative lg:hidden">
+          <select
+            aria-label="Admin settings section"
+            value={activeSubTab}
+            onChange={(event) => setActiveSubTab(event.target.value as 'users' | 'auth' | 'app' | 'smtp')}
+            className="w-full appearance-none rounded-xl bg-zinc-900 py-2.5 pl-3 pr-9 font-semibold text-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="app">App Settings</option>
+            <option value="users">User Management ({band.members.length})</option>
+            <option value="auth">Authentication Management</option>
+            <option value="smtp">Email Settings</option>
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+        </div>
+
+        <div className="hidden items-center gap-2 lg:flex">
         {isAdmin && <>
         <button
           onClick={() => setActiveSubTab('app')}
@@ -298,6 +393,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </>}
 
         {isAdmin && <button onClick={() => setActiveSubTab('smtp')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition whitespace-nowrap ${activeSubTab === 'smtp' ? 'bg-amber-500 text-zinc-950 shadow-md font-bold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}><Mail className="w-4 h-4"/><span>Email Settings</span></button>}
+        </div>
       </div>
 
       {isAdmin && activeSubTab === 'smtp' && <SmtpSettingsView />}
@@ -397,7 +493,151 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             </form>
           </div>
 
-          {/* Header Logo & Name Area Live Mockup */}
+          {/* Demo Category Management */}
+          <div className="min-w-0 space-y-4 rounded-3xl border border-zinc-800 bg-zinc-900/70 p-3 sm:p-6">
+          <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
+            <Tags className="h-5 w-5 shrink-0 text-amber-400" />
+            <h3 className="text-base font-bold text-white">
+              Demo Category Management
+            </h3>
+          </div>
+
+          {categoryError && (
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+              {categoryError}
+            </div>
+          )}
+
+          <div className="grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-2">
+            {localAppSettings.demoCategories.map((category) => {
+              const assignedCount = songs.filter(
+                (song) => song.category === category.id,
+              ).length;
+
+              const selectableCount = localAppSettings.demoCategories.filter(
+                (item) => item.id !== 'all' && item.id !== 'archived',
+              ).length;
+
+              const cannotRemove =
+                category.id === 'all' ||
+                category.id === 'archived' ||
+                assignedCount > 0 ||
+                selectableCount <= 1;
+
+              return (
+                <div
+                  key={category.id}
+                  className="grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                >
+                  <input
+                    type="text"
+                    value={category.label}
+                    maxLength={200}
+                    onChange={(event) => {
+                      setCategorySaveSuccess(false);
+                      setLocalAppSettings({
+                        ...localAppSettings,
+                        demoCategories: localAppSettings.demoCategories.map(
+                          (item) =>
+                            item.id === category.id
+                              ? { ...item, label: event.target.value }
+                              : item,
+                        ),
+                      });
+                    }}
+                    className="w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                    aria-label={`Category name for ${category.id}`}
+                  />
+
+                  <div className="flex shrink-0 items-center justify-end gap-2">
+                    <span className="w-40 shrink-0 text-right text-[10px] text-zinc-500">
+                      {category.id === 'all'
+                        ? 'Required library filter'
+                        : category.id === 'archived'
+                          ? 'Required archive filter'
+                          : `${assignedCount} ${
+                              assignedCount === 1 ? 'demo' : 'demos'
+                            }`}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLocalAppSettings({
+                          ...localAppSettings,
+                          demoCategories: localAppSettings.demoCategories.filter(
+                            (item) => item.id !== category.id,
+                          ),
+                        });
+                        setCategoryError('');
+                        setCategorySaveSuccess(false);
+                      }}
+                      disabled={cannotRemove}
+                      className="shrink-0 rounded-lg border border-zinc-700 p-2 text-zinc-400 transition hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-30"
+                      title={
+                        category.id === 'all' || category.id === 'archived'
+                          ? `${category.label} is required`
+                          : assignedCount > 0
+                            ? 'Move demos out of this category before removing it'
+                            : selectableCount <= 1
+                              ? 'At least one demo category is required'
+                              : `Remove ${category.label}`
+                      }
+                      aria-label={`Remove ${category.label}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleAddCategory();
+            }}
+            className="flex flex-col gap-2 border-t border-zinc-800 pt-4 sm:flex-row"
+          >
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(event) => setNewCategoryName(event.target.value)}
+              maxLength={200}
+              placeholder="New category name"
+              className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none"
+            />
+
+            <button
+              type="submit"
+              className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-zinc-700"
+            >
+              <Plus className="h-4 w-4" />
+              Add Category
+            </button>
+          </form>
+
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-zinc-800 pt-3 text-xs">
+            {categorySaveSuccess && (
+              <span className="flex items-center gap-1 font-medium text-emerald-400">
+                <Check className="h-4 w-4" />
+                Categories saved!
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSaveCategories}
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-amber-500 px-5 py-2 font-bold text-zinc-950 transition hover:bg-amber-400"
+            >
+              <Save className="h-4 w-4" />
+              Save Categories
+            </button>
+          </div>
+        </div>
+
+          {/* Header Logo & Name Area */}
           {isAdmin && (
           <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -407,7 +647,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               </div>
             </div>
 
-            {/* Live Header Preview Box */}
+            {/* Header Preview Box */}
             <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0">
                 {localAppSettings.headerLogoUrl ? (
@@ -568,7 +808,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             </div>
             <div>
               <p className="text-xs text-zinc-400 mb-3">
-                Choose how clock times appear throughout RehearsalHQ.
+                Choose how time appears throughout RehearsalHQ.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
@@ -608,6 +848,50 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               >
                 <Save className="w-4 h-4" />
                 <span>Save Time Display</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-zinc-800">
+              <Trash2 className="w-5 h-5 text-amber-400" />
+              <h3 className="font-bold text-white text-base">Archive Retention</h3>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+              <input
+                type="checkbox"
+                checked={localAppSettings.autoDeleteArchivedDemos}
+                onChange={(event) => {
+                  setLocalAppSettings({
+                    ...localAppSettings,
+                    autoDeleteArchivedDemos: event.target.checked,
+                  });
+                  setArchiveSettingsSaveSuccess(false);
+                }}
+                className="mt-0.5 h-4 w-4 rounded accent-amber-500"
+              />
+              <div>
+                <p className="text-xs font-semibold text-zinc-200">
+                  Automatically delete archived demos after 30 days
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                  Permanently removes the demo, every audio take, and its setlist references after it has remained archived for 30 days.
+                </p>
+              </div>
+            </label>
+            <div className="flex items-center justify-end gap-3 border-t border-zinc-800 pt-3 text-xs">
+              {archiveSettingsSaveSuccess && (
+                <span className="flex items-center gap-1 font-medium text-emerald-400">
+                  <Check className="h-4 w-4" /> Archive retention saved!
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleSaveArchiveSettings}
+                className="flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-2.5 font-bold text-zinc-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400"
+              >
+                <Save className="h-4 w-4" />
+                Save Archive Retention
               </button>
             </div>
           </div>
@@ -847,6 +1131,21 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                               </button>
                             )}
 
+                            {isAdmin && member.twoFactorEnabled && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`Reset two-factor authentication for ${displayName}? They will need to enroll again at their next sign-in.`)) {
+                                    void resetUserTwoFactor(member.id);
+                                  }
+                                }}
+                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-amber-500/20 text-zinc-300 hover:text-amber-300 text-[11px] transition"
+                                title="Reset two-factor authentication"
+                              >
+                                Reset 2FA
+                              </button>
+                            )}
+
                             {isAdmin && !isSelf && (
                               <button
                                 onClick={() => {
@@ -987,14 +1286,14 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <label className="flex items-center gap-3 p-3 rounded-xl bg-zinc-950/60 border border-zinc-800 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={false}
-                    disabled
+                    checked={localAuthSettings.requireTwoFactor}
+                    disabled={!isAdmin}
                     onChange={e => setLocalAuthSettings({ ...localAuthSettings, requireTwoFactor: e.target.checked })}
                     className="rounded accent-amber-500 w-4 h-4"
                   />
                   <div>
                     <p className="font-semibold text-zinc-200">Enforce Two-Factor Authentication (2FA)</p>
-                    <p className="text-[11px] text-zinc-500">Future Feature</p>
+                    <p className="text-[11px] text-zinc-500">Members enroll an authenticator app at their next sign-in</p>
                   </div>
                 </label>
 

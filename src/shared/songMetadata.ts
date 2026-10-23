@@ -1,17 +1,25 @@
-import type { SongIdea } from '../types/band.ts';
+import type { DemoCategory } from '../types/band.ts';
 
-export const SONG_CATEGORY_OPTIONS: ReadonlyArray<{
-  value: SongIdea['category'];
-  label: string;
-}> = [
-  { value: 'idea', label: 'Song Idea (Acoustic / Full)' },
-  { value: 'chorus', label: 'Chorus Idea (Anthem / Hook)' },
-  { value: 'riff', label: 'Riff (Guitar / Heavy)' },
-  { value: 'bass', label: 'Bass Idea (Groove / Pocket)' },
-  { value: 'verse', label: 'Verse Idea' },
-  { value: 'bridge', label: 'Bridge Idea' },
-  { value: 'full', label: 'Full Arrangement' },
+export const DEFAULT_DEMO_CATEGORIES: DemoCategory[] = [
+  { id: 'all', label: 'All Demos' },
+  { id: 'idea', label: 'Song Ideas' },
+  { id: 'chorus', label: 'Chorus Ideas' },
+  { id: 'riff', label: 'Riffs' },
+  { id: 'bass', label: 'Bass Ideas' },
+  { id: 'verse', label: 'Verse Ideas' },
+  { id: 'bridge', label: 'Bridge Ideas' },
+  { id: 'full', label: 'Full Arrangements' },
+  { id: 'archived', label: 'Archived' },
 ];
+
+export const selectableDemoCategories = (categories: DemoCategory[]) =>
+  categories.filter(
+    (category) => category.id !== 'all' && category.id !== 'archived',
+  );
+
+export const categoryLabel = (categories: DemoCategory[], id: string) =>
+  categories.find((category) => category.id === id)?.label ||
+  id.replaceAll('-', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export const KEY_ROOTS = [
   'C',

@@ -38,7 +38,14 @@ if (
   uploadLimitMb > 500
 )
   throw new Error('MAX_UPLOAD_MB must be between 1 and 500.');
-const { app, store, errorHandler, sendPracticeReminders } = createApplication({
+const {
+  app,
+  store,
+  errorHandler,
+  sendPracticeReminders,
+  cleanupArchivedDemos,
+  cleanupPastPractices,
+} = createApplication({
   development: !production,
   mediaDirectory: process.env.MEDIA_DIR || './media',
   databasePath: path.resolve(
@@ -99,6 +106,26 @@ async function start() {
     15 * 60 * 1000,
   );
   practiceReminderTimer.unref();
+  const runMaintenanceCleanup = () => {
+    try {
+      const deletedDemoCount = cleanupArchivedDemos();
+      const deletedPracticeCount = cleanupPastPractices();
+      if (deletedDemoCount > 0) {
+        console.log(`Deleted ${deletedDemoCount} archived demo(s) older than 30 days.`);
+      }
+      if (deletedPracticeCount > 0) {
+        console.log(`Deleted ${deletedPracticeCount} practice session(s) that ended over 30 days ago.`);
+      }
+    } catch (error) {
+      console.error('Maintenance cleanup failed:', error);
+    }
+  };
+  runMaintenanceCleanup();
+  const maintenanceCleanupTimer = setInterval(
+    runMaintenanceCleanup,
+    60 * 60 * 1000,
+  );
+  maintenanceCleanupTimer.unref();
   server.requestTimeout = 120_000;
   server.headersTimeout = 30_000;
   let stopping = false;
@@ -106,6 +133,7 @@ async function start() {
     if (stopping) return;
     stopping = true;
     clearInterval(practiceReminderTimer);
+    clearInterval(maintenanceCleanupTimer);
     console.log('Stopping RehearsalHQ...');
     const deadline = setTimeout(() => process.exit(1), 15_000);
     deadline.unref();

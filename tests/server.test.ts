@@ -23,6 +23,7 @@ import {
   practiceCalendarIcs,
   yahooCalendarUrl,
 } from '../src/shared/calendar.ts';
+import { encodeBase32, totpCode } from '../server/totp.ts';
 
 const password = 'Correct-Horse-123!';
 
@@ -42,6 +43,12 @@ test('clock times support 12-hour and 24-hour display', () => {
   assert.equal(formatClockTime('00:05', '12'), '12:05 AM');
   assert.equal(formatClockTime('15:30', '12'), '3:30 PM');
   assert.equal(formatClockTime('15:30', '24'), '15:30');
+});
+
+test('TOTP generation follows the RFC 6238 SHA-1 vectors', () => {
+  const secret = encodeBase32(Buffer.from('12345678901234567890'));
+  assert.equal(totpCode(secret, 59_000, 8), '94287082');
+  assert.equal(totpCode(secret, 1_111_111_109_000, 8), '07081804');
 });
 
 test('notification emails use branded, escaped HTML with a useful text alternative', () => {
@@ -407,7 +414,6 @@ test('action notifications include branded song, feedback, and rehearsal details
         await f.action(admin.cookie, 'song.lyrics', {
           songId: song.id,
           draft: 'Updated words',
-          chordsSheet: 'Em C G D',
         })
       ).status,
       200,
@@ -415,8 +421,21 @@ test('action notifications include branded song, feedback, and rehearsal details
     await waitForMessages(smtp.messages, 3);
     const lyricsEmail = decodeEmail(smtp.messages[2]);
     assert.match(lyricsEmail, /Lyrics updated/);
-    assert.match(lyricsEmail, /Chord chart/);
-    assert.match(lyricsEmail, /Included/);
+    assert.match(lyricsEmail, /Review lyrics/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.chords', {
+          songId: song.id,
+          chordsSheet: 'Em C G D',
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 4);
+    const chordsEmail = decodeEmail(smtp.messages[3]);
+    assert.match(chordsEmail, /Chord chart updated/);
+    assert.match(chordsEmail, /Review chord chart/);
 
     assert.equal(
       (
@@ -428,8 +447,8 @@ test('action notifications include branded song, feedback, and rehearsal details
       ).status,
       200,
     );
-    await waitForMessages(smtp.messages, 4);
-    const commentEmail = decodeEmail(smtp.messages[3]);
+    await waitForMessages(smtp.messages, 5);
+    const commentEmail = decodeEmail(smtp.messages[4]);
     assert.match(commentEmail, /New band feedback/);
     assert.match(commentEmail, /1:02/);
     assert.match(commentEmail, /harmony lands perfectly/);
@@ -450,8 +469,8 @@ test('action notifications include branded song, feedback, and rehearsal details
       ).status,
       200,
     );
-    await waitForMessages(smtp.messages, 5);
-    const practiceEmail = decodeEmail(smtp.messages[4]);
+    await waitForMessages(smtp.messages, 6);
+    const practiceEmail = decodeEmail(smtp.messages[5]);
     assert.match(practiceEmail, /New rehearsal/);
     assert.match(practiceEmail, /Album Run-through/);
     assert.match(practiceEmail, /Studio B/);
@@ -459,6 +478,23 @@ test('action notifications include branded song, feedback, and rehearsal details
     assert.match(practiceEmail, /Midnight Drive/);
     assert.match(practiceEmail, /Bring in-ear monitors/);
     assert.match(practiceEmail, /View practice and RSVP/);
+
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.archive', {
+          songId: song.id,
+        })
+      ).status,
+      200,
+    );
+    await waitForMessages(smtp.messages, 7);
+    const archiveEmail = decodeEmail(smtp.messages[6]);
+    assert.match(archiveEmail, /Demo archived/);
+    assert.match(archiveEmail, /Midnight Drive/);
+    assert.match(archiveEmail, /permanently deleted in 30 days/i);
+    assert.match(archiveEmail, /Download its ZIP archive before deletion/i);
+    assert.match(archiveEmail, /audio takes, lyrics, chords, and tabs/i);
+    assert.equal(f.store.read().emailLogs[0].eventType, 'demo_archived');
   } finally {
     await smtp.close();
     await f.close();
@@ -534,6 +570,10 @@ async function fixture() {
     action,
     sendPracticeReminders: (referenceTime?: Date) =>
       application.sendPracticeReminders(referenceTime),
+    cleanupArchivedDemos: (referenceTime?: Date) =>
+      application.cleanupArchivedDemos(referenceTime),
+    cleanupPastPractices: (referenceTime?: Date) =>
+      application.cleanupPastPractices(referenceTime),
     get store() {
       return application.store;
     },
@@ -558,14 +598,38 @@ test('RSVP reminders target unconfirmed members and event reminders target atten
   const smtp = await localSmtp();
   try {
     const admin = await f.login();
-    assert.equal(
-      (
-        await f.action(admin.cookie, 'member.add', {
+    const memberResponse = await f.action(admin.cookie, 'member.add', {
           name: 'Unconfirmed Member',
           email: 'unconfirmed@example.com',
           password,
           role: 'member',
           instrument: 'Bass',
+        });
+    assert.equal(memberResponse.status, 200);
+    const memberId = (await memberResponse.json()).result.memberId;
+    const memberProfile = f.store
+      .members()
+      .find((member) => member.id === memberId)!;
+    assert.deepEqual(memberProfile.notifications, {
+      newDemos: true,
+      newVersions: true,
+      lyricEdits: true,
+      practiceSchedule: true,
+      practiceRsvpReminders: true,
+      practiceEventReminders: true,
+      comments: true,
+      demoArchived: true,
+    });
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'member.profile', {
+          userId: memberId,
+          updates: {
+            notifications: {
+              ...memberProfile.notifications!,
+              practiceSchedule: false,
+            },
+          },
         })
       ).status,
       200,
@@ -580,16 +644,23 @@ test('RSVP reminders target unconfirmed members and event reminders target atten
       username: '',
       password: '',
       fromEmail: 'band@example.com',
-      notificationTriggers: {
-        ...f.store.read().smtpSettings.notificationTriggers,
-        practiceSchedule: false,
-        practiceReminder: true,
-      },
     };
     assert.equal(
       (await f.action(admin.cookie, 'smtp.update', smtpSettings)).status,
       200,
     );
+    const pastDate = await f.action(admin.cookie, 'practice.add', {
+      title: 'Past Practice',
+      date: '2000-01-01',
+      startTime: '18:00',
+      endTime: '20:00',
+      location: 'Studio A',
+      setlistSongIds: [],
+      goals: [],
+      notes: '',
+    });
+    assert.equal(pastDate.status, 400);
+    assert.match(await pastDate.text(), /cannot be earlier than today/i);
     assert.equal(
       (
         await f.action(admin.cookie, 'practice.add', {
@@ -627,6 +698,33 @@ test('RSVP reminders target unconfirmed members and event reminders target atten
       f.store.read().emailLogs[0].eventType,
       'practice_event_reminder',
     );
+    const pastState = f.store.read();
+    pastState.practices[0].date = '2000-01-01';
+    f.store.write(pastState);
+    const pastEdit = await f.action(admin.cookie, 'practice.update', {
+      practiceId: pastState.practices[0].id,
+      title: 'Edited Past Practice',
+      date: '2027-01-01',
+      startTime: '18:00',
+      endTime: '20:00',
+      location: 'Studio A',
+      setlistSongIds: [],
+      goals: [],
+      notes: '',
+    });
+    assert.equal(pastEdit.status, 400);
+    assert.match(await pastEdit.text(), /past practice sessions cannot be edited/i);
+    const pastRsvp = await f.action(admin.cookie, 'practice.rsvp', {
+      practiceId: pastState.practices[0].id,
+      status: 'attending',
+    });
+    assert.equal(pastRsvp.status, 400);
+    assert.match(await pastRsvp.text(), /rsvps cannot be changed/i);
+    assert.equal(
+      f.cleanupPastPractices(new Date('2000-02-01T20:00:01')),
+      1,
+    );
+    assert.equal(f.store.read().practices.length, 0);
   } finally {
     await smtp.close();
     await f.close();
@@ -882,7 +980,7 @@ test('legacy Editor accounts migrate to Member with merged permissions', async (
       (f.store.db.prepare('SELECT version FROM schema_version').get() as {
         version: number;
       }).version,
-      3,
+      5,
     );
   } finally {
     await f.close();
@@ -988,6 +1086,136 @@ test('server login, session protection, secret isolation and password rotation',
   }
 });
 
+test('admin-enforced TOTP requires enrollment, accepts codes, and consumes recovery codes', async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.login();
+    const authSettings = f.store.read().authSettings;
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'auth.update', {
+          ...authSettings,
+          requireTwoFactor: true,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await f.request('/api/auth/logout', {}, admin.cookie)).status,
+      200,
+    );
+
+    const beginSetup = await f.request('/api/auth/login', {
+      email: 'admin@example.com',
+      password,
+    });
+    assert.equal(beginSetup.status, 200);
+    assert.equal(beginSetup.headers.get('set-cookie'), null);
+    const setup = await beginSetup.json();
+    assert.equal(setup.twoFactorRequired, true);
+    assert.equal(setup.setupRequired, true);
+    assert.match(setup.manualKey, /^[A-Z2-7]{32}$/);
+    assert.equal(setup.recoveryCodes.length, 8);
+
+    const currentCode = totpCode(setup.manualKey);
+    const wrongCode = await f.request('/api/auth/2fa/verify', {
+      challengeToken: setup.challengeToken,
+      code: currentCode === '000000' ? '111111' : '000000',
+    });
+    assert.equal(wrongCode.status, 401);
+
+    const verification = await f.request('/api/auth/2fa/verify', {
+      challengeToken: setup.challengeToken,
+      code: currentCode,
+    });
+    assert.equal(verification.status, 200, await verification.clone().text());
+    const verifiedState = await verification.json();
+    assert.equal(verifiedState.currentUser.twoFactorEnabled, true);
+    assert.ok(!JSON.stringify(verifiedState).includes(setup.manualKey));
+    const encryptedSecret = String(
+      f.store.db.prepare('SELECT secret FROM user_two_factor').get()!.secret,
+    );
+    assert.ok(!encryptedSecret.includes(setup.manualKey));
+
+    const enrolledCookie = verification.headers.get('set-cookie')!.split(';')[0];
+    await f.request('/api/auth/logout', {}, enrolledCookie);
+    const beginRecovery = await f.request('/api/auth/login', {
+      email: 'admin@example.com',
+      password,
+    });
+    const recoveryChallenge = await beginRecovery.json();
+    assert.equal(recoveryChallenge.setupRequired, false);
+    assert.equal(recoveryChallenge.manualKey, undefined);
+    const recovery = await f.request('/api/auth/2fa/verify', {
+      challengeToken: recoveryChallenge.challengeToken,
+      code: setup.recoveryCodes[0],
+    });
+    assert.equal(recovery.status, 200, await recovery.clone().text());
+
+    const recoveryCookie = recovery.headers.get('set-cookie')!.split(';')[0];
+    await f.request('/api/auth/logout', {}, recoveryCookie);
+    const beginReuse = await f.request('/api/auth/login', {
+      email: 'admin@example.com',
+      password,
+    });
+    const reuseChallenge = await beginReuse.json();
+    assert.equal(
+      (
+        await f.request('/api/auth/2fa/verify', {
+          challengeToken: reuseChallenge.challengeToken,
+          code: setup.recoveryCodes[0],
+        })
+      ).status,
+      401,
+    );
+    const finalVerification = await f.request('/api/auth/2fa/verify', {
+      challengeToken: reuseChallenge.challengeToken,
+      code: totpCode(setup.manualKey),
+      rememberDevice: true,
+    });
+    assert.equal(finalVerification.status, 200);
+    const rememberedCookieHeader = finalVerification.headers
+      .getSetCookie()
+      .map((cookie) => cookie.split(';')[0])
+      .join('; ');
+    assert.match(rememberedCookieHeader, /rehearsalhq_trusted_device=/);
+    assert.equal(
+      f.store.db.prepare('SELECT count(*) AS total FROM trusted_devices').get()!.total,
+      1,
+    );
+    await f.request('/api/auth/logout', {}, rememberedCookieHeader);
+    const trustedLogin = await f.request(
+      '/api/auth/login',
+      { email: 'admin@example.com', password },
+      rememberedCookieHeader,
+    );
+    assert.equal(trustedLogin.status, 200);
+    const trustedState = await trustedLogin.clone().json();
+    assert.equal(trustedState.twoFactorRequired, undefined);
+    assert.equal(trustedState.currentUser.twoFactorEnabled, true);
+    const trustedSessionCookie = trustedLogin.headers.get('set-cookie')!.split(';')[0];
+    const reset = await f.action(trustedSessionCookie, 'member.2fa.reset', {
+      userId: verifiedState.currentUser.id,
+    });
+    assert.equal(reset.status, 200);
+    assert.equal(
+      f.store.db.prepare('SELECT 1 FROM user_two_factor').get(),
+      undefined,
+    );
+    assert.equal(
+      f.store.db.prepare('SELECT 1 FROM trusted_devices').get(),
+      undefined,
+    );
+    assert.equal((await reset.json()).state.currentUser.twoFactorEnabled, false);
+    assert.equal(
+      (await f.request('/api/state', undefined, trustedSessionCookie)).status,
+      401,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
 test('server enforces roles, self-update allowlist, lockout, expiry and last Admin', async () => {
   const f = await fixture();
   try {
@@ -1026,6 +1254,25 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       ).status,
       403,
     );
+    assert.equal(
+      (
+        await f.action(guest.cookie, 'song.tabs', {
+          songId: 'missing-song',
+          tuning: 'E A D G B E',
+          content: 'e|---|',
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await f.action(guest.cookie, 'song.chords', {
+          songId: 'missing-song',
+          chordsSheet: 'Am G',
+        })
+      ).status,
+      403,
+    );
     const branding = {
       headerLogoUrl: 'data:image/png;base64,aGVhZGVy',
       headerLogoShape: 'circle',
@@ -1035,6 +1282,37 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
     assert.equal(
       (await f.action(admin.cookie, 'app.update', branding)).status,
       200,
+    );
+    const demoCategories = [
+      { id: 'all', label: 'All Demos' },
+      { id: 'idea', label: 'Song Ideas' },
+      { id: 'chorus', label: 'Chorus Ideas' },
+      { id: 'riff', label: 'Riffs' },
+      { id: 'bass', label: 'Bass Ideas' },
+      { id: 'verse', label: 'Verse Ideas' },
+      { id: 'bridge', label: 'Bridge Ideas' },
+      { id: 'full', label: 'Full Arrangements' },
+      { id: 'archived', label: 'Archived' },
+    ];
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'app.update', {
+          demoCategories,
+        })
+      ).status,
+      200,
+    );
+    assert.deepEqual(f.store.read().appSettings.demoCategories, demoCategories);
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'app.update', {
+          demoCategories: [
+            { id: 'all', label: 'All Demos' },
+            { id: 'idea', label: 'All Demos' },
+          ],
+        })
+      ).status,
+      400,
     );
     assert.equal(
       (await f.action(admin.cookie, 'band.update', { name: 'Admin Band' }))
@@ -1157,9 +1435,11 @@ test('server enforces roles, self-update allowlist, lockout, expiry and last Adm
       updates: {
         name: 'Updated Member',
         avatar: member.state.currentUser.avatar,
+        chordSelectorEnabled: false,
       },
     });
     assert.equal(profile.status, 200, await profile.clone().text());
+    assert.equal(f.store.members().find((user) => user.id === member.state.currentUser.id)?.chordSelectorEnabled, false);
     assert.equal(
       (await f.request('/api/state', undefined, guest.cookie)).status,
       200,
@@ -1280,6 +1560,12 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     assert.equal(updatedSong.bpm, 132);
     assert.equal(updatedSong.musicalKey, 'D minor');
     assert.equal(updatedSong.description, 'Use the quieter intro.');
+    const earlyChordChart = await f.action(admin.cookie, 'song.chords', {
+      songId: song.id,
+      chordsSheet: 'Am G',
+    });
+    assert.equal(earlyChordChart.status, 400);
+    assert.match(await earlyChordChart.text(), /Add lyrics in Lyrics Studio/);
     assert.equal(
       (
         await f.action(admin.cookie, 'song.comment', {
@@ -1294,11 +1580,51 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
         await f.action(admin.cookie, 'song.lyrics', {
           songId: song.id,
           draft: 'Shared words',
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.chords', {
+          songId: song.id,
           chordsSheet: 'Am G',
         })
       ).status,
       200,
     );
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'song.tabs', {
+          songId: song.id,
+          tuning: 'D A D G B E',
+          content: '[Intro]\ne|--0--2--3--|\nB|-----------|',
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await f.request(`/api/demos/${song.id}/export`)).status,
+      401,
+    );
+    const bundle = await f.request(
+      `/api/demos/${song.id}/export`,
+      undefined,
+      admin.cookie,
+    );
+    assert.equal(bundle.status, 200, await bundle.clone().text());
+    assert.match(bundle.headers.get('content-type') || '', /application\/zip/);
+    assert.match(
+      bundle.headers.get('content-disposition') || '',
+      /attachment; filename="Finished Demo\.zip"/,
+    );
+    const bundleBytes = Buffer.from(await bundle.arrayBuffer());
+    assert.equal(bundleBytes.subarray(0, 2).toString('ascii'), 'PK');
+    const bundleIndex = bundleBytes.toString('latin1');
+    assert.match(bundleIndex, /Finished Demo\/Audio\/01_v1\.wav/);
+    assert.match(bundleIndex, /Finished Demo\/Lyrics\.txt/);
+    assert.match(bundleIndex, /Finished Demo\/Chords\.txt/);
+    assert.match(bundleIndex, /Finished Demo\/Tabs\.txt/);
     assert.equal(
       (
         await f.action(admin.cookie, 'practice.add', {
@@ -1365,6 +1691,11 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
       await f.request('/api/state', undefined, admin.cookie)
     ).json();
     assert.equal(state.songs[0].lyrics.draft, 'Shared words');
+    assert.equal(state.songs[0].lyrics.chordsSheet, 'Am G');
+    assert.equal(state.songs[0].tabs.tuning, 'D A D G B E');
+    assert.match(state.songs[0].tabs.content, /^\[Intro\]/);
+    assert.equal(state.songs[0].tabs.versionNumber, 1);
+    assert.equal(state.songs[0].tabs.lastEditedBy, 'The Conductor');
     assert.equal(state.songs[0].title, 'Finished Demo');
     assert.equal(state.songs[0].category, 'full');
     assert.equal(state.songs[0].bpm, 132);
@@ -1405,8 +1736,57 @@ test('shared songs, audio byte ranges, lyrics, practices and settings survive re
     );
     restored.close();
     assert.equal(
-      (await f.action(admin.cookie, 'song.delete', { songId: song.id })).status,
+      (await f.action(admin.cookie, 'song.archive', { songId: song.id })).status,
       200,
+    );
+    assert.equal(f.store.read().songs[0].category, 'archived');
+    assert.equal(f.store.read().songs[0].archivedFromCategory, 'full');
+    assert.ok(f.store.read().songs[0].archivedAt);
+    assert.equal(existsSync(audioPath), true);
+    const archivedEdit = await f.action(admin.cookie, 'song.comment', {
+      songId: song.id,
+      text: 'This should remain read-only.',
+    });
+    assert.equal(archivedEdit.status, 400);
+    assert.match(await archivedEdit.text(), /restore this archived demo/i);
+    assert.equal(
+      (await f.action(admin.cookie, 'song.restore', { songId: song.id })).status,
+      200,
+    );
+    assert.equal(f.store.read().songs[0].category, 'full');
+    assert.equal(f.store.read().songs[0].archivedFromCategory, undefined);
+    assert.equal(f.store.read().songs[0].archivedAt, undefined);
+    assert.equal(
+      (await f.action(admin.cookie, 'song.archive', { songId: song.id })).status,
+      200,
+    );
+    const oldArchiveState = f.store.read();
+    oldArchiveState.songs[0].archivedAt = '2026-01-01T00:00:00.000Z';
+    f.store.write(oldArchiveState);
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'app.update', {
+          autoDeleteArchivedDemos: false,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      f.cleanupArchivedDemos(new Date('2026-02-01T00:00:01.000Z')),
+      0,
+    );
+    assert.equal(f.store.read().songs.length, 1);
+    assert.equal(
+      (
+        await f.action(admin.cookie, 'app.update', {
+          autoDeleteArchivedDemos: true,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      f.cleanupArchivedDemos(new Date('2026-02-01T00:00:01.000Z')),
+      1,
     );
     assert.equal(
       (await f.request(audioUrl, undefined, admin.cookie)).status,

@@ -16,13 +16,17 @@ import { formatClockTime } from '../shared/time.ts';
 
 interface SongListMainViewProps {
   onOpenUploadModal: () => void;
-  onOpenLyricsModal: (song: SongIdea) => void;
+  onOpenLyricsStudio: (song: SongIdea) => void;
+  onOpenChordsStudio: (song: SongIdea) => void;
+  onOpenTabsStudio: (song: SongIdea) => void;
   onOpenNewVersionModal: (song: SongIdea) => void;
 }
 
 export const SongListMainView: React.FC<SongListMainViewProps> = ({
   onOpenUploadModal,
-  onOpenLyricsModal,
+  onOpenLyricsStudio,
+  onOpenChordsStudio,
+  onOpenTabsStudio,
   onOpenNewVersionModal,
 }) => {
   const { songs, permissions, practices, appSettings } = useBand();
@@ -30,9 +34,19 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
 
   const nextPractice = practices[0];
+  const activeSongs = songs.filter((song) => song.category !== 'archived');
+
+  const activeCategory = appSettings.demoCategories.some(
+    (category) => category.id === selectedCategory,
+  )
+    ? selectedCategory
+    : 'all';
 
   const filteredSongs = songs.filter(song => {
-    const matchesCategory = selectedCategory === 'all' || song.category === selectedCategory;
+    const matchesCategory =
+      activeCategory === 'all'
+        ? song.category !== 'archived'
+        : song.category === activeCategory;
     const matchesSearch =
       song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       song.createdBy.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -51,7 +65,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
           <div>
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Demo Vault</p>
             <p className="text-base font-bold text-white">
-              {songs.length} Track Ideas &amp; Takes
+              {activeSongs.length} Track Ideas &amp; Takes
             </p>
           </div>
         </div>
@@ -63,7 +77,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
           <div>
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total Recorded Takes</p>
             <p className="text-base font-bold text-white">
-              {songs.reduce((acc, s) => acc + s.versions.length, 0)} Versions Stored
+              {activeSongs.reduce((acc, s) => acc + s.versions.length, 0)} Versions Stored
             </p>
           </div>
         </div>
@@ -94,21 +108,29 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        {/* Category Filters (matching Page 1 tracks: Song Idea, Chorus Idea, Riff, Bass Idea) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {[
-            { id: 'all', label: 'All Demos' },
-            { id: 'idea', label: 'Song Ideas' },
-            { id: 'chorus', label: 'Chorus Ideas' },
-            { id: 'riff', label: 'Riffs' },
-            { id: 'bass', label: 'Bass Ideas' },
-          ].map(cat => (
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        {/* Category Filters */}
+        <div className="relative md:hidden">
+          <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-400" />
+          <select
+            aria-label="Filter demos by category"
+            value={activeCategory}
+            onChange={(event) => setSelectedCategory(event.target.value)}
+            className="w-full appearance-none rounded-xl border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-9 text-xs font-semibold text-zinc-200 focus:border-amber-500 focus:outline-none"
+          >
+            {appSettings.demoCategories.map((category) => (
+              <option key={category.id} value={category.id}>{category.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="hidden flex-wrap items-center gap-1.5 md:flex">
+          {appSettings.demoCategories.map(cat => (
             <button
               key={cat.id}
+              data-active={activeCategory === cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap border ${
-                selectedCategory === cat.id
+              className={`demo-category-filter px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap border ${
+                activeCategory === cat.id
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
                   : 'bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 border-zinc-800'
               }`}
@@ -119,7 +141,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
         </div>
 
         {/* Search */}
-        <div className="relative sm:w-64">
+        <div className="relative md:w-64 md:shrink-0">
           <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
           <input
             type="text"
@@ -131,7 +153,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
         </div>
       </div>
 
-      {/* Main Track List Container as sketched on Page 1 */}
+      {/* Main Track List Container */}
       <div className="rounded-3xl border border-zinc-800 bg-zinc-950/40 p-3 sm:p-5 shadow-2xl">
         <div className="flex items-center justify-between px-2 pb-3 mb-2 border-b border-zinc-800/80">
           <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400">
@@ -142,8 +164,12 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
         {filteredSongs.length === 0 ? (
           <div className="p-12 text-center text-zinc-500 space-y-3">
             <Music className="w-10 h-10 mx-auto text-zinc-700" />
-            <p className="text-sm font-medium text-zinc-300">No song demos found in this filter.</p>
-            {permissions.canUploadDemo && (
+            <p className="text-sm font-medium text-zinc-300">
+              {activeCategory === 'archived'
+                ? 'No archived demos.'
+                : 'No song demos found in this filter.'}
+            </p>
+            {activeCategory !== 'archived' && permissions.canUploadDemo && (
               <button
                 onClick={onOpenUploadModal}
                 className="px-4 py-2 rounded-xl bg-amber-500 text-zinc-950 font-bold text-xs"
@@ -158,25 +184,25 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
               <SongCard
                 key={song.id}
                 song={song}
-                onOpenLyrics={onOpenLyricsModal}
+                onOpenLyrics={onOpenLyricsStudio}
+                onOpenChords={onOpenChordsStudio}
+                onOpenTabs={onOpenTabsStudio}
                 onOpenNewVersion={onOpenNewVersionModal}
               />
             ))}
           </div>
         )}
 
-        {/* Bottom Upload Section as sketched on Page 1: "upload new demo (see page 2)" */}
+        {/* Bottom Upload Section */}
+        {activeCategory !== 'archived' && (
         <div className="mt-6 pt-5 border-t border-zinc-800/90 text-center">
           {permissions.canUploadDemo ? (
             <button
               onClick={onOpenUploadModal}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-zinc-950 font-black text-sm tracking-wide shadow-xl shadow-amber-500/15 hover:shadow-amber-500/25 transition active:scale-[0.99] border border-amber-300/40"
+              className="theme-bg-accent w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl text-zinc-950 font-black text-sm tracking-wide shadow-xl shadow-amber-500/15 hover:shadow-amber-500/25 transition active:scale-[0.99] border border-amber-300/40"
             >
               <Upload className="w-5 h-5 stroke-[2.5]" />
               <span>Upload New Demo</span>
-              <span className="text-xs font-semibold text-zinc-800 ml-1">
-                (MP3, WAV, Mic &amp; Presets)
-              </span>
             </button>
           ) : (
             <div className="p-3 text-xs text-zinc-500 italic">
@@ -184,6 +210,7 @@ export const SongListMainView: React.FC<SongListMainViewProps> = ({
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

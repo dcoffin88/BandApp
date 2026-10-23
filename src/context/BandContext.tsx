@@ -38,6 +38,12 @@ import { applyTheme } from '../shared/theme.ts';
 interface AuthResponse {
   success: boolean;
   message?: string;
+  twoFactorRequired?: boolean;
+  setupRequired?: boolean;
+  challengeToken?: string;
+  manualKey?: string;
+  otpauthUrl?: string;
+  recoveryCodes?: string[];
 }
 
 interface BandContextType {
@@ -73,6 +79,11 @@ interface BandContextType {
     newPassword: string,
   ) => Promise<AuthResponse>;
   login: (email: string, password: string) => Promise<AuthResponse>;
+  verifyTwoFactor: (
+    challengeToken: string,
+    code: string,
+    rememberDevice?: boolean,
+  ) => Promise<AuthResponse>;
   logout: () => Promise<boolean>;
   updateUserRole: (memberId: string, newRole: Role) => Promise<boolean>;
   updateUserStatus: (memberId: string, status: UserStatus) => Promise<boolean>;
@@ -80,6 +91,7 @@ interface BandContextType {
     userId: string,
     updates: Partial<BandMember>,
   ) => Promise<boolean>;
+  resetUserTwoFactor: (userId: string) => Promise<boolean>;
   deleteUserAccount: (userId: string) => Promise<boolean>;
   updateAuthSettings: (settings: AuthSettings) => Promise<boolean>;
   clearAuditLogs: () => Promise<boolean>;
@@ -106,6 +118,12 @@ interface BandContextType {
     draft: string,
     chordsSheet?: string,
   ) => Promise<boolean>;
+  updateChords: (songId: string, chordsSheet: string) => Promise<boolean>;
+  updateTabs: (
+    songId: string,
+    tuning: string,
+    content: string,
+  ) => Promise<boolean>;
   updateSongMetadata: (
     songId: string,
     updates: SongMetadataUpdate,
@@ -116,6 +134,8 @@ interface BandContextType {
     timestampSeconds?: number,
   ) => Promise<boolean>;
   deleteSong: (songId: string) => Promise<boolean>;
+  archiveSong: (songId: string) => Promise<boolean>;
+  restoreSong: (songId: string) => Promise<boolean>;
   setActiveVersion: (songId: string, versionId: string) => Promise<boolean>;
   addPracticeSession: (
     session: Omit<
@@ -305,9 +325,35 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
   }
   async function login(email: string, password: string): Promise<AuthResponse> {
     try {
-      const data = await api<SessionState>('/api/auth/login', {
+      const data = await api<SessionState | Omit<AuthResponse, 'success'>>('/api/auth/login', {
         email,
         password,
+      });
+      if ('twoFactorRequired' in data && data.twoFactorRequired) {
+        return { success: true, ...data };
+      }
+      epoch.current++;
+      setState(data as SessionState);
+      setAuthenticated(true);
+      setError('');
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Unable to sign in.',
+      };
+    }
+  }
+  async function verifyTwoFactor(
+    challengeToken: string,
+    code: string,
+    rememberDevice = false,
+  ): Promise<AuthResponse> {
+    try {
+      const data = await api<SessionState>('/api/auth/2fa/verify', {
+        challengeToken,
+        code,
+        rememberDevice,
       });
       epoch.current++;
       setState(data);
@@ -317,7 +363,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (err) {
       return {
         success: false,
-        message: err instanceof Error ? err.message : 'Unable to sign in.',
+        message: err instanceof Error ? err.message : 'Verification failed.',
       };
     }
   }
@@ -466,6 +512,7 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     isAuthenticated: authenticated,
     isAudioInitialized: true,
     login,
+    verifyTwoFactor,
     changePassword,
     logout,
     updateAppSettings: (settings) => save('app.update', settings),
@@ -481,6 +528,11 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
       updates.password !== undefined
         ? save('member.password', { userId, password: updates.password })
         : save('member.profile', { userId, updates }),
+    resetUserTwoFactor: async (userId) => {
+      const saved = await save('member.2fa.reset', { userId });
+      if (saved && userId === state.currentUser.id) clear(state.band.name);
+      return saved;
+    },
     deleteUserAccount: (userId) => save('member.delete', { userId }),
     updateAuthSettings: (settings) => save('auth.update', settings),
     clearAuditLogs: () => save('audit.clear', {}),
@@ -490,11 +542,17 @@ export const BandProvider: React.FC<{ children: React.ReactNode }> = ({
     addSongVersion,
     updateLyrics: (songId, draft, chordsSheet) =>
       save('song.lyrics', { songId, draft, chordsSheet }),
+    updateChords: (songId, chordsSheet) =>
+      save('song.chords', { songId, chordsSheet }),
+    updateTabs: (songId, tuning, content) =>
+      save('song.tabs', { songId, tuning, content }),
     updateSongMetadata: (songId, updates) =>
       save('song.update', { songId, ...updates }),
     addComment: (songId, text, timestampSeconds) =>
       save('song.comment', { songId, text, timestampSeconds }),
     deleteSong: (songId) => save('song.delete', { songId }),
+    archiveSong: (songId) => save('song.archive', { songId }),
+    restoreSong: (songId) => save('song.restore', { songId }),
     setActiveVersion: (songId, versionId) =>
       save('song.active', { songId, versionId }),
     addPracticeSession: (session) => save('practice.add', session),

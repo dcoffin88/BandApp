@@ -5,9 +5,12 @@ import {
   ChevronDown,
   Edit2,
   FileText,
+  Guitar,
   KeyRound,
   LogOut,
+  Menu,
   Music,
+  Music2,
   Palette,
   Plus,
   Settings,
@@ -18,7 +21,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
-import { Role } from '../types/band.ts';
+import { AppTab, Role } from '../types/band.ts';
 import { useAppVersion } from '../hooks/useAppVersion.ts';
 import { RehearsalHQLogo } from './RehearsalHQLogo.tsx';
 import { VersionBadge } from './VersionBadge.tsx';
@@ -26,8 +29,8 @@ import { VersionModal } from './VersionModal.tsx';
 import { memberDisplayName } from '../shared/member.ts';
 
 interface NavbarProps {
-  activeTab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile';
-  setActiveTab: (tab: 'songs' | 'lyrics' | 'practice' | 'admin' | 'profile') => void;
+  activeTab: AppTab;
+  setActiveTab: (tab: AppTab) => void;
   onOpenUploadModal: () => void;
   onSelectAdminSubTab?: (subTab: 'users' | 'auth' | 'app' | 'smtp') => void;
 }
@@ -134,7 +137,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           </a>
 
           {/* Right Header Area: Version Badge & User Profile */}
-          {/* <div className="flex items-center gap-2 sm:gap-3"> */}
           <div className="flex items-center gap-2 sm:gap-3">
             {currentUser.role === 'admin' && (
               <VersionBadge
@@ -244,8 +246,25 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Navigation tabs & Upload CTA */}
-        <div className="flex items-center justify-between overflow-x-auto py-2 gap-4">
-          <nav className="flex space-x-1 sm:space-x-2">
+        <div className="flex items-center justify-between py-2 gap-2 lg:gap-4">
+          <div className="relative min-w-0 flex-1 lg:hidden">
+            <Menu className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-400" />
+            <select
+              aria-label="Main navigation"
+              value={['songs', 'lyrics', 'chords', 'tabs', 'practice'].includes(activeTab) ? activeTab : ''}
+              onChange={(event) => setActiveTab(event.target.value as AppTab)}
+              className="w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-9 text-xs font-semibold text-zinc-200 focus:border-amber-500 focus:outline-none"
+            >
+              <option value="songs">Demos &amp; Audio</option>
+              <option value="lyrics">Lyrics Studio</option>
+              <option value="chords">Chords Studio</option>
+              <option value="tabs">Tabs Studio</option>
+              <option value="practice">Practice Schedule</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+          </div>
+
+          <nav className="hidden space-x-1 lg:flex lg:space-x-2">
             <button
               onClick={() => setActiveTab('songs')}
               className={`flex items-center gap-2 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition whitespace-nowrap ${
@@ -269,6 +288,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Lyrics Studio</span>
             </button>
             <button
+              onClick={() => setActiveTab('chords')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition whitespace-nowrap ${
+                activeTab === 'chords'
+                  ? 'bg-zinc-800 text-amber-400 shadow-inner'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              }`}
+            >
+              <Music2 className="w-4 h-4" />
+              <span>Chords Studio</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('tabs')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition whitespace-nowrap ${
+                activeTab === 'tabs'
+                  ? 'bg-zinc-800 text-amber-400 shadow-inner'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              }`}
+            >
+              <Guitar className="w-4 h-4" />
+              <span>Tabs Studio</span>
+            </button>
+            <button
               onClick={() => setActiveTab('practice')}
               className={`flex items-center gap-2 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition whitespace-nowrap ${
                 activeTab === 'practice'
@@ -285,10 +326,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           {permissions.canUploadDemo && (
             <button
               onClick={onOpenUploadModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs sm:text-sm transition shadow-md shadow-amber-500/20 whitespace-nowrap"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-zinc-950 shadow-md shadow-amber-500/20 transition hover:bg-amber-400 sm:text-sm lg:py-1.5"
+              aria-label="Upload demo"
+              title="Upload demo"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Upload Demo</span>
+              <span className="hidden sm:inline">Upload Demo</span>
             </button>
           )}
         </div>

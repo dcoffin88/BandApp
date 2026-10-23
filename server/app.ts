@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import nodemailer from 'nodemailer';
+import { ZipArchive } from 'archiver';
 import { statSync, createReadStream } from 'node:fs';
 import path from 'node:path';
 import {
@@ -31,11 +32,14 @@ import type {
   BandMember,
   EmailEventType,
   EmailNotificationLog,
+  PracticeSession,
   Role,
   SmtpSettings,
 } from '../src/types/band.ts';
 import { memberDisplayName } from '../src/shared/member.ts';
-import { formatClockTime } from '../src/shared/time.ts';
+import { formatClockTime, localDateValue } from '../src/shared/time.ts';
+import { DEFAULT_TAB_TUNING } from '../src/shared/tabs.ts';
+import { categoryLabel } from '../src/shared/songMetadata.ts';
 import {
   prepareEmailForDelivery,
   renderBrandedEmail,
@@ -43,12 +47,53 @@ import {
   type EmailDetail,
   type RenderedEmail,
 } from './emailTemplates.ts';
+import {
+  generateRecoveryCodes,
+  generateTotpSecret,
+  hashRecoveryCode,
+  totpUri,
+  verifyTotp,
+} from './totp.ts';
 
 const text = z.string().max(1e4);
+const tabText = z.string().max(1e5);
 const short = z.string().trim().max(200);
 const required = short.min(1);
 const email = z.string().trim().toLowerCase().email().max(254);
 const roleSchema = z.enum(['admin', 'member', 'guest']);
+const categoryIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(50)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const demoCategoriesSchema = z
+  .array(
+    z
+      .object({ id: categoryIdSchema, label: required })
+      .strict(),
+  )
+  .min(2)
+  .max(30)
+  .refine(
+    (categories) => categories.filter((category) => category.id === 'all').length === 1,
+    'Categories must include All Demos.',
+  )
+  .refine(
+    (categories) =>
+      categories.filter((category) => category.id === 'archived').length === 1,
+    'Categories must include Archived.',
+  )
+  .refine(
+    (categories) => new Set(categories.map((category) => category.id)).size === categories.length,
+    'Category identifiers must be unique.',
+  )
+  .refine(
+    (categories) =>
+      new Set(categories.map((category) => category.label.toLowerCase())).size ===
+      categories.length,
+    'Category names must be unique.',
+  );
 const avatar = z
   .string()
   .max(5e5)
@@ -65,8 +110,11 @@ const notifications = z.object({
   newDemos: z.boolean(),
   newVersions: z.boolean(),
   lyricEdits: z.boolean(),
-  practiceReminders: z.boolean(),
+  practiceSchedule: z.boolean(),
+  practiceRsvpReminders: z.boolean(),
+  practiceEventReminders: z.boolean(),
   comments: z.boolean(),
+  demoArchived: z.boolean(),
 });
 
 const profileSchema = z
@@ -80,6 +128,7 @@ const profileSchema = z
     phone: short,
     avatar,
     notifications,
+    chordSelectorEnabled: z.boolean(),
   })
   .partial()
   .strict();
@@ -89,7 +138,7 @@ const authSchema = z
     sessionTimeoutMinutes: z.number().int().min(5).max(1440),
     allowEmailPassword: z.literal(true),
     allowGoogleAuth: z.literal(false),
-    requireTwoFactor: z.literal(false),
+    requireTwoFactor: z.boolean(),
     minPasswordLength: z.number().int().min(12).max(128),
     maxFailedLogins: z.number().int().min(3).max(10),
     requireSpecialChar: z.boolean(),
@@ -129,6 +178,8 @@ const appSchema = z
     headerSubtitle: short,
     accentGlow: z.boolean(),
     timeFormat: z.enum(['12', '24']),
+    autoDeleteArchivedDemos: z.boolean(),
+    demoCategories: demoCategoriesSchema,
   })
   .partial()
   .strict();
@@ -169,15 +220,7 @@ const versionSchema = z.object({
 
 const songSchema = z.object({
   title: required,
-  category: z.enum([
-    'idea',
-    'chorus',
-    'riff',
-    'bass',
-    'full',
-    'verse',
-    'bridge',
-  ]),
+  category: categoryIdSchema,
   bpm: z.number().min(1).max(500).optional(),
   musicalKey: short.optional(),
   description: text.optional(),
@@ -190,15 +233,7 @@ const songMetadataSchema = z
   .object({
     songId: short,
     title: required,
-    category: z.enum([
-      'idea',
-      'chorus',
-      'riff',
-      'bass',
-      'full',
-      'verse',
-      'bridge',
-    ]),
+    category: categoryIdSchema,
     bpm: z.number().int().min(40).max(260).optional(),
     musicalKey: short.optional(),
     description: text.optional(),
@@ -234,11 +269,46 @@ function fail(status: number, message: string): never {
   throw new HttpError(status, message);
 }
 
+const legacyCategoryIds = new Set(['full', 'verse', 'bridge']);
+
+const categoryIsAvailable = (state: SharedState, categoryId: string) =>
+  categoryId !== 'all' &&
+  (legacyCategoryIds.has(categoryId) ||
+    state.appSettings.demoCategories.some(
+      (category) => category.id === categoryId,
+    ));
+
+const requireAvailableCategory = (state: SharedState, categoryId: string) => {
+  if (!categoryIsAvailable(state, categoryId)) {
+    fail(400, 'Choose an available demo category.');
+  }
+};
+
+const safeArchiveName = (value: string, fallback: string) =>
+  value
+    .normalize('NFKC')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '_')
+    .replace(/[. ]+$/g, '')
+    .trim()
+    .slice(0, 120) || fallback;
+
 const requireAdmin = (user: BandMember) => {
   if (user.role !== 'admin') fail(403, 'Admin permission required.');
 };
 
 const now = () => new Date().toISOString();
+
+const practiceEndTimestamp = (
+  practice: Pick<PracticeSession, 'date' | 'endTime'>,
+) => Date.parse(`${practice.date}T${practice.endTime}:00`);
+
+const practiceHasEnded = (
+  practice: Pick<PracticeSession, 'date' | 'endTime'>,
+  referenceTime = new Date(),
+) => {
+  const endTime = practiceEndTimestamp(practice);
+  return Number.isFinite(endTime) && endTime <= referenceTime.getTime();
+};
 
 const identity = (u: BandMember) => ({
   id: u.id,
@@ -278,6 +348,35 @@ export function createApplication(options: ApplicationOptions) {
     store,
     options.mediaDirectory || path.join(path.dirname(options.databasePath), 'media')
   );
+  const collectSongDeletion = (
+    state: SharedState,
+    target: SharedState['songs'][number],
+    deletedMedia: string[],
+  ) => {
+    for (const version of target.versions) {
+      const uploadId = version.audioUrl.split('/').pop() || '';
+      const upload = db
+        .prepare('SELECT relative_path FROM uploads WHERE id=?')
+        .get(uploadId) as { relative_path?: string } | undefined;
+      if (upload?.relative_path) deletedMedia.push(String(upload.relative_path));
+      db.prepare('DELETE FROM uploads WHERE id=?').run(uploadId);
+    }
+    state.songs = state.songs.filter((song) => song.id !== target.id);
+    for (const session of state.practices) {
+      session.setlistSongIds = session.setlistSongIds.filter(
+        (id) => id !== target.id,
+      );
+    }
+  };
+  const removeMediaFiles = (relativePaths: string[]) => {
+    for (const relative of relativePaths) {
+      try {
+        media.remove(relative);
+      } catch (error) {
+        console.error('Could not remove deleted audio:', error);
+      }
+    }
+  };
   const app = express();
   const origin = new URL(options.appUrl).origin;
   const key = createHash('sha256').update(options.secret).digest();
@@ -551,6 +650,8 @@ export function createApplication(options: ApplicationOptions) {
   app.use(express.json({ limit: '2mb' }));
 
   const cookieName = 'rehearsalhq_session';
+  const trustedDeviceCookieName = 'rehearsalhq_trusted_device';
+  const trustedDeviceMaxAge = 30 * 24 * 60 * 60 * 1000;
   const cookies = (req: Request): Record<string, string> =>
     Object.fromEntries(
       (req.get('cookie') || '')
@@ -594,6 +695,65 @@ export function createApplication(options: ApplicationOptions) {
       path: '/',
       maxAge,
     });
+  }
+
+  function isTrustedDevice(req: Request, userId: string): boolean {
+    const value = cookies(req)[trustedDeviceCookieName] || '';
+    if (!value) return false;
+    db.prepare('DELETE FROM trusted_devices WHERE expires_at<=?').run(Date.now());
+    const device = db
+      .prepare('SELECT user_id FROM trusted_devices WHERE token_hash=? AND expires_at>?')
+      .get(tokenHash(value), Date.now()) as { user_id: string } | undefined;
+    return device?.user_id === userId;
+  }
+
+  function rememberTrustedDevice(user: BandMember, res: Response) {
+    const value = randomBytes(32).toString('hex');
+    const expiresAt = Date.now() + trustedDeviceMaxAge;
+    db.prepare('DELETE FROM trusted_devices WHERE expires_at<=?').run(Date.now());
+    db.prepare('INSERT INTO trusted_devices VALUES (?,?,?)').run(
+      tokenHash(value),
+      user.id,
+      expiresAt,
+    );
+    res.cookie(trustedDeviceCookieName, value, {
+      httpOnly: true,
+      secure: options.secureCookies,
+      sameSite: 'strict',
+      path: '/',
+      maxAge: trustedDeviceMaxAge,
+    });
+  }
+
+  function createTwoFactorChallenge(user: BandMember) {
+    const enrolled = db
+      .prepare('SELECT 1 FROM user_two_factor WHERE user_id=?')
+      .get(user.id);
+    const setupRequired = !enrolled;
+    const secret = setupRequired ? generateTotpSecret() : '';
+    const recoveryCodes = setupRequired ? generateRecoveryCodes() : [];
+    const challengeToken = randomBytes(32).toString('hex');
+    db.prepare('DELETE FROM two_factor_challenges WHERE expires_at<=? OR user_id=?')
+      .run(Date.now(), user.id);
+    db.prepare(
+      'INSERT INTO two_factor_challenges VALUES (?,?,?,?,?,0)',
+    ).run(
+      tokenHash(challengeToken),
+      user.id,
+      encrypt(secret),
+      JSON.stringify(recoveryCodes.map(hashRecoveryCode)),
+      Date.now() + 5 * 60 * 1000,
+    );
+    return {
+      twoFactorRequired: true as const,
+      setupRequired,
+      challengeToken,
+      manualKey: setupRequired ? secret : undefined,
+      otpauthUrl: setupRequired
+        ? totpUri(secret, user.email, 'RehearsalHQ')
+        : undefined,
+      recoveryCodes: setupRequired ? recoveryCodes : undefined,
+    };
   }
 
   function snapshot(user: BandMember) {
@@ -718,14 +878,107 @@ export function createApplication(options: ApplicationOptions) {
         audit(req, input.email, false);
         fail(401, 'Invalid email or password.');
       }
+      db.prepare('DELETE FROM login_attempts WHERE email=?').run(input.email);
+      if (
+        state.authSettings.requireTwoFactor &&
+        !(user.twoFactorEnabled && isTrustedDevice(req, user.id))
+      ) {
+        return res.json(createTwoFactorChallenge(user));
+      }
       user.status = 'active';
       user.lastLogin = now();
       store.saveUser(user);
-      db.prepare('DELETE FROM login_attempts WHERE email=?').run(input.email);
       audit(req, memberDisplayName(user), true, user.id);
       createSession(user, res);
       res.json(snapshot(user));
     })
+  );
+
+  app.post(
+    '/api/auth/2fa/verify',
+    route((req: Request, res: Response) => {
+      const input = z
+        .object({
+          challengeToken: z.string().regex(/^[a-f0-9]{64}$/),
+          code: z.string().trim().min(6).max(20),
+          rememberDevice: z.boolean().default(false),
+        })
+        .strict()
+        .parse(req.body);
+      const challenge = db
+        .prepare('SELECT * FROM two_factor_challenges WHERE token_hash=?')
+        .get(tokenHash(input.challengeToken)) as
+        | {
+            token_hash: string;
+            user_id: string;
+            secret: string;
+            recovery_hashes: string;
+            expires_at: number;
+            attempts: number;
+          }
+        | undefined;
+      if (!challenge || challenge.expires_at <= Date.now()) {
+        if (challenge) {
+          db.prepare('DELETE FROM two_factor_challenges WHERE token_hash=?')
+            .run(challenge.token_hash);
+        }
+        fail(401, 'Your verification session expired. Sign in again.');
+      }
+      if (challenge.attempts >= 5) {
+        db.prepare('DELETE FROM two_factor_challenges WHERE token_hash=?')
+          .run(challenge.token_hash);
+        fail(429, 'Too many verification attempts. Sign in again.');
+      }
+      const user = store.members().find((member) => member.id === challenge.user_id);
+      if (!user || user.status === 'suspended') {
+        fail(401, 'Please sign in with an active account.');
+      }
+      const enrolled = db
+        .prepare('SELECT secret,recovery_hashes FROM user_two_factor WHERE user_id=?')
+        .get(user.id) as
+        | { secret: string; recovery_hashes: string }
+        | undefined;
+      const setupSecret = decrypt(challenge.secret);
+      const secret = setupSecret || (enrolled ? decrypt(enrolled.secret) : '');
+      let valid = Boolean(secret) && verifyTotp(secret, input.code);
+      let usedRecoveryIndex = -1;
+      let recoveryHashes: string[] = enrolled
+        ? JSON.parse(enrolled.recovery_hashes)
+        : [];
+      if (!valid && enrolled) {
+        const recoveryHash = hashRecoveryCode(input.code);
+        usedRecoveryIndex = recoveryHashes.indexOf(recoveryHash);
+        valid = usedRecoveryIndex >= 0;
+      }
+      if (!valid) {
+        db.prepare(
+          'UPDATE two_factor_challenges SET attempts=attempts+1 WHERE token_hash=?',
+        ).run(challenge.token_hash);
+        audit(req, memberDisplayName(user), false, user.id);
+        fail(401, 'Invalid authentication code.');
+      }
+      store.transaction(() => {
+        if (setupSecret) {
+          db.prepare(
+            'INSERT OR REPLACE INTO user_two_factor VALUES (?,?,?)',
+          ).run(user.id, encrypt(setupSecret), challenge.recovery_hashes);
+          user.twoFactorEnabled = true;
+        } else if (usedRecoveryIndex >= 0 && enrolled) {
+          recoveryHashes = recoveryHashes.filter((_, index) => index !== usedRecoveryIndex);
+          db.prepare(
+            'UPDATE user_two_factor SET recovery_hashes=? WHERE user_id=?',
+          ).run(JSON.stringify(recoveryHashes), user.id);
+        }
+        db.prepare('DELETE FROM two_factor_challenges WHERE user_id=?').run(user.id);
+        user.status = 'active';
+        user.lastLogin = now();
+        store.saveUser(user);
+      });
+      audit(req, memberDisplayName(user), true, user.id);
+      createSession(user, res);
+      if (input.rememberDevice) rememberTrustedDevice(user, res);
+      res.json(snapshot({ ...user, twoFactorEnabled: true }));
+    }),
   );
 
   app.post(
@@ -778,6 +1031,7 @@ export function createApplication(options: ApplicationOptions) {
       store.transaction(() => {
         store.saveUser(user, hashPassword(input.newPassword));
         db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+        db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(user.id);
       });
       createSession(user, res);
       res.json({ success: true });
@@ -804,9 +1058,8 @@ export function createApplication(options: ApplicationOptions) {
         fail(400, 'Choose a non-empty audio file.');
       }
       const id = randomUUID();
-      const category = z
-        .enum(['idea', 'chorus', 'riff', 'bass', 'full', 'verse', 'bridge'])
-        .parse(req.query.category || 'idea');
+      const category = categoryIdSchema.parse(req.query.category || 'idea');
+      requireAvailableCategory(store.read(), category);
       const relative = media.location(user.name, category, id, mime);
       media.write(relative, req.body);
       try {
@@ -819,6 +1072,63 @@ export function createApplication(options: ApplicationOptions) {
       }
       res.status(201).json({ audioUrl: `/api/uploads/${id}` });
     })
+  );
+
+  app.get(
+    '/api/demos/:songId/export',
+    route((req: Request, res: Response) => {
+      const state = store.read();
+      const song = state.songs.find(
+        (candidate) => candidate.id === String(req.params.songId),
+      );
+      if (!song) fail(404, 'Demo not found.');
+
+      const folderName = safeArchiveName(song.title, 'Demo');
+      const archiveName = `${folderName}.zip`;
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${archiveName.replaceAll('"', '')}"; filename*=UTF-8''${encodeURIComponent(archiveName)}`,
+        'Cache-Control': 'private, no-store',
+      });
+
+      const archive = new ZipArchive({ zlib: { level: 6 } });
+      archive.on('warning', (error) => {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          res.destroy(error);
+        }
+      });
+      archive.on('error', (error) => res.destroy(error));
+      archive.pipe(res);
+
+      song.versions.forEach((version, index) => {
+        const uploadId = version.audioUrl.split('/').pop() || '';
+        const row = db
+          .prepare('SELECT relative_path FROM uploads WHERE id=?')
+          .get(uploadId) as { relative_path?: string } | undefined;
+        if (!row?.relative_path || !media.exists(row.relative_path)) return;
+        const extension = path.extname(row.relative_path).toLowerCase() || '.audio';
+        const versionName = safeArchiveName(
+          version.label || `Version ${index + 1}`,
+          `Version_${index + 1}`,
+        );
+        archive.file(media.resolve(row.relative_path), {
+          name: `${folderName}/Audio/${String(index + 1).padStart(2, '0')}_${versionName}${extension}`,
+        });
+      });
+
+      archive.append(song.lyrics?.draft || '', {
+        name: `${folderName}/Lyrics.txt`,
+      });
+      archive.append(song.lyrics?.chordsSheet || '', {
+        name: `${folderName}/Chords.txt`,
+      });
+      const tabsContent = song.tabs?.content || '';
+      const tabsDocument = song.tabs?.tuning
+        ? `Tuning: ${song.tabs.tuning}\n\n${tabsContent}`
+        : tabsContent;
+      archive.append(tabsDocument, { name: `${folderName}/Tabs.txt` });
+      void archive.finalize();
+    }),
   );
 
   app.get(
@@ -934,6 +1244,11 @@ export function createApplication(options: ApplicationOptions) {
         const song = () =>
           state.songs.find((s) => s.id === (p.songId as string)) ||
           fail(404, 'Song not found.');
+        const requireEditableSong = (target: ReturnType<typeof song>) => {
+          if (target.category === 'archived') {
+            fail(400, 'Restore this archived demo before editing it.');
+          }
+        };
         const practice = () =>
           state.practices.find((s) => s.id === (p.practiceId as string)) ||
           fail(404, 'Practice not found.');
@@ -1056,6 +1371,18 @@ export function createApplication(options: ApplicationOptions) {
             validatePassword(password, state);
             store.saveUser(target, hashPassword(password));
             db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(target.id);
+            break;
+          }
+          case 'member.2fa.reset': {
+            requireAdmin(user);
+            const target = member();
+            db.prepare('DELETE FROM user_two_factor WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM two_factor_challenges WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(target.id);
+            target.twoFactorEnabled = false;
+            if (target.id === user.id) user.twoFactorEnabled = false;
             break;
           }
           case 'member.role':
@@ -1073,6 +1400,7 @@ export function createApplication(options: ApplicationOptions) {
             protectLastAdmin(target, updated);
             store.saveUser(updated);
             db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+            db.prepare('DELETE FROM trusted_devices WHERE user_id=?').run(target.id);
             break;
           }
           case 'member.delete': {
@@ -1087,6 +1415,7 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Upload permission required.');
             }
             const data = songSchema.parse(p);
+            requireAvailableCategory(state, data.category);
             ensureVersion(data.version.audioUrl, user);
             const version = {
               ...data.version,
@@ -1108,6 +1437,13 @@ export function createApplication(options: ApplicationOptions) {
                 lastEditedAt: now(),
                 versionNumber: 1,
               },
+              tabs: {
+                tuning: DEFAULT_TAB_TUNING,
+                content: '',
+                lastEditedBy: memberDisplayName(user),
+                lastEditedAt: now(),
+                versionNumber: 0,
+              },
               comments: [],
               createdAt: now(),
               createdBy: identity(user),
@@ -1121,7 +1457,13 @@ export function createApplication(options: ApplicationOptions) {
               title: data.title,
               intro: `${memberDisplayName(user)} added a new recording to the demo vault.`,
               details: [
-                { label: 'Category', value: data.category },
+                {
+                  label: 'Category',
+                  value: categoryLabel(
+                    state.appSettings.demoCategories,
+                    data.category,
+                  ),
+                },
                 { label: 'Tempo', value: data.bpm ? `${data.bpm} BPM` : '' },
                 { label: 'Key', value: data.musicalKey || '' },
                 { label: 'Initial take', value: version.label },
@@ -1139,6 +1481,7 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Upload permission required.');
             }
             const target = song();
+            requireEditableSong(target);
             const data = versionSchema.parse(p.version);
             ensureVersion(data.audioUrl, user);
             const version = {
@@ -1180,6 +1523,8 @@ export function createApplication(options: ApplicationOptions) {
             }
             const data = songMetadataSchema.parse(p);
             const target = song();
+            requireEditableSong(target);
+            requireAvailableCategory(state, data.category);
             target.title = data.title;
             target.category = data.category;
             target.bpm = data.bpm;
@@ -1192,6 +1537,7 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Editing permission required.');
             }
             const target = song();
+            requireEditableSong(target);
             target.lyrics = {
               draft: text.parse(p.draft),
               chordsSheet:
@@ -1205,26 +1551,81 @@ export function createApplication(options: ApplicationOptions) {
             event = {
               type: 'lyric_edit',
               subject: `Lyrics updated: ${target.title}`,
-              preheader: `${memberDisplayName(user)} updated the lyrics and chords.`,
+              preheader: `${memberDisplayName(user)} updated the lyrics.`,
               eyebrow: 'Lyrics updated',
               title: target.title,
-              intro: `${memberDisplayName(user)} saved a new lyrics and chords revision.`,
+              intro: `${memberDisplayName(user)} saved a new lyrics revision.`,
               details: [
                 { label: 'Revision', value: `Version ${target.lyrics.versionNumber}` },
                 { label: 'Edited by', value: memberDisplayName(user) },
-                {
-                  label: 'Chord chart',
-                  value: target.lyrics.chordsSheet?.trim()
-                    ? 'Included'
-                    : 'Not included',
-                },
               ],
-              ctaLabel: 'Review lyrics and chords',
+              ctaLabel: 'Review lyrics',
+            };
+            break;
+          }
+          case 'song.chords': {
+            if (!permissions.canEditLyrics) {
+              fail(403, 'Editing permission required.');
+            }
+            const target = song();
+            requireEditableSong(target);
+            const lyricsDraft = target.lyrics.draft.trim();
+            if (
+              !lyricsDraft ||
+              /^\[Draft Lyrics for .+\]\s*\(Add lyrics here\.\.\.\)$/s.test(
+                lyricsDraft,
+              )
+            ) {
+              fail(400, 'Add lyrics in Lyrics Studio before creating a chord chart.');
+            }
+            target.lyrics = {
+              ...target.lyrics,
+              chordsSheet: text.parse(p.chordsSheet),
+              lastEditedBy: memberDisplayName(user),
+              lastEditedAt: now(),
+              versionNumber: target.lyrics.versionNumber + 1,
+            };
+            event = {
+              type: 'lyric_edit',
+              subject: `Chord chart updated: ${target.title}`,
+              preheader: `${memberDisplayName(user)} updated the chord chart.`,
+              eyebrow: 'Chord chart updated',
+              title: target.title,
+              intro: `${memberDisplayName(user)} saved a new chord chart revision.`,
+              details: [
+                { label: 'Revision', value: `Version ${target.lyrics.versionNumber}` },
+                { label: 'Edited by', value: memberDisplayName(user) },
+              ],
+              ctaLabel: 'Review chord chart',
+            };
+            break;
+          }
+          case 'song.tabs': {
+            if (!permissions.canEditLyrics) {
+              fail(403, 'Editing permission required.');
+            }
+            const target = song();
+            requireEditableSong(target);
+            const data = z
+              .object({
+                songId: short,
+                tuning: z.string().trim().max(100),
+                content: tabText,
+              })
+              .strict()
+              .parse(p);
+            target.tabs = {
+              tuning: data.tuning,
+              content: data.content,
+              lastEditedBy: memberDisplayName(user),
+              lastEditedAt: now(),
+              versionNumber: (target.tabs?.versionNumber || 0) + 1,
             };
             break;
           }
           case 'song.comment': {
             const target = song();
+            requireEditableSong(target);
             const comment = {
               id: randomUUID(),
               userId: user.id,
@@ -1262,6 +1663,7 @@ export function createApplication(options: ApplicationOptions) {
           }
           case 'song.active': {
             const target = song();
+            requireEditableSong(target);
             if (!permissions.canUploadVersion) {
               fail(403, 'Editing permission required.');
             }
@@ -1271,27 +1673,85 @@ export function createApplication(options: ApplicationOptions) {
             target.activeVersionId = String(p.versionId);
             break;
           }
+          case 'song.archive': {
+            requireAdmin(user);
+            const target = song();
+            if (target.category !== 'archived') {
+              target.archivedFromCategory = target.category;
+              target.category = 'archived';
+              target.archivedAt = now();
+              const autoDelete = state.appSettings.autoDeleteArchivedDemos;
+              const deletionDate = new Date(
+                Date.parse(target.archivedAt) + 30 * 24 * 60 * 60 * 1000,
+              ).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                timeZone: 'UTC',
+              });
+              event = {
+                type: 'demo_archived',
+                subject: `Demo archived: ${target.title}`,
+                preheader: autoDelete
+                  ? `${target.title} was archived and will be permanently deleted in 30 days.`
+                  : `${target.title} was moved to Archived.`,
+                eyebrow: 'Demo archived',
+                title: target.title,
+                intro: `${memberDisplayName(user)} moved this demo to Archived. Its audio, lyrics, chords, tabs, and comments are now read-only.`,
+                details: [
+                  { label: 'Archived by', value: memberDisplayName(user) },
+                  {
+                    label: 'Previous category',
+                    value: categoryLabel(
+                      state.appSettings.demoCategories,
+                      target.archivedFromCategory,
+                    ),
+                  },
+                  {
+                    label: autoDelete ? 'Scheduled deletion' : 'Automatic deletion',
+                    value: autoDelete ? deletionDate : 'Disabled',
+                  },
+                ],
+                callout: autoDelete
+                  ? {
+                      label: '30-day deletion notice',
+                      text: 'This item will be permanently deleted in 30 days. Download its ZIP archive before deletion if you want to keep the audio takes, lyrics, chords, and tabs for your own records.',
+                    }
+                  : undefined,
+                ctaLabel: 'Open Archived Demos',
+              };
+            }
+            break;
+          }
+          case 'song.restore': {
+            requireAdmin(user);
+            const target = song();
+            if (target.category !== 'archived') {
+              fail(400, 'Only archived demos can be restored.');
+            }
+            const previousCategory = target.archivedFromCategory;
+            const fallbackCategory =
+              state.appSettings.demoCategories.find(
+                (category) =>
+                  category.id !== 'all' && category.id !== 'archived',
+              )?.id || 'idea';
+            target.category =
+              previousCategory &&
+              previousCategory !== 'all' &&
+              previousCategory !== 'archived' &&
+              state.appSettings.demoCategories.some(
+                (category) => category.id === previousCategory,
+              )
+                ? previousCategory
+                : fallbackCategory;
+            delete target.archivedFromCategory;
+            delete target.archivedAt;
+            break;
+          }
           case 'song.delete': {
             requireAdmin(user);
             const target = song();
-            for (const version of target.versions) {
-              const uploadId = version.audioUrl.split('/').pop() || '';
-              const upload = db
-                .prepare('SELECT relative_path FROM uploads WHERE id=?')
-                .get(uploadId) as
-                | { relative_path?: string }
-                | undefined;
-              if (upload?.relative_path) {
-                deletedMedia.push(String(upload.relative_path));
-              }
-              db.prepare('DELETE FROM uploads WHERE id=?').run(uploadId);
-            }
-            state.songs = state.songs.filter((s) => s.id !== target.id);
-            for (const session of state.practices) {
-              session.setlistSongIds = session.setlistSongIds.filter(
-                (id) => id !== target.id
-              );
-            }
+            collectSongDeletion(state, target, deletedMedia);
             break;
           }
           case 'practice.add': {
@@ -1299,6 +1759,9 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Scheduling permission required.');
             }
             const data = practiceSchema.parse(p);
+            if (data.date < localDateValue()) {
+              fail(400, 'Practice date cannot be earlier than today.');
+            }
             if (data.endTime <= data.startTime) {
               fail(400, 'Practice must end after it starts.');
             }
@@ -1334,7 +1797,13 @@ export function createApplication(options: ApplicationOptions) {
               fail(403, 'Scheduling permission required.');
             }
             const target = practice();
+            if (practiceHasEnded(target)) {
+              fail(400, 'Past practice sessions cannot be edited.');
+            }
             const data = practiceSchema.parse(p);
+            if (data.date < localDateValue()) {
+              fail(400, 'Practice date cannot be earlier than today.');
+            }
             if (data.endTime <= data.startTime) {
               fail(400, 'Practice must end after it starts.');
             }
@@ -1353,6 +1822,9 @@ export function createApplication(options: ApplicationOptions) {
           }
           case 'practice.rsvp': {
             const target = practice();
+            if (practiceHasEnded(target)) {
+              fail(400, 'RSVPs cannot be changed for past practice sessions.');
+            }
             const status = z
               .enum(['attending', 'tentative', 'declined'])
               .parse(p.status);
@@ -1381,13 +1853,7 @@ export function createApplication(options: ApplicationOptions) {
         store.write(state);
       });
 
-      for (const relative of deletedMedia) {
-        try {
-          media.remove(relative);
-        } catch (error) {
-          console.error('Could not remove deleted audio:', error);
-        }
-      }
+      removeMediaFiles(deletedMedia);
 
       if (invitationRecipient) {
         const recipient = invitationRecipient;
@@ -1531,30 +1997,18 @@ export function createApplication(options: ApplicationOptions) {
   async function notify(user: BandMember, event: AppNotification) {
     const state = store.read();
     if (!state.smtpSettings.isEnabled) return;
-    const trigger: Record<string, keyof SmtpSettings['notificationTriggers']> = {
+    const preference: Record<string, string> = {
+      demo_archived: 'demoArchived',
       new_demo: 'newDemos',
       new_version: 'newVersions',
       lyric_edit: 'lyricEdits',
       practice_schedule: 'practiceSchedule',
-      practice_reminder: 'practiceReminder',
-      practice_event_reminder: 'practiceEventReminder',
+      practice_reminder: 'practiceRsvpReminders',
+      practice_event_reminder: 'practiceEventReminders',
       comment: 'comments',
       test_probe: 'newDemos',
       member_invite: 'newDemos',
     };
-    const preference: Record<string, string> = {
-      new_demo: 'newDemos',
-      new_version: 'newVersions',
-      lyric_edit: 'lyricEdits',
-      practice_schedule: 'practiceReminders',
-      practice_reminder: 'practiceReminders',
-      practice_event_reminder: 'practiceReminders',
-      comment: 'comments',
-      test_probe: 'newDemos',
-      member_invite: 'newDemos',
-    };
-    const triggerKey = trigger[event.type];
-    if (!triggerKey || !state.smtpSettings.notificationTriggers[triggerKey]) return;
     for (const recipient of state.band.members.filter(
       (m) =>
         m.status === 'active' &&
@@ -1578,15 +2032,60 @@ export function createApplication(options: ApplicationOptions) {
     }
   }
 
+  function cleanupArchivedDemos(referenceTime = new Date()): number {
+    const deletedMedia: string[] = [];
+    let deletedCount = 0;
+    store.transaction(() => {
+      const state = store.read();
+      if (!state.appSettings.autoDeleteArchivedDemos) return;
+
+      const referenceIso = referenceTime.toISOString();
+      const cutoff = referenceTime.getTime() - 30 * 24 * 60 * 60 * 1000;
+      let changed = false;
+      for (const target of [...state.songs]) {
+        if (target.category !== 'archived') continue;
+        if (!target.archivedAt) {
+          target.archivedAt = referenceIso;
+          changed = true;
+          continue;
+        }
+        const archivedTime = Date.parse(target.archivedAt);
+        if (Number.isFinite(archivedTime) && archivedTime <= cutoff) {
+          collectSongDeletion(state, target, deletedMedia);
+          deletedCount++;
+          changed = true;
+        }
+      }
+      if (changed) store.write(state);
+    });
+    removeMediaFiles(deletedMedia);
+    return deletedCount;
+  }
+
+  function cleanupPastPractices(referenceTime = new Date()): number {
+    let deletedCount = 0;
+    store.transaction(() => {
+      const state = store.read();
+      const cutoff = referenceTime.getTime() - 30 * 24 * 60 * 60 * 1000;
+      const retainedPractices = state.practices.filter((practice) => {
+        const endTime = practiceEndTimestamp(practice);
+        const shouldDelete = Number.isFinite(endTime) && endTime <= cutoff;
+        if (shouldDelete) deletedCount++;
+        return !shouldDelete;
+      });
+      if (deletedCount > 0) {
+        state.practices = retainedPractices;
+        store.write(state);
+      }
+    });
+    return deletedCount;
+  }
+
   async function sendPracticeReminders(
     referenceTime = new Date()
   ): Promise<number> {
     const state = store.read();
-    if (
-      !state.smtpSettings.isEnabled ||
-      (!state.smtpSettings.notificationTriggers.practiceReminder &&
-        !state.smtpSettings.notificationTriggers.practiceEventReminder)
-    ) {
+    if (!state.smtpSettings.isEnabled) {
       return 0;
     }
 
@@ -1619,23 +2118,21 @@ export function createApplication(options: ApplicationOptions) {
       const delivered = new Set(practice.reminderDeliveryKeys ?? []);
       const deliveredBefore = delivered.size;
 
-      if (state.smtpSettings.notificationTriggers.practiceReminder) {
-        for (const recipient of state.band.members) {
-          const deliveryKey = `rsvp:${recipient.id}`;
-          const rsvp = practice.rsvps.find(
-            (entry) => entry.userId === recipient.id
-          );
-          if (
-            recipient.status !== 'active' ||
-            recipient.notifications?.practiceReminders === false ||
-            delivered.has(deliveryKey) ||
-            (rsvp && rsvp.status !== 'tentative')
-          ) {
-            continue;
-          }
-          delivered.add(deliveryKey);
-          pending.push({ recipient, practice, type: 'practice_reminder' });
+      for (const recipient of state.band.members) {
+        const deliveryKey = `rsvp:${recipient.id}`;
+        const rsvp = practice.rsvps.find(
+          (entry) => entry.userId === recipient.id
+        );
+        if (
+          recipient.status !== 'active' ||
+          recipient.notifications?.practiceRsvpReminders === false ||
+          delivered.has(deliveryKey) ||
+          (rsvp && rsvp.status !== 'tentative')
+        ) {
+          continue;
         }
+        delivered.add(deliveryKey);
+        pending.push({ recipient, practice, type: 'practice_reminder' });
       }
 
       const dueWindows = [
@@ -1655,7 +2152,6 @@ export function createApplication(options: ApplicationOptions) {
         },
       ].filter(
         (window) =>
-          state.smtpSettings.notificationTriggers.practiceEventReminder &&
           window.enabled &&
           millisecondsUntilPractice <= window.maximum &&
           millisecondsUntilPractice > window.minimum
@@ -1669,7 +2165,7 @@ export function createApplication(options: ApplicationOptions) {
           );
           if (
             recipient.status !== 'active' ||
-            recipient.notifications?.practiceReminders === false ||
+            recipient.notifications?.practiceEventReminders === false ||
             delivered.has(deliveryKey) ||
             rsvp?.status !== 'attending'
           ) {
@@ -1869,5 +2365,12 @@ export function createApplication(options: ApplicationOptions) {
       .json({ message: 'The server could not complete this request.' });
   };
 
-  return { app, store, errorHandler, sendPracticeReminders };
+  return {
+    app,
+    store,
+    errorHandler,
+    sendPracticeReminders,
+    cleanupArchivedDemos,
+    cleanupPastPractices,
+  };
 }

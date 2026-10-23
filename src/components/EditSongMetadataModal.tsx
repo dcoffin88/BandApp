@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Save, X } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
-import { KEY_ROOTS, SONG_CATEGORY_OPTIONS } from '../shared/songMetadata.ts';
+import {
+  KEY_ROOTS,
+  categoryLabel,
+  selectableDemoCategories,
+} from '../shared/songMetadata.ts';
 import type { SongIdea } from '../types/band.ts';
 
 interface EditSongMetadataModalProps {
@@ -17,7 +21,21 @@ export const EditSongMetadataModal: React.FC<EditSongMetadataModalProps> = ({
   song,
   onClose,
 }) => {
-  const { updateSongMetadata } = useBand();
+  const { updateSongMetadata, appSettings } = useBand();
+  const configuredCategories = selectableDemoCategories(
+    appSettings.demoCategories,
+  );
+  const categoryOptions = configuredCategories.some(
+    (option) => option.id === song.category,
+  )
+    ? configuredCategories
+    : [
+        ...configuredCategories,
+        {
+          id: song.category,
+          label: categoryLabel(appSettings.demoCategories, song.category),
+        },
+      ];
   const [title, setTitle] = useState(song.title);
   const [category, setCategory] = useState<SongIdea['category']>(song.category);
   const [bpm, setBpm] = useState(song.bpm?.toString() ?? '');
@@ -132,8 +150,8 @@ export const EditSongMetadataModal: React.FC<EditSongMetadataModalProps> = ({
                 }
                 className={inputClass}
               >
-                {SONG_CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
+                {categoryOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
                     {option.label}
                   </option>
                 ))}

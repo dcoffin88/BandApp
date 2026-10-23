@@ -1,9 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Archive,
+  ArchiveRestore,
   Clock,
   Download,
   FileText,
   Gauge,
+  Guitar,
   History,
   MessageSquare,
   MoreVertical,
@@ -20,10 +23,13 @@ import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { AudioVersion, SongIdea } from '../types/band.ts';
 import { EditSongMetadataModal } from './EditSongMetadataModal.tsx';
+import { categoryLabel } from '../shared/songMetadata.ts';
 
 interface SongCardProps {
   song: SongIdea;
   onOpenLyrics: (song: SongIdea) => void;
+  onOpenChords: (song: SongIdea) => void;
+  onOpenTabs: (song: SongIdea) => void;
   onOpenNewVersion: (song: SongIdea) => void;
 }
 
@@ -46,6 +52,8 @@ const createFallbackWaveform = (versionId: string): number[] => {
 export const SongCard: React.FC<SongCardProps> = ({
   song,
   onOpenLyrics,
+  onOpenChords,
+  onOpenTabs,
   onOpenNewVersion,
 }) => {
   const {
@@ -62,11 +70,21 @@ export const SongCard: React.FC<SongCardProps> = ({
     downloadTrack,
   } = useAudioPlayer();
 
-  const { currentUser, permissions, deleteSong, setActiveVersion, addComment } = useBand();
+  const {
+    currentUser,
+    permissions,
+    archiveSong,
+    restoreSong,
+    deleteSong,
+    setActiveVersion,
+    addComment,
+    appSettings,
+  } = useBand();
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showEditMetadata, setShowEditMetadata] = useState(false);
   const [newCommentText, setNewCommentText] = useState('');
+  const isArchived = song.category === 'archived';
 
   const isCurrentPlaying = currentSong?.id === song.id;
   const activeVersion =
@@ -145,8 +163,8 @@ export const SongCard: React.FC<SongCardProps> = ({
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              <span className={`text-[11px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full border ${getCategoryTheme(song.category)}`}>
-                {song.category}
+              <span data-category={song.category} className={`demo-category-pill text-[11px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full border ${getCategoryTheme(song.category)}`}>
+                {categoryLabel(appSettings.demoCategories, song.category)}
               </span>
 
               {song.musicalKey && (
@@ -161,7 +179,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                 </span>
               )}
 
-              {/* Version indicator as requested in prompt */}
+              {/* Version indicator */}
               <button
                 onClick={() => setShowVersionHistory(!showVersionHistory)}
                 className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition"
@@ -173,12 +191,12 @@ export const SongCard: React.FC<SongCardProps> = ({
               </button>
             </div>
 
-            {/* Song Title as sketched in Page 1 */}
+            {/* Song Title */}
             <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate">
               {song.title}
             </h3>
 
-            {/* Uploaded by info as sketched on Page 1: "uploaded by ..." */}
+            {/* Uploaded by */}
             <div className="flex items-center gap-2 mt-1 text-xs text-zinc-400">
               <img
                 src={song.createdBy.avatar}
@@ -197,7 +215,27 @@ export const SongCard: React.FC<SongCardProps> = ({
 
           {/* Right Action Menu: Version button & delete */}
           <div className="flex items-center gap-1.5">
-            {permissions.canUploadDemo && (
+            {permissions.canUploadVersion && !isArchived && (
+              <button
+                onClick={() => onOpenNewVersion(song)}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-zinc-700/80 transition"
+                title="Upload a new version or audio take for this track"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">New Take</span>
+              </button>
+            )}
+
+            <a
+              href={`/api/demos/${encodeURIComponent(song.id)}/export`}
+              className="flex items-center gap-1 rounded-lg border border-zinc-700/80 bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-300 transition hover:bg-zinc-700 hover:text-white"
+              title={`Download ${song.title} with all audio takes, lyrics, chords, and tabs`}
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Download ZIP</span>
+            </a>
+
+            {permissions.canUploadDemo && !isArchived && (
               <button
                 type="button"
                 onClick={() => setShowEditMetadata(true)}
@@ -209,29 +247,46 @@ export const SongCard: React.FC<SongCardProps> = ({
               </button>
             )}
 
-            {permissions.canUploadVersion && (
-              <button
-                onClick={() => onOpenNewVersion(song)}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-zinc-700/80 transition"
-                title="Upload a new version or audio take for this track"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">New Take</span>
-              </button>
-            )}
-
             {permissions.canDeleteTracks && (
-              <button
-                onClick={() => {
-                  if (confirm(`Are you sure you want to delete "${song.title}"?`)) {
-                    deleteSong(song.id);
-                  }
-                }}
-                className="p-1.5 text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
-                title="Delete track (Admin only)"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              isArchived ? (
+                <>
+                  <button
+                    onClick={() => restoreSong(song.id)}
+                    className="archive-restore-button flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+                    title="Restore this demo to its previous category"
+                    aria-label={`Restore ${song.title}`}
+                  >
+                    <ArchiveRestore className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Restore</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `Permanently delete "${song.title}" and all of its audio takes? This cannot be undone.`,
+                        )
+                      ) {
+                        deleteSong(song.id);
+                      }
+                    }}
+                    className="archive-delete-button flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20"
+                    title="Permanently delete this archived demo"
+                    aria-label={`Permanently delete ${song.title}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Delete Permanently</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => archiveSong(song.id)}
+                  className="p-1.5 text-zinc-500 hover:text-amber-300 rounded-lg hover:bg-amber-500/10 transition"
+                  title="Move this demo to Archived"
+                  aria-label={`Archive ${song.title}`}
+                >
+                  <Archive className="w-4 h-4" />
+                </button>
+              )
             )}
           </div>
         </div>
@@ -243,10 +298,10 @@ export const SongCard: React.FC<SongCardProps> = ({
           </p>
         )}
 
-        {/* Audio Player Core Row (Page 2 sketch: Waveform, Play, Lyrics, Playback Speed, Download) */}
+        {/* Audio Player Core Row */}
         <div className="bg-zinc-950/70 p-3 sm:p-3.5 rounded-xl border border-zinc-800/80 mb-3">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Big Play / Pause button as sketched on Page 1 & Page 2 */}
+            {/* Big Play / Pause button */}
             <div className="flex items-center justify-between sm:justify-start gap-3">
               <button
                 onClick={handlePlayToggle}
@@ -318,16 +373,32 @@ export const SongCard: React.FC<SongCardProps> = ({
               </div>
             </div>
 
-            {/* Action buttons matching Page 2 sketch: [Lyrics], [Playback Speed], Download */}
+            {/* Action buttons */}
             <div className="flex items-center justify-end gap-1.5 pt-2 sm:pt-0 border-t border-zinc-800 sm:border-t-0">
-              {/* [Lyrics] button -> "will bring up a pop up to add/edit lyrics" */}
               <button
                 onClick={() => onOpenLyrics(song)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/80 transition"
-                title="Open lyrics draft and chord notes"
+                title="Open lyrics draft"
               >
                 <FileText className="w-3.5 h-3.5 text-amber-400" />
-                <span>Lyrics</span>
+                <span className="hidden sm:inline">Lyrics</span>
+              </button>
+              <button
+                onClick={() => onOpenChords(song)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/80 transition"
+                title="Open the chord chart for this track"
+              >
+                <Music2 className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Chords</span>
+              </button>
+
+              <button
+                onClick={() => onOpenTabs(song)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/80 transition"
+                title="Open the tab sheet for this track"
+              >
+                <Guitar className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Tabs</span>
               </button>
 
               {/* [Playback Speed] button -> "Playback speed button" */}
@@ -349,7 +420,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                 <span>{isCurrentPlaying ? `${playbackRate}x` : '1x'}</span>
               </button>
 
-              {/* Download button -> "maybe a download button? For each track" */}
+              {/* Download button */}
               <button
                 onClick={() => downloadTrack(song, activeVersion)}
                 className="p-2 text-zinc-400 hover:text-zinc-100 bg-zinc-800/90 hover:bg-zinc-700 rounded-lg border border-zinc-700/80 transition"
@@ -379,7 +450,7 @@ export const SongCard: React.FC<SongCardProps> = ({
           </div>
         </div>
 
-        {/* Version History Drawer (File versioning requested in prompt) */}
+        {/* Version History Drawer */}
         {showVersionHistory && (
           <div className="mt-3 p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs text-zinc-300 space-y-2.5">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
@@ -444,7 +515,7 @@ export const SongCard: React.FC<SongCardProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 self-end sm:self-auto">
-                      {!isActive && (
+                      {!isActive && !isArchived && (
                         <button
                           onClick={() => setActiveVersion(song.id, version.id)}
                           className="px-2 py-1 text-[11px] font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition"
@@ -525,22 +596,28 @@ export const SongCard: React.FC<SongCardProps> = ({
             </div>
 
             {/* Comment input form */}
-            <form onSubmit={handleAddComment} className="flex gap-2 pt-1">
-              <input
-                type="text"
-                placeholder={isCurrentPlaying ? `Add note at ${formatSeconds(currentTime)}...` : 'Add band feedback or idea...'}
-                value={newCommentText}
-                onChange={e => setNewCommentText(e.target.value)}
-                className="flex-1 bg-zinc-900 border border-zinc-700/80 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-              <button
-                type="submit"
-                disabled={!newCommentText.trim()}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:hover:bg-amber-500 text-zinc-950 font-bold rounded-lg transition flex items-center gap-1"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
+            {isArchived ? (
+              <p className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-center text-zinc-500">
+                Archived demos are read-only. Restore this demo to add feedback.
+              </p>
+            ) : (
+              <form onSubmit={handleAddComment} className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder={isCurrentPlaying ? `Add note at ${formatSeconds(currentTime)}...` : 'Add band feedback or idea...'}
+                  value={newCommentText}
+                  onChange={e => setNewCommentText(e.target.value)}
+                  className="flex-1 bg-zinc-900 border border-zinc-700/80 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!newCommentText.trim()}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:hover:bg-amber-500 text-zinc-950 font-bold rounded-lg transition flex items-center gap-1"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
+            )}
           </div>
         )}
       </div>

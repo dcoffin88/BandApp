@@ -10,10 +10,24 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useBand } from '../context/BandContext.tsx';
-import type { UserAppearance } from '../types/band.ts';
-import { appearanceFrom } from '../shared/defaults.ts';
+import type { UserAppearance, UserNotifications } from '../types/band.ts';
+import { appearanceFrom, notificationsFrom } from '../shared/defaults.ts';
 import { AppearanceSettings } from './AppearanceSettings.tsx';
 import { ImageCropModal } from './ImageCropModal.tsx';
+
+const NOTIFICATION_OPTIONS: Array<{
+  id: keyof UserNotifications;
+  label: string;
+}> = [
+  { id: 'newDemos', label: 'New audio demos' },
+  { id: 'newVersions', label: 'New audio take versions' },
+  { id: 'lyricEdits', label: 'Lyrics or chord chart updates' },
+  { id: 'practiceSchedule', label: 'Practice scheduled or updated' },
+  { id: 'practiceRsvpReminders', label: 'Practice RSVP reminders' },
+  { id: 'practiceEventReminders', label: '1-day and 4-hour practice reminders' },
+  { id: 'comments', label: 'Band feedback and comments' },
+  { id: 'demoArchived', label: 'Demos moved to Archived' },
+];
 
 export const ProfileSettingsView: React.FC = () => {
   const {
@@ -43,17 +57,9 @@ export const ProfileSettingsView: React.FC = () => {
   const [profilePhone, setProfilePhone] = useState(currentUser.phone || '');
   const [profileAvatar, setProfileAvatar] = useState(currentUser.avatar);
   const [isProfileCropModalOpen, setIsProfileCropModalOpen] = useState(false);
-  const [profile2FA, setProfile2FA] = useState(
-    currentUser.twoFactorEnabled || false,
-  );
-  const [profileNotifs, setProfileNotifs] = useState(
-    currentUser.notifications || {
-      newDemos: true,
-      newVersions: true,
-      lyricEdits: true,
-      practiceReminders: true,
-      comments: true,
-    },
+  const profile2FA = currentUser.twoFactorEnabled || false;
+  const [profileNotifs, setProfileNotifs] = useState(() =>
+    notificationsFrom(currentUser.notifications),
   );
 
   // Password change state
@@ -271,65 +277,31 @@ export const ProfileSettingsView: React.FC = () => {
             {/* Notification Toggles */}
             <div className="pt-3 border-t border-zinc-800 space-y-2">
               <p className="font-semibold text-zinc-300 uppercase tracking-wider">
-                Band Notifications
+                Notification Preferences
+              </p>
+              <p className="text-[11px] text-zinc-500">
+                Choose which email notifications you receive. New notification types are enabled by default.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <label className="flex items-center gap-2 text-zinc-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={profileNotifs.newDemos}
-                    onChange={(e) =>
-                      setProfileNotifs({
-                        ...profileNotifs,
-                        newDemos: e.target.checked,
-                      })
-                    }
-                    className="accent-amber-500 rounded"
-                  />
-                  <span>Notify on new audio demo ideas</span>
-                </label>
-                <label className="flex items-center gap-2 text-zinc-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={profileNotifs.newVersions}
-                    onChange={(e) =>
-                      setProfileNotifs({
-                        ...profileNotifs,
-                        newVersions: e.target.checked,
-                      })
-                    }
-                    className="accent-amber-500 rounded"
-                  />
-                  <span>Notify on new audio take versions</span>
-                </label>
-                <label className="flex items-center gap-2 text-zinc-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={profileNotifs.practiceReminders}
-                    onChange={(e) =>
-                      setProfileNotifs({
-                        ...profileNotifs,
-                        practiceReminders: e.target.checked,
-                      })
-                    }
-                    className="accent-amber-500 rounded"
-                  />
-                  <span>Upcoming rehearsal reminders</span>
-                </label>
-                <label className="flex items-center gap-2 text-zinc-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={profileNotifs.comments}
-                    onChange={(e) =>
-                      setProfileNotifs({
-                        ...profileNotifs,
-                        comments: e.target.checked,
-                      })
-                    }
-                    className="accent-amber-500 rounded"
-                  />
-                  <span>Band feedback &amp; comments</span>
-                </label>
+                {NOTIFICATION_OPTIONS.map((option) => (
+                  <label
+                    key={option.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-zinc-300"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={profileNotifs[option.id]}
+                      onChange={(event) =>
+                        setProfileNotifs({
+                          ...profileNotifs,
+                          [option.id]: event.target.checked,
+                        })
+                      }
+                      className="rounded accent-amber-500"
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
               </div>
             </div>
 

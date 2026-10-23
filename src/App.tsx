@@ -1,27 +1,30 @@
 import React, { useState } from 'react';
 import { AdminSettingsView } from './components/AdminSettingsView.tsx';
 import { AuthView } from './components/AuthView.tsx';
+import { ChordsStudioView } from './components/ChordsStudioView.tsx';
 import { GlobalAudioPlayer } from './components/GlobalAudioPlayer.tsx';
-import { LyricsModal } from './components/LyricsModal.tsx';
 import { LyricsStudioView } from './components/LyricsStudioView.tsx';
 import { Navbar } from './components/Navbar.tsx';
 import { NewVersionModal } from './components/NewVersionModal.tsx';
 import { PracticeScheduleView } from './components/PracticeScheduleView.tsx';
 import { ProfileSettingsView } from './components/ProfileSettingsView.tsx';
 import { SongListMainView } from './components/SongListMainView.tsx';
+import { TabsStudioView } from './components/TabsStudioView.tsx';
 import { UploadDemoModal } from './components/UploadDemoModal.tsx';
 import { AudioPlayerProvider, useAudioPlayer } from './context/AudioPlayerContext.tsx';
 import { BandProvider, useBand } from './context/BandContext.tsx';
-import { SongIdea } from './types/band.ts';
+import { AppTab, SongIdea } from './types/band.ts';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, currentUser } = useBand();
-  const [activeTab, setActiveTab] = useState<'songs' | 'lyrics' | 'practice' | 'admin' | 'profile'>('songs');
+  const [activeTab, setActiveTab] = useState<AppTab>('songs');
   const [adminSubTab, setAdminSubTab] = useState<'users' | 'auth' | 'app' | 'smtp'>('app');
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [lyricsModalSong, setLyricsModalSong] = useState<SongIdea | null>(null);
   const [newVersionModalSong, setNewVersionModalSong] = useState<SongIdea | null>(null);
+  const [lyricsStudioSongId, setLyricsStudioSongId] = useState('');
+  const [tabsStudioSongId, setTabsStudioSongId] = useState('');
+  const [chordsStudioSongId, setChordsStudioSongId] = useState('');
 
   const { currentSong } = useAudioPlayer();
 
@@ -52,12 +55,33 @@ const AppContent: React.FC = () => {
         {activeTab === 'songs' && (
           <SongListMainView
             onOpenUploadModal={() => setIsUploadModalOpen(true)}
-            onOpenLyricsModal={(song) => setLyricsModalSong(song)}
+            onOpenLyricsStudio={(song) => {
+              setLyricsStudioSongId(song.id);
+              setActiveTab('lyrics');
+            }}
+            onOpenTabsStudio={(song) => {
+              setTabsStudioSongId(song.id);
+              setActiveTab('tabs');
+            }}
+            onOpenChordsStudio={(song) => {
+              setChordsStudioSongId(song.id);
+              setActiveTab('chords');
+            }}
             onOpenNewVersionModal={(song) => setNewVersionModalSong(song)}
           />
         )}
 
-        {activeTab === 'lyrics' && <LyricsStudioView />}
+        {activeTab === 'lyrics' && (
+          <LyricsStudioView initialSongId={lyricsStudioSongId} />
+        )}
+
+        {activeTab === 'chords' && (
+          <ChordsStudioView initialSongId={chordsStudioSongId} />
+        )}
+
+        {activeTab === 'tabs' && (
+          <TabsStudioView initialSongId={tabsStudioSongId} />
+        )}
 
         {activeTab === 'practice' && <PracticeScheduleView />}
 
@@ -73,7 +97,18 @@ const AppContent: React.FC = () => {
 
       {/* Persistent Bottom Audio Player Bar */}
       <GlobalAudioPlayer
-        onOpenLyrics={(song) => setLyricsModalSong(song)}
+        onOpenLyrics={(song) => {
+          setLyricsStudioSongId(song.id);
+          setActiveTab('lyrics');
+        }}
+        onOpenChords={(song) => {
+          setChordsStudioSongId(song.id);
+          setActiveTab('chords');
+        }}
+        onOpenTabs={(song) => {
+          setTabsStudioSongId(song.id);
+          setActiveTab('tabs');
+        }}
       />
 
       {/* Modals */}
@@ -81,12 +116,6 @@ const AppContent: React.FC = () => {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
       />}
-
-      <LyricsModal
-        song={lyricsModalSong}
-        isOpen={!!lyricsModalSong}
-        onClose={() => setLyricsModalSong(null)}
-      />
 
       {newVersionModalSong && <NewVersionModal
         song={newVersionModalSong}

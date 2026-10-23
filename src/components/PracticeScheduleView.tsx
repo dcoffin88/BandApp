@@ -17,8 +17,14 @@ import {
 import { useAudioPlayer } from '../context/AudioPlayerContext.tsx';
 import { useBand } from '../context/BandContext.tsx';
 import { PracticeSession, SongIdea } from '../types/band.ts';
-import { formatClockTime } from '../shared/time.ts';
+import { formatClockTime, localDateValue } from '../shared/time.ts';
+import { categoryLabel } from '../shared/songMetadata.ts';
 import { AddToCalendarMenu } from './AddToCalendarMenu.tsx';
+
+const practiceHasEnded = (practice: PracticeSession) => {
+  const endTime = Date.parse(`${practice.date}T${practice.endTime}:00`);
+  return Number.isFinite(endTime) && endTime <= Date.now();
+};
 
 export const PracticeScheduleView: React.FC = () => {
   const { practices, songs, currentUser, permissions, appSettings, addPracticeSession, updatePracticeSession, updateRsvp, deletePracticeSession } = useBand();
@@ -39,6 +45,12 @@ export const PracticeScheduleView: React.FC = () => {
   const [eventReminderFourHours, setEventReminderFourHours] = useState(true);
 
   const canSchedule = permissions.canSchedulePractice;
+  const today = localDateValue();
+  const selectableSongs = songs.filter((song) => song.category !== 'archived');
+  const selectableSongIds = new Set(selectableSongs.map((song) => song.id));
+  const upcomingPractices = practices.filter((practice) => !practiceHasEnded(practice));
+  const pastPractices = practices.filter(practiceHasEnded);
+  const orderedPractices = [...upcomingPractices, ...pastPractices];
 
   const resetPracticeForm = () => {
     setEditingPracticeId(null);
@@ -61,6 +73,7 @@ export const PracticeScheduleView: React.FC = () => {
   };
 
   const openEditPractice = (practice: PracticeSession) => {
+    if (practiceHasEnded(practice)) return;
     setEditingPracticeId(practice.id);
     setTitle(practice.title);
     setDate(practice.date);
@@ -68,7 +81,9 @@ export const PracticeScheduleView: React.FC = () => {
     setEndTime(practice.endTime);
     setLocation(practice.location);
     setNotes(practice.notes);
-    setSelectedSongIds([...practice.setlistSongIds]);
+    setSelectedSongIds(
+      practice.setlistSongIds.filter((songId) => selectableSongIds.has(songId)),
+    );
     setGoalInput('');
     setGoals([...practice.goals]);
     setEventReminderOneDay(practice.eventReminderOneDay ?? true);
@@ -108,7 +123,7 @@ export const PracticeScheduleView: React.FC = () => {
       startTime,
       endTime,
       location: location.trim() || 'Band Rehearsal Space',
-      setlistSongIds: selectedSongIds,
+      setlistSongIds: selectedSongIds.filter((songId) => selectableSongIds.has(songId)),
       goals,
       notes: notes.trim(),
       eventReminderOneDay,
@@ -130,12 +145,13 @@ export const PracticeScheduleView: React.FC = () => {
           <div className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-amber-400" />
             <h2 className="text-xl font-bold text-white tracking-tight">
-              Band Practice Schedule
+              <span className="hidden sm:inline">Band Practice Schedule</span>
+              <span className="sm:hidden">Schedule</span>
             </h2>
+            <p className="text-xs text-zinc-400 mt-1">
+              Coordinate upcoming rehearsals, track RSVPs, and assign demo songs to work on.
+            </p>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
-            Coordinate upcoming rehearsals, track RSVPs, and assign demo songs to work on.
-          </p>
         </div>
 
         {canSchedule && (
@@ -162,18 +178,37 @@ export const PracticeScheduleView: React.FC = () => {
             )}
           </div>
         ) : (
-          practices.map(practice => {
+          orderedPractices.map((practice, index) => {
             const myRsvp = practice.rsvps.find(r => r.userId === currentUser.id)?.status;
             const setlistSongs = songs.filter(s => practice.setlistSongIds.includes(s.id));
+            const isPast = practiceHasEnded(practice);
 
             return (
-              <div
-                key={practice.id}
-                className="p-5 sm:p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700/80 transition space-y-4"
+              <React.Fragment key={practice.id}>
+                {index === upcomingPractices.length && upcomingPractices.length > 0 && (
+                  <div className="space-y-2 py-2" aria-label="Past scheduled sessions">
+                    <div className="flex items-center gap-3">
+                      <hr className="flex-1 border-zinc-800" />
+                      <span className="text-s font-semibold uppercase tracking-wider text-zinc-500">
+                        Past Sessions
+                      </span>
+                      <hr className="flex-1 border-zinc-800" />
+                    </div>
+                    <p className="text-center text-xs text-zinc-500">
+                      Past session history is automatically deleted 30 days after each session ends.
+                    </p>
+                  </div>
+                )}
+                <div
+                className={`p-5 sm:p-6 rounded-2xl border transition space-y-4 ${
+                  isPast
+                    ? 'bg-zinc-950/50 border-zinc-900'
+                    : 'bg-zinc-900/70 border-zinc-800 hover:border-zinc-700/80'
+                }`}
               >
                 {/* Top Info */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-zinc-800">
-                  <div>
+                  <div className={isPast ? 'opacity-45' : ''}>
                     <div className="flex items-center gap-2.5">
                       <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold">
                         {new Date(practice.date + 'T12:00:00').toLocaleDateString(undefined, {
@@ -185,6 +220,11 @@ export const PracticeScheduleView: React.FC = () => {
                       <h3 className="text-lg font-bold text-white tracking-tight">
                         {practice.title}
                       </h3>
+                      {isPast && (
+                        <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                          Past
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-zinc-400">
@@ -202,13 +242,14 @@ export const PracticeScheduleView: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-1 self-end sm:self-auto">
-                    <AddToCalendarMenu practice={practice} />
+                    {!isPast && <AddToCalendarMenu practice={practice} />}
                     {canSchedule && (
                       <button
                         type="button"
                         onClick={() => openEditPractice(practice)}
-                        className="text-zinc-400 hover:text-amber-300 p-1.5 rounded-lg hover:bg-amber-500/10 transition"
-                        title="Edit practice session"
+                        disabled={isPast}
+                        className="text-zinc-400 hover:text-amber-300 p-1.5 rounded-lg hover:bg-amber-500/10 transition disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+                        title={isPast ? 'Past practice sessions cannot be edited' : 'Edit practice session'}
                         aria-label={`Edit ${practice.title}`}
                       >
                         <Pencil className="w-4 h-4" />
@@ -221,7 +262,11 @@ export const PracticeScheduleView: React.FC = () => {
                             deletePracticeSession(practice.id);
                           }
                         }}
-                        className="text-zinc-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition"
+                        className={`p-1.5 rounded-lg transition ${
+                          isPast
+                            ? 'border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:border-rose-400/60 hover:bg-rose-500/20 hover:text-rose-300'
+                            : 'text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10'
+                        }`}
                         title="Delete practice session"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -232,7 +277,7 @@ export const PracticeScheduleView: React.FC = () => {
 
                 {/* Goals & Notes */}
                 {practice.goals && practice.goals.length > 0 && (
-                  <div className="space-y-1.5">
+                  <div className={`space-y-1.5 ${isPast ? 'opacity-45' : ''}`}>
                     <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                       Rehearsal Goals:
                     </h4>
@@ -249,7 +294,7 @@ export const PracticeScheduleView: React.FC = () => {
 
                 {/* Linked Rehearsal Setlist */}
                 {setlistSongs.length > 0 && (
-                  <div className="space-y-2">
+                  <div className={`space-y-2 ${isPast ? 'opacity-45' : ''}`}>
                     <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
                       <ListMusic className="w-3.5 h-3.5 text-amber-400" />
                       <span>Rehearsal Setlist ({setlistSongs.length} tracks to practice):</span>
@@ -262,11 +307,12 @@ export const PracticeScheduleView: React.FC = () => {
                         >
                           <div className="min-w-0 pr-2">
                             <p className="font-semibold text-zinc-200 truncate">{song.title}</p>
-                            <p className="text-[11px] text-zinc-500 uppercase">{song.category} • {song.bpm ? `${song.bpm} BPM` : 'Idea'}</p>
+                            <p className="text-[11px] text-zinc-500 uppercase">{categoryLabel(appSettings.demoCategories, song.category)} • {song.bpm ? `${song.bpm} BPM` : 'Idea'}</p>
                           </div>
                           <button
                             onClick={() => playSong(song)}
-                            className="p-1.5 rounded-full bg-zinc-800 group-hover:bg-amber-500 group-hover:text-zinc-950 text-zinc-300 transition shrink-0"
+                            disabled={isPast}
+                            className="p-1.5 rounded-full bg-zinc-800 group-hover:bg-amber-500 group-hover:text-zinc-950 text-zinc-300 transition shrink-0 disabled:cursor-not-allowed disabled:group-hover:bg-zinc-800 disabled:group-hover:text-zinc-300"
                             title={`Play ${song.title} audio demo`}
                           >
                             <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
@@ -278,10 +324,10 @@ export const PracticeScheduleView: React.FC = () => {
                 )}
 
                 {/* Member RSVPs & Current User RSVP buttons */}
-                <div className="pt-3 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className={`pt-3 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${isPast ? 'opacity-45' : ''}`}>
                   {/* Attendance roster */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-zinc-500 text-[11px] font-semibold uppercase mr-1">
+                    <span className="rsvp-heading text-zinc-500 text-[11px] font-semibold uppercase mr-1">
                       RSVPs:
                     </span>
                     {practice.rsvps.map((rsvp, idx) => {
@@ -295,7 +341,8 @@ export const PracticeScheduleView: React.FC = () => {
                       return (
                         <span
                           key={idx}
-                          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] ${color}`}
+                          data-status={rsvp.status}
+                          className={`rsvp-pill flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] ${color}`}
                         >
                           <img
                             src={rsvp.userAvatar}
@@ -312,41 +359,45 @@ export const PracticeScheduleView: React.FC = () => {
                   </div>
 
                   {/* Interactive RSVP buttons for current user */}
-                  <div className="flex items-center gap-1.5 self-end sm:self-auto bg-zinc-950 p-1 rounded-xl border border-zinc-800">
-                    <span className="text-[11px] text-zinc-500 px-2 font-medium">Your RSVP:</span>
+                  <div className="rsvp-controls flex items-center gap-1.5 self-end sm:self-auto bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+                    <span className="rsvp-heading text-[11px] text-zinc-500 px-2 font-medium">Your RSVP:</span>
                     <button
                       onClick={() => updateRsvp(practice.id, 'attending')}
+                      disabled={isPast}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                         myRsvp === 'attending'
                           ? 'bg-emerald-600 text-white shadow-sm'
                           : 'text-zinc-400 hover:text-emerald-300 hover:bg-zinc-900'
-                      }`}
+                      } disabled:cursor-not-allowed`}
                     >
                       Going
                     </button>
                     <button
                       onClick={() => updateRsvp(practice.id, 'tentative')}
+                      disabled={isPast}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                         myRsvp === 'tentative'
                           ? 'bg-amber-600 text-white shadow-sm'
                           : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-900'
-                      }`}
+                      } disabled:cursor-not-allowed`}
                     >
                       Maybe
                     </button>
                     <button
                       onClick={() => updateRsvp(practice.id, 'declined')}
+                      disabled={isPast}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                         myRsvp === 'declined'
                           ? 'bg-rose-600 text-white shadow-sm'
                           : 'text-zinc-400 hover:text-rose-300 hover:bg-zinc-900'
-                      }`}
+                      } disabled:cursor-not-allowed`}
                     >
                       Can't Make It
                     </button>
                   </div>
                 </div>
-              </div>
+                </div>
+              </React.Fragment>
             );
           })
         )}
@@ -393,6 +444,7 @@ export const PracticeScheduleView: React.FC = () => {
                   </label>
                   <input
                     type="date"
+                  min={today}
                     value={date}
                     onChange={e => setDate(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-2 text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -429,7 +481,7 @@ export const PracticeScheduleView: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Sonic Vault Studios, Alex's Garage..."
+                  placeholder="e.g. Recording Studio, Alex's Garage..."
                   value={location}
                   onChange={e => setLocation(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white"
@@ -471,7 +523,12 @@ export const PracticeScheduleView: React.FC = () => {
                   Select Songs to Rehearse
                 </label>
                 <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-2 bg-zinc-950 border border-zinc-800 rounded-lg">
-                  {songs.map(song => {
+                  {selectableSongs.length === 0 && (
+                    <p className="col-span-2 px-2 py-3 text-center text-zinc-500">
+                      No active demos are available.
+                    </p>
+                  )}
+                  {selectableSongs.map(song => {
                     const isSelected = selectedSongIds.includes(song.id);
                     return (
                       <button

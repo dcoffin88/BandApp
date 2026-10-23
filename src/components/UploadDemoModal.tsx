@@ -13,7 +13,7 @@ import { SongIdea } from '../types/band.ts';
 import { useMicrophoneRecorder } from '../hooks/useMicrophoneRecorder.ts';
 import { MicrophoneSelector } from './MicrophoneSelector.tsx';
 import { memberDisplayName } from '../shared/member.ts';
-import { KEY_ROOTS, SONG_CATEGORY_OPTIONS } from '../shared/songMetadata.ts';
+import { KEY_ROOTS, selectableDemoCategories } from '../shared/songMetadata.ts';
 
 interface UploadDemoModalProps {
   isOpen: boolean;
@@ -26,10 +26,13 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
   onClose,
   onSongCreated,
 }) => {
-  const { addSongIdea, currentUser, permissions } = useBand();
+  const { addSongIdea, currentUser, permissions, appSettings } = useBand();
+  const categoryOptions = selectableDemoCategories(appSettings.demoCategories);
 
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<SongIdea['category']>('idea');
+  const [category, setCategory] = useState<SongIdea['category']>(
+    categoryOptions[0]?.id || 'idea',
+  );
   const [bpm, setBpm] = useState<string>('120');
   const [musicalKey, setMusicalKey] = useState('E minor');
   const [description, setDescription] = useState('');
@@ -107,7 +110,7 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
           description: description.trim() || 'New recorded demo idea.',
           tags: [category.toUpperCase(), musicalKey, bpm ? `${bpm} BPM` : ''].filter(Boolean),
           lyrics: {
-            draft: initialLyrics.trim() || `[Draft Lyrics for ${title}]\n(Add lyrics here...)`,
+            draft: initialLyrics.trim() || ``,
             lastEditedBy: memberDisplayName(currentUser),
             lastEditedAt: new Date().toISOString(),
             versionNumber: 1,
@@ -131,7 +134,7 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm animate-in fade-in">
       <div className="relative w-full max-w-xl bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header as sketched on Page 2 */}
+        {/* Header */}
         <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
@@ -196,7 +199,7 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
             </div>
           </div>
 
-          {/* Mode 1: File Upload (sketch Page 2: "supported formats", "choose audio file") */}
+          {/* File Upload */}
           {sourceMode === 'file' && (
             <div className="p-4 rounded-xl border-2 border-dashed border-zinc-700/80 bg-zinc-950/40 text-center hover:border-amber-500/50 transition">
               <input
@@ -230,7 +233,6 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
                   </div>
                 ) : (
                   <div>
-                    {/* Sketched on Page 2: "choose audio file" button */}
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
@@ -239,7 +241,6 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
                       Choose Audio File
                     </button>
 
-                    {/* Sketched on Page 2: "supported formats" */}
                     <p className="text-[11px] text-zinc-400 mt-2">
                       <strong className="text-zinc-300">Supported formats:</strong> MP3, WAV, M4A, OGG, AAC, FLAC, WebM
                     </p>
@@ -249,7 +250,7 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
             </div>
           )}
 
-          {/* Mode 2: Live Mic Recording */}
+          {/* Live Mic Recording */}
           {sourceMode === 'mic' && (
             <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 text-center space-y-3">
               <MicrophoneSelector id="demo-microphone" devices={microphone.devices} value={microphone.selectedDeviceId} onChange={microphone.setSelectedDeviceId} disabled={isRecording || isRequesting || isStopping} isRequesting={isRequesting} isStopping={isStopping} />
@@ -326,11 +327,11 @@ export const UploadDemoModal: React.FC<UploadDemoModalProps> = ({
               </label>
               <select
                 value={category}
-                onChange={e => setCategory(e.target.value as any)}
+                onChange={e => setCategory(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
               >
-                {SONG_CATEGORY_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                {categoryOptions.map(option => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
                 ))}
               </select>
             </div>
